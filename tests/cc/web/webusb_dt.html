@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Ray 日志通道 (WebUSB)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #101418; color: #d6dee6;
+         font: 13px/1.5 "Cascadia Mono", Consolas, monospace; }
+  header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+           padding: 10px 14px; background: #171d24; border-bottom: 1px solid #26303a; }
+  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 4px;
+           padding: 6px 14px; font: inherit; cursor: pointer; }
+  button:disabled { background: #38414a; color: #8a97a3; cursor: default; }
+  button.ghost { background: #38414a; }
+  #status { padding: 6px 14px; color: #8a97a3; border-bottom: 1px solid #26303a; }
+  #status b { color: #4fd1c5; font-weight: normal; }
+  #log { margin: 0; padding: 10px 14px; height: calc(100vh - 150px);
+         overflow: auto; white-space: pre-wrap; word-break: break-all; }
+  #log .err { color: #f56565; }
+  footer { display: flex; gap: 8px; padding: 8px 14px; background: #171d24;
+           border-top: 1px solid #26303a; }
+  #cmd { flex: 1; background: #0c1014; color: #d6dee6; border: 1px solid #2b3540;
+         border-radius: 4px; padding: 6px 10px; font: inherit; }
+</style>
+</head>
+<body>
+
+<header>
+  <button id="btnConnect">连接设备</button>
+  <button id="btnDisconnect" class="ghost" disabled>断开</button>
+  <button id="btnClear" class="ghost">清屏</button>
+  <label><input type="checkbox" id="chkHex"> 以十六进制显示</label>
+</header>
+
+<div id="status">未连接。点「连接设备」后在弹窗里选择 <b>Trace40</b>(VID 0x7987 / PID 0x0001)。</div>
+<pre id="log"></pre>
+
+<footer>
+  <input id="cmd" placeholder="输入要下发给设备的文本，回车发送（走 OUT 端点）">
+  <button id="btnSend" disabled>发送</button>
+</footer>
+
+<script>
+'use strict';
+
+const VID = 0x7987;
+const PID = 0x0001;
+const DT_INTF = 3;               // diagnosis tracking 接口号
+const PACKET = 512;              // bulk 端点 wMaxPacketSize（高速）
+
+const $log = document.getElementById('log');
+const $status = document.getElementById('status');
+const btnConnect = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const btnSend = document.getElementById('btnSend');
+const chkHex = document.getElementById('chkHex');
+const $cmd = document.getElementById('cmd');
+
+let device = null;
+let epIn = null;
+let epOut = null;
+let reading = false;
+const dec = new TextDecoder('utf-8');
+const enc = new TextEncoder();
+
+function append(text, isErr) {
+  const atBottom = $log.scrollTop + $log.clientHeight >= $log.scrollHeight - 8;
+  if (isErr) {
+    const span = document.createElement('span');
+    span.className = 'err';
+    span.textContent = text;
+    $log.appendChild(span);
+  } else {
+    $log.appendChild(document.createTextNode(text));
+  }
+  if (atBottom) $log.scrollTop = $log.scrollHeight;
+}
+
+function toHex(buf) {
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0')).join(' ') + '\n';
+}
+
+async function connect() {
+  if (!navigator.usb) {
+    append('[错误] 当前浏览器没有 WebUSB（需要 Chrome/Edge，且页面在 localhost 或 https 下）\n', true);
+    return;
+  }
+  try {
+    device = await navigator.usb.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+    await device.open();
+    if (device.configuration === null) await device.selectConfiguration(1);
+
+    const intf = device.configuration.interfaces.find(i => i.interfaceNumber === DT_INTF);
+    if (!intf) throw new Error('找不到 interface ' + DT_INTF);
+    await device.claimInterface(DT_INTF);
+
+    const eps = intf.alternate.endpoints;
+    epIn = eps.find(e => e.direction === 'in');
+    epOut = eps.find(e => e.direction === 'out');
+    if (!epIn) throw new Error('接口 ' + DT_INTF + ' 上没有 IN 端点');
+
+    $status.innerHTML = '已连接：<b>' + device.productName + '</b> · ' +
+      '接口 ' + DT_INTF + ' · IN 0x' + epIn.endpointNumber.toString(16).padStart(2, '0') +
+      ' · OUT ' + (epOut ? '0x' + epOut.endpointNumber.toString(16).padStart(2, '0') : '无');
+    btnConnect.disabled = true;
+    btnDisconnect.disabled = false;
+    btnSend.disabled = !epOut;
+    readLoop();
+  } catch (e) {
+    append('[连接失败] ' + e.message + '\n', true);
+  }
+}
+
+async function readLoop() {
+  if (reading) return;
+  reading = true;
+  while (reading && device && device.opened) {
+    try {
+      const r = await device.transferIn(epIn.endpointNumber, PACKET);
+      if (r.status !== 'ok' || !r.data || r.data.byteLength === 0) continue;
+      append(chkHex.checked ? toHex(r.data.buffer) : dec.decode(r.data));
+    } catch (e) {
+      if (reading) append('[读取出错] ' + e.message + '\n', true);
+      break;
+    }
+  }
+  reading = false;
+}
+
+async function disconnect() {
+  reading = false;
+  try {
+    if (device && device.opened) {
+      await device.releaseInterface(DT_INTF).catch(() => {});
+      await device.close();
+    }
+  } catch (e) { /* ignore */ }
+  device = null; epIn = null; epOut = null;
+  btnConnect.disabled = false;
+  btnDisconnect.disabled = true;
+  btnSend.disabled = true;
+  $status.textContent = '已断开。';
+}
+
+async function send() {
+  if (!epOut || !$cmd.value) return;
+  const data = enc.encode($cmd.value + '\n');
+  try {
+    await device.transferOut(epOut.endpointNumber, data);
+    append('[已下发 ' + data.length + ' 字节] ' + $cmd.value + '\n');
+    $cmd.value = '';
+  } catch (e) {
+    append('[发送失败] ' + e.message + '\n', true);
+  }
+}
+
+btnConnect.addEventListener('click', connect);
+btnDisconnect.addEventListener('click', disconnect);
+document.getElementById('btnClear').addEventListener('click', () => { $log.textContent = ''; });
+btnSend.addEventListener('click', send);
+$cmd.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+navigator.usb?.addEventListener('disconnect', e => {
+  if (device && e.device === device) {
+    append('[设备已拔出]\n', true);
+    disconnect();
+  }
+});
+</script>
+</body>
+</html>

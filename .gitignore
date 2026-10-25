@@ -1,0 +1,23 @@
+# cmake
+*build*/
+!build_cmake/
+build_cmake/*
+# !build_cmake/output/
+
+# build dir: 只保留生成的SES项目文件
+*hpm5300*flash_xip_debug/
+!*hpm5300*flash_xip_debug/
+*hpm5300*flash_xip_debug/*
+!*hpm5300*flash_xip_debug/segger_embedded_studio/
+*hpm5300*flash_xip_debug/segger_embedded_studio/*
+!*hpm5300*flash_xip_debug/segger_embedded_studio/*.emProject
+
+
+# 构建工具与工具链不随仓库分发，使用者用 script\bundle_tools_from_sdk.cmd 从 SDK 环境打包
+/tools/
+/toolchain/
+
+/*cache*/
+/.vscode
+
+*__pycache__/
