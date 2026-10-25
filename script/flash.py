@@ -55,18 +55,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import localize_project as lp
 
 
-def detect_localized_board(project_dir):
-    """从工程中的本地化 SDK 目录推断板卡名称。"""
-    candidates = [
-        d
-        for d in project_dir.iterdir()
-        if d.is_dir() and d.name.startswith(lp.LOCALIZED_PREFIX)
-    ]
-    if len(candidates) == 1:
-        return candidates[0].name[len(lp.LOCALIZED_PREFIX):]
-    return None
-
-
 def read_board_field(board_yaml, field, default):
     """从板卡 yaml 中读取 openocd-probe / openocd-soc 等字段。"""
     if not board_yaml.is_file():
@@ -133,7 +121,7 @@ def main(argv=None):
 
     try:
         # 确定板卡和本地化 SDK 目录
-        board = args.board or detect_localized_board(lp.PROJECT_DIR) or lp.DEFAULT_BOARD
+        board = args.board or lp.detect_localized_board(lp.PROJECT_DIR) or lp.DEFAULT_BOARD
         localized_name = lp.LOCALIZED_PREFIX + board
         localized_dir = lp.PROJECT_DIR / localized_name
         if not localized_dir.is_dir():

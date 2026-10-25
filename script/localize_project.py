@@ -128,6 +128,19 @@ def fail(message):
     raise RuntimeError(message)
 
 
+def detect_localized_board(project_dir):
+    """从工程中的本地化 SDK 目录推断板卡名称。"""
+    candidates = [
+        d.name[len(LOCALIZED_PREFIX):]
+        for d in project_dir.iterdir()
+        if d.is_dir() and d.name.startswith(LOCALIZED_PREFIX)
+    ]
+    # 只存在一个本地化 SDK 时才自动推断，避免歧义
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
 def resolve_paths(sdk_arg, sdk_env_arg):
     """解析原 SDK 路径，返回 (hpm_sdk 目录, SDK 环境根目录)。"""
     # 优先使用 --sdk-env，其次使用环境变量 HPM_SDK_ENV，最后使用默认路径
@@ -651,6 +664,8 @@ def build_cmake_from_sample(sample_dir, sdk_base, project_dir, sample_name, proj
         + "# 引入工程内本地化 SDK、编译工具链和构建工具路径\n"
         "if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)\n"
         "    include(${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)\n"
+        "else()\n"
+        "    message(FATAL_ERROR \"未找到 localized_sdk.cmake，请先运行 python script/setup.py 补齐工程环境\")\n"
         "endif()\n\n"
     )
     return (
@@ -1149,6 +1164,15 @@ def localize(
             staging,
             ignore=_ignore_app_items,
             dirs_exist_ok=True,
+        )
+
+        # 工程 CMakeLists 要求 localized_sdk.cmake 存在，否则直接 FATAL_ERROR；
+        # 依赖分析发生在本地化之前，这里先写一个占位文件满足 include。
+        # SDK 路径、工具链和 PATH 仍由 make_sdk_env() 通过进程环境变量提供，
+        # 分析结果与本地化后一致；该文件随临时目录一起删除。
+        (staging / "localized_sdk.cmake").write_text(
+            "# 依赖分析占位文件：SDK 路径由 CMake 进程环境变量提供。\n",
+            encoding="utf-8",
         )
 
         # 创建 CMake File API 查询文件，让 localize_sdk.py 能拿到依赖信息

@@ -20,6 +20,8 @@ set(APP_NAME ray)
 # 引入工程内本地化 SDK、编译工具链和构建工具路径
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)
     include(${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)
+else()
+    message(FATAL_ERROR "未找到 localized_sdk.cmake，请先运行 python script/setup.py 补齐工程环境")
 endif()
 
 
@@ -35,6 +37,8 @@ sdk_app_src(src/main.c)
 
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)
+sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
+
 if(TARGET app)
     target_compile_options(app PRIVATE "-Wextra") # "-Wignored-qualifiers"
 endif()

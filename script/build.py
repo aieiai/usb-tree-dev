@@ -55,19 +55,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import localize_project as lp
 
 
-def detect_localized_board(project_dir):
-    """从工程中的本地化 SDK 目录推断板卡名称。"""
-    candidates = [
-        d
-        for d in project_dir.iterdir()
-        if d.is_dir() and d.name.startswith(lp.LOCALIZED_PREFIX)
-    ]
-    # 只存在一个本地化 SDK 时才自动推断，避免歧义
-    if len(candidates) == 1:
-        return candidates[0].name[len(lp.LOCALIZED_PREFIX):]
-    return None
-
-
 def find_cmake_in_project(project_dir):
     """从工程内 tools/cmake 查找 CMake 可执行文件。"""
     paths = lp.tool_paths(project_dir)
@@ -149,7 +136,7 @@ def main(argv=None):
 
     try:
         # 确定板卡：命令行参数 > 本地化目录推断 > 默认板卡
-        board = args.board or detect_localized_board(lp.PROJECT_DIR) or lp.DEFAULT_BOARD
+        board = args.board or lp.detect_localized_board(lp.PROJECT_DIR) or lp.DEFAULT_BOARD
         localized_name = lp.LOCALIZED_PREFIX + board
         localized_dir = lp.PROJECT_DIR / localized_name
         project_name = lp.get_app_name(lp.PROJECT_DIR)
@@ -288,6 +275,10 @@ def main(argv=None):
         return 1
     except RuntimeError as exc:
         print("\n错误：%s" % exc, file=sys.stderr)
+        print(
+            "提示：可运行 python script/setup.py 检查工程环境并补齐缺失内容。",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

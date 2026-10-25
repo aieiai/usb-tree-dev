@@ -13,9 +13,13 @@ build_cmake/*
 !*hpm5300*flash_xip_debug/segger_embedded_studio/*.emProject
 
 
-# 构建工具与工具链不随仓库分发，使用者用 script\bundle_tools_from_sdk.cmd 从 SDK 环境打包
+# 以下内容由 script/localize_project.py 从本地 HPM SDK 环境生成，不随仓库分发：
+# 构建工具与编译工具链（tools/、toolchain/）、本地化 SDK 及其路径配置。
+# 新克隆的工程先执行 python script/setup.py 补齐（详见 --help）。
 /tools/
 /toolchain/
+/hpm_sdk_localized_for_*/
+/localized_sdk.cmake
 
 /*cache*/
 /.vscode
