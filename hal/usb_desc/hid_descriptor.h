@@ -11,15 +11,15 @@
  *   1 = 厂商自定义类 + WinUSB，Windows 自动加载 winusb.sys；
  *   0 = 退回 HID 类（免驱）：
  *       - control center 用中断端点，可直接退回 HID；
- *       - diagnosis tracking 的批量端点会跟着换成中断端点再退回 HID。
+ *       - diagnostic tracking 的批量端点会跟着换成中断端点再退回 HID。
  * 两者都关时还会关闭 BOS / MS OS 2.0，bcdUSB 退回 0x0200（隔离枚举故障用）。
  */
 #ifndef HAL_USB_CC_WINUSB_ENABLE
-#define HAL_USB_CC_WINUSB_ENABLE        (0) /* control center, interface 1 */
+#define HAL_USB_CC_WINUSB_ENABLE        (1) /* control center, interface 1 */
 #endif
 
 #ifndef HAL_USB_DT_WINUSB_ENABLE
-#define HAL_USB_DT_WINUSB_ENABLE        (0) /* diagnosis tracking, interface 3 */
+#define HAL_USB_DT_WINUSB_ENABLE        (1) /* diagnostic tracking, interface 3 */
 #endif
 
 /* 是否声明 WebUSB 平台能力（浏览器访问）。
@@ -30,8 +30,7 @@
 #endif
 
 
-#define HAL_USB_WINUSB_ENABLE \
-    (HAL_USB_CC_WINUSB_ENABLE || HAL_USB_DT_WINUSB_ENABLE)
+#define HAL_USB_WINUSB_ENABLE           (HAL_USB_CC_WINUSB_ENABLE || HAL_USB_DT_WINUSB_ENABLE)
 
 
 typedef struct {
@@ -108,27 +107,27 @@ enum {
 #define INTF_LIGHTING_EPO_INTERVAL      (USBD_INTERVAL_MS(16)) /* max: 60fps */
 
 
-#define INTF_DT_NUM                 (0x03) /* Interface number for Diagnosis Tracking */
-#define INTF_DT_EPI                 (0x84) /* Endpoint number and attributes for Diagnosis Tracking input */
-#define INTF_DT_EPO                 (0x04) /* Endpoint number and attributes for Diagnosis Tracking output */
+#define INTF_DT_NUM                     (0x03) /* Interface number for Diagnostic Tracking */
+#define INTF_DT_EPI                     (0x84) /* Endpoint number and attributes for Diagnostic Tracking input */
+#define INTF_DT_EPO                     (0x04) /* Endpoint number and attributes for Diagnostic Tracking output */
 #if HAL_USB_DT_WINUSB_ENABLE
-    #define INTF_DT_EP_TYPE         (0x02)
-    #define INTF_DT_EPI_INTERVAL    (USBD_INTERVAL_MS(0))    /* 批量端点不使用轮询间隔 */
-    #define INTF_DT_EPO_INTERVAL    (USBD_INTERVAL_MS(0))
+    #define INTF_DT_EP_TYPE             (0x02)
+    #define INTF_DT_EPI_INTERVAL        (USBD_INTERVAL_MS(0))    /* 批量端点不使用轮询间隔 */
+    #define INTF_DT_EPO_INTERVAL        (USBD_INTERVAL_MS(0))
     #if defined(CONFIG_USB_HS)
-        #define INTF_DT_EP_SIZE     (512) /* The high speed can only be 512 */
+        #define INTF_DT_EP_SIZE         USB_BULK_EP_MPS_HS /* The high speed can only be 512 */
     #else
-        #define INTF_DT_EP_SIZE     (64)  /* The full speed can only be 8/16/32/64 */
+        #define INTF_DT_EP_SIZE         USB_BULK_EP_MPS_FS  /* The full speed can only be 8/16/32/64 */
     #endif
 #else
-    #define INTF_DT_EP_TYPE         (0x03)
-    #define INTF_DT_EPI_INTERVAL    (USBD_INTERVAL_MS(1))
-    #define INTF_DT_EPO_INTERVAL    (USBD_INTERVAL_MS(1))
-    #define INTF_DT_EP_SIZE         (64)
+    #define INTF_DT_EP_TYPE             (0x03)
+    #define INTF_DT_EPI_INTERVAL        (USBD_INTERVAL_MS(1))
+    #define INTF_DT_EPO_INTERVAL        (USBD_INTERVAL_MS(1))
+    #define INTF_DT_EP_SIZE             (64)
 #endif
 
 
-/* gamepad 排在 Diagnosis Tracking 之后：未启用 gamepad 时接口号依然连续（1..4） */
+/* gamepad 排在 Diagnostic Tracking 之后：未启用 gamepad 时接口号依然连续（1..4） */
 #define INTF_GAMEPAD_NUM                (0x04) /* Interface number for Gamepad for standard hid or xbox controller */
 // standard hid gamepad
 #define INTF_GAMEPAD_HID_EPI            (0x85) /* Endpoint number and attributes for Gamepad for standard hid input */
@@ -155,7 +154,7 @@ enum {
 #define MSOS_VENDOR_CODE                (0x07)
 #define WEBUSB_VENDOR_CODE              (0x08)
 
-#define HAL_USB_CC_GUID                 "{0F3C7A21-8B4E-4D95-A6C1-2E7B9F4D5A38}"
+#define HAL_USB_CC_GUID                 "{1F3C7A21-8B4E-4D95-A6C1-2E7B9F4D5A38}"
 #define HAL_USB_DT_GUID                 "{6B1D7C3E-4A2F-4E8B-9C5D-1F0A2B3C4D5E}"
 
 

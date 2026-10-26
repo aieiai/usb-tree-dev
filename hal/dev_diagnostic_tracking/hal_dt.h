@@ -8,7 +8,7 @@
 #include "hal_usb.h"
 #include "hid_descriptor.h"
 
-/* 诊断追踪通道（Diagnosis Tracking 接口，interface 3）：
+/* 诊断追踪通道（Diagnostic Tracking 接口，interface 3）：
  *  - WinUSB 模式：厂商自定义接口 + 批量端点；
  *  - HID 退回模式（WinUSB 关）：HID 接口 + 中断端点，免驱。
  * 两种模式都有：

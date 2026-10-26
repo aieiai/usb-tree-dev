@@ -5,13 +5,13 @@
 #   dev_kbd     键盘接口（interface 0）
 #   dev_control_center 上位机接口（interface 1）
 #   dev_lighting 灯效接口（interface 2）
-#   dev_diagnosis_tracking  诊断追踪接口（interface 3，WinUSB/WebUSB）
+#   dev_diagnostic_tracking  诊断追踪接口（interface 3，WinUSB/WebUSB）
 sdk_inc(usb_core)
 sdk_inc(usb_desc)
 sdk_inc(dev_kbd)
 sdk_inc(dev_control_center)
 sdk_inc(dev_lighting)
-sdk_inc(dev_diagnosis_tracking)
+sdk_inc(dev_diagnostic_tracking)
 
 sdk_app_src(
     usb_core/hal_usb.c
@@ -19,5 +19,5 @@ sdk_app_src(
     dev_kbd/hal_kbd.c
     dev_control_center/hal_cc.c
     dev_lighting/hal_lighting.c
-    dev_diagnosis_tracking/hal_dt.c
+    dev_diagnostic_tracking/hal_dt.c
 )

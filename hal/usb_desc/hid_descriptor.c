@@ -11,20 +11,17 @@
 
 // 配置描述符总长：获取阶段会自动算出长度
 #define CONFIG_DESC_SIZ         (73)
-#define KBD_RPT_SIZ             (sizeof(desc_rpt_kbd))
-#define LIGHTING_RPT_SIZ        (sizeof(desc_rpt_lighting))
-#define GAMEPAD_RPT_SIZ         (sizeof(desc_rpt_gamepad))
 
 
 // Configuration descriptor
 #define  CONFIG_DESC_INIT(num_intf) \
-    USB_CONFIG_DESCRIPTOR_INIT(1, (num_intf), 0x01, USB_CONFIG_SELF_POWERED, USBD_MAX_POWER)
+    USB_CONFIG_DESCRIPTOR_INIT(CONFIG_DESC_SIZ, (num_intf), 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER)
 
 
 // Keyboard
 #define  CONFIG_DESC_KBD \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_KBD_NUM, 0x00, 0x02, USB_DEVICE_CLASS_HID, 0x01, 0x01, STRID_INTF_KBD), \
-    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(KBD_RPT_SIZ), \
+    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DESC_RPT_SIZ_KBD), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_KBD_EPI, 0x03, INTF_KBD_EPI_SIZE, INTF_KBD_EPI_INTERVAL), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_KBD_EPO, 0x03, INTF_KBD_EPO_SIZE, INTF_KBD_EPO_INTERVAL)
 
@@ -38,7 +35,7 @@
 #else
 #define  CONFIG_DESC_CC \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_CC_NUM, 0x00, 0x02, USB_DEVICE_CLASS_HID, 0x00, 0x00, STRID_INTF_CUSTOM), \
-    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(CC_RPT_SIZ), \
+    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DESC_RPT_SIZ_CC), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_CC_EPI, 0x03, INTF_CC_EP_SIZE, INTF_CC_EP_INTERVAL), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_CC_EPO, 0x03, INTF_CC_EP_SIZE, INTF_CC_EP_INTERVAL)
 #endif
@@ -47,12 +44,12 @@
 // lighting
 #define  CONFIG_DESC_LIGHTING \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_LIGHTING_NUM, 0x00, 0x01, USB_DEVICE_CLASS_HID, 0x00, 0x00, STRID_INTF_LIGHTING), \
-    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(LIGHTING_RPT_SIZ), \
+    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DESC_RPT_SIZ_LIGHTING), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_LIGHTING_EPI, 0x03, INTF_LIGHTING_EPI_SIZE, INTF_LIGHTING_EPI_INTERVAL)
     // USB_ENDPOINT_DESCRIPTOR_INIT(INTF_LIGHTING_EPO, 0x03, INTF_LIGHTING_EPO_SIZE, INTF_LIGHTING_EPO_INTERVAL)
 
 
-// Diagnosis Tracking
+// Diagnostic Tracking
 #if HAL_USB_DT_WINUSB_ENABLE
 #define  CONFIG_DESC_DT \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_DT_NUM, 0x00, 0x02, USB_DEVICE_CLASS_VEND_SPECIFIC, 0x00, 0x00, STRID_INTF_DT), \
@@ -61,7 +58,7 @@
 #else
 #define  CONFIG_DESC_DT \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_DT_NUM, 0x00, 0x02, USB_DEVICE_CLASS_HID, 0x00, 0x00, STRID_INTF_DT), \
-    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DT_RPT_SIZ), \
+    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DESC_RPT_SIZ_DT), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_DT_EPI, INTF_DT_EP_TYPE, INTF_DT_EP_SIZE, INTF_DT_EPI_INTERVAL), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_DT_EPO, INTF_DT_EP_TYPE, INTF_DT_EP_SIZE, INTF_DT_EPO_INTERVAL)
 #endif
@@ -69,7 +66,7 @@
 // gamepad hid
 #define  CONFIG_DESC_GAMEPAD_HID \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_GAMEPAD_NUM, 0x00, 0x01, USB_DEVICE_CLASS_HID, 0x00, 0x00, STRID_INTF_GAMEPAD), \
-    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(GAMEPAD_RPT_SIZ), \
+    0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, WBVAL(DESC_RPT_SIZ_GAMEPAD), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_GAMEPAD_HID_EPI, 0x03, INTF_GAMEPAD_HID_EPI_SIZE, INTF_GAMEPAD_HID_EPI_INTERVAL)
     // USB_ENDPOINT_DESCRIPTOR_INIT(INTF_GAMEPAD_HID_EPO, 0x03, INTF_GAMEPAD_HID_EPO_SIZE, INTF_GAMEPAD_HID_EPO_INTERVAL)
 
@@ -104,6 +101,7 @@
 
 
 // Keyboard
+#define DESC_RPT_SIZ_KBD             (sizeof(desc_rpt_kbd))
 static const uint8_t desc_rpt_kbd[] = {
     REPORT_DESC_KBD
 };
@@ -112,27 +110,35 @@ const usb_descriptor_t g_desc_rpt_kbd = { .buf = desc_rpt_kbd, .len = sizeof(des
 
 // Upper computer control center
 #if !HAL_USB_CC_WINUSB_ENABLE
-#define CC_RPT_SIZ              (sizeof(desc_rpt_cc))
+#define DESC_RPT_SIZ_CC              (sizeof(desc_rpt_cc))
 static const uint8_t desc_rpt_cc[] = {
   TUD_HID_REPORT_DESC_GENERIC_INOUT(INTF_CC_EP_SIZE)
 };
 const usb_descriptor_t g_desc_rpt_cc = { .buf = desc_rpt_cc, .len = sizeof(desc_rpt_cc) };
 #endif
 
-// Diagnosis Tracking
+// Lighting
+#define DESC_RPT_SIZ_LIGHTING        (sizeof(desc_rpt_lighting))
+static const uint8_t desc_rpt_lighting[] = {
+  TUD_HID_REPORT_DESC_LIGHTING(LIGHTING_REPORT_ID_ATTRIBUTES)
+};
+const usb_descriptor_t g_desc_rpt_lighting = { .buf = desc_rpt_lighting, .len = sizeof(desc_rpt_lighting) };
+
+// Diagnostic Tracking
 #if !HAL_USB_DT_WINUSB_ENABLE
-#define DT_RPT_SIZ              (sizeof(desc_rpt_dt))
+#define DESC_RPT_SIZ_DT              (sizeof(desc_rpt_dt))
 static const uint8_t desc_rpt_dt[] = {
   TUD_HID_REPORT_DESC_GENERIC_INOUT(INTF_DT_EP_SIZE)
 };
 const usb_descriptor_t g_desc_rpt_dt = { .buf = desc_rpt_dt, .len = sizeof(desc_rpt_dt) };
 #endif
 
-// Lighting
-static const uint8_t desc_rpt_lighting[] = {
-  TUD_HID_REPORT_DESC_LIGHTING(LIGHTING_REPORT_ID_ATTRIBUTES)
+// Gamepad standard hid
+#define DESC_RPT_SIZ_GAMEPAD    (sizeof(desc_rpt_gamepad))
+static const uint8_t desc_rpt_gamepad[] = {
+    0x00
 };
-const usb_descriptor_t g_desc_rpt_lighting = { .buf = desc_rpt_lighting, .len = sizeof(desc_rpt_lighting) };
+const usb_descriptor_t g_desc_rpt_gamepad = { .buf = desc_rpt_gamepad, .len = sizeof(desc_rpt_gamepad) };
 
 
 // Device
@@ -217,7 +223,7 @@ static const uint8_t _msos_v2_0[] = {
     'G', 0, 'U', 0, 'I', 0, 'D', 0, 's', 0, 0, 0,
     WBVAL(80),                                 /* wPropertyDataLength */
     '{', 0,
-    '0', 0, 'F', 0, '3', 0, 'C', 0, '7', 0, 'A', 0, '2', 0, '1', 0, '-', 0,
+    '1', 0, 'F', 0, '3', 0, 'C', 0, '7', 0, 'A', 0, '2', 0, '1', 0, '-', 0,
     '8', 0, 'B', 0, '4', 0, 'E', 0, '-', 0,
     '4', 0, 'D', 0, '9', 0, '5', 0, '-', 0,
     'A', 0, '6', 0, 'C', 0, '1', 0, '-', 0,
@@ -226,8 +232,8 @@ static const uint8_t _msos_v2_0[] = {
 #endif
 
 #if HAL_USB_DT_WINUSB_ENABLE
-    /* ==== Function Subset #2：interface 3 = diagnosis tracking ==== */
-    /* ---- Function Subset Header (8)：bFirstInterface = diagnosis tracking ---- */
+    /* ==== Function Subset #2：interface 3 = diagnostic tracking ==== */
+    /* ---- Function Subset Header (8)：bFirstInterface = diagnostic tracking ---- */
     WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE),
     WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE),
     INTF_DT_NUM,
@@ -332,12 +338,13 @@ static const uint8_t *device_descriptor_callback(uint8_t speed) {
 }
 
 // 三种配置描述符的接口数量不同，wTotalLength 也不同。统一拷贝到缓冲区后，按实际数组长度回填 wTotalLength
-static uint8_t config_descriptor_buffer[256];
-
+static uint8_t config_descriptor_buf[255];
 static const uint8_t *config_descriptor_callback(uint8_t speed) {
     (void)speed;
     const uint8_t *selected;
     uint16_t len;
+    uint8_t *buf    = config_descriptor_buf;
+    uint8_t buf_len = sizeof(config_descriptor_buf);
 
     switch (g_gamepad_mode) {
         case HAL_GAMEPAD_MODE_HID:
@@ -354,19 +361,50 @@ static const uint8_t *config_descriptor_callback(uint8_t speed) {
             break;
     }
 
-    if (len > sizeof(config_descriptor_buffer)) {
-        USB_LOG_ERR("config_descriptor_buffer overflow\r\n");
+    if (len > buf_len) {
+        USB_LOG_ERR("config descriptor buf overflow\r\n");
         return NULL;
     }
 
-    memcpy(config_descriptor_buffer, selected, len);
-    config_descriptor_buffer[2] = (uint8_t)(len & 0xFF);
-    config_descriptor_buffer[3] = (uint8_t)(len >> 8);
+    memcpy(buf, selected, len);
+    buf[2] = (uint8_t)(len & 0xFF);
+    buf[3] = (uint8_t)(len >> 8);
 
-    USB_LOG_RAW("[usb] config desc: %u intf, %u bytes, Diagnosis Tracking bulk mps=%u\r\n",
-                config_descriptor_buffer[4], (unsigned)len, (unsigned)INTF_DT_EP_SIZE);
+    USB_LOG_RAW("[usb] config desc: %u intf, %u bytes, Diagnostic Tracking bulk mps=%u\r\n",
+                buf[4], (unsigned)len, (unsigned)INTF_DT_EP_SIZE);
 
-    return config_descriptor_buffer;
+    return buf;
+}
+
+
+// Device Quality Descriptor
+static const uint8_t device_quality_descriptor[] = {
+    #if HAL_USB_WINUSB_ENABLE
+        USB_DEVICE_QUALIFIER_DESCRIPTOR_INIT(USB_2_1, 0x00, 0x00, 0x00, 0x01),
+    #else
+        USB_DEVICE_QUALIFIER_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, 0x01),
+    #endif
+};
+static const uint8_t *device_quality_descriptor_callback(uint8_t speed) {
+    (void)speed;
+    return device_quality_descriptor;
+}
+
+// Other Speed Descriptor
+static uint8_t other_speed_descriptor_buf[255];
+static const uint8_t *other_speed_descriptor_callback(uint8_t speed) {
+    const uint8_t *cur = config_descriptor_callback(speed);
+    uint16_t len       = (uint16_t)(cur[2] | (cur[3] << 8));
+    uint8_t *buf       = other_speed_descriptor_buf;
+    uint8_t buf_len    = sizeof(other_speed_descriptor_buf);
+
+    if (len > buf_len)
+    {
+        len = buf_len;
+    }
+    memcpy(buf, cur, len);
+    buf[1] = USB_DESCRIPTOR_TYPE_OTHER_SPEED;
+    return buf;
 }
 
 /* 不再提供 Device Qualifier 和 Other Speed Configuration：
@@ -385,7 +423,7 @@ static char const *string_descriptors[] = {
   "Ray Keyboard/Mouse/Consumer/System",   // 4: ITF KBD (Keyboard+Mouse+Consumer+System)
   "Ray Control Center",                   // 5: ITF Custom (Control Center)
   "Ray Dynamic Lighting",                 // 6: ITF Lighting (Dynamic Lighting)
-  "Ray Diagnosis Tracking",               // 7: ITF Diagnosis (Diagnosis Tracking)
+  "Ray Diagnostic Tracking",              // 7: ITF Diagnostic (Diagnostic Tracking)
   "Ray Gamepad",                          // 8: ITF Gamepad (XBOX 360 / HID 模式共用)
 };
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index) {
@@ -399,9 +437,9 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index) {
 const struct usb_descriptor g_hid_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
+    .device_quality_descriptor_callback = device_quality_descriptor_callback,
+    .other_speed_descriptor_callback = other_speed_descriptor_callback,
     .string_descriptor_callback = string_descriptor_callback,
-    /* device_quality_descriptor_callback / other_speed_descriptor_callback 保持 NULL：
-     * 单速设备不提供 qualifier，避免主机拿非法的高速描述符去校验 */
 
 #if HAL_USB_WINUSB_ENABLE
     // .msosv1_descriptor = &msosv1_desc,

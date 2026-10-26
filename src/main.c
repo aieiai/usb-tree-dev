@@ -50,7 +50,7 @@ static void task1(void *pvParameters)
 
 #if APP_LOG_DEMO
     printf("[cherryusb hid keyboard with freertos sample]: task started.\n");
-    hal_dt_puts("[ray] diagnosis tracking channel ready\r\n");
+    hal_dt_puts("[ray] diagnostic tracking channel ready\r\n");
 #endif
 
     while (1) {
