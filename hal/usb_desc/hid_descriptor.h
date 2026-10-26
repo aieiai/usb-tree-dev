@@ -41,8 +41,8 @@ typedef struct {
 /* 手柄模式：影响配置描述符与设备描述符的选择 */
 typedef enum {
     HAL_GAMEPAD_MODE_OFF = 0,
+    HAL_GAMEPAD_MODE_HID,
     HAL_GAMEPAD_MODE_XBOX,
-    HAL_GAMEPAD_MODE_HID
 } gamepad_mode_ty;
 
 extern volatile gamepad_mode_ty g_gamepad_mode;
@@ -127,22 +127,37 @@ enum {
 #endif
 
 
-/* gamepad 排在 Diagnostic Tracking 之后：未启用 gamepad 时接口号依然连续（1..4） */
+/* gamepad 排在 Diagnostic Tracking 之后：未启用 gamepad 时接口号依然连续（1..4）
+ *
+ * 两种模式由 g_gamepad_mode 选择，走不同的配置描述符：
+ *  - HAL_GAMEPAD_MODE_HID  : 标准 HID 接口（class 0x03），免驱，13 字节报告，见 REPORT_DESC_GAMEPAD；
+ *  - HAL_GAMEPAD_MODE_XBOX : vendor class 0xFF/0x5D/0x01 + 0x21 私有描述符 + 20 字节报告。
+ *    Xbox 模式下 MS OS 2.0 描述符集会额外给本接口挂 CompatibleID="XUSB10"，
+ *    Windows 据此加载 xusb22.sys（XInput），因此 VID/PID 可以用任意自定义值。
+ *    该模式依赖 MS OS 2.0：要求 HAL_USB_WINUSB_ENABLE=1（CC/DT 至少开一个），
+ *    否则设备不会上报 BOS，Windows 就没有加载 xusb22.sys 的依据。
+ *    Linux 的 xpad 驱动按接口 class/subclass/protocol 匹配，同样可直接识别。 */
 #define INTF_GAMEPAD_NUM                (0x04) /* Interface number for Gamepad for standard hid or xbox controller */
 // standard hid gamepad
 #define INTF_GAMEPAD_HID_EPI            (0x85) /* Endpoint number and attributes for Gamepad for standard hid input */
-#define INTF_GAMEPAD_HID_EPI_SIZE       (8)
-#define INTF_GAMEPAD_HID_EPI_INTERVAL   (USBD_INTERVAL_MS(0.125))
+#define INTF_GAMEPAD_HID_EPI_SIZE       (32)   /* 端点包大小，需 >= 13 字节报告 */
+#define INTF_GAMEPAD_HID_EPI_INTERVAL   (USBD_INTERVAL_MS(0.5)) /* 4ms */
 #define INTF_GAMEPAD_HID_EPO            (0x05) /* Endpoint number and attributes for Gamepad for standard hid output */
 #define INTF_GAMEPAD_HID_EPO_SIZE       (8)
-#define INTF_GAMEPAD_HID_EPO_INTERVAL   (USBD_INTERVAL_MS(0.125))
+#define INTF_GAMEPAD_HID_EPO_INTERVAL   (USBD_INTERVAL_MS(0.5))
+/* HID 模式 IN 报告长度，与 REPORT_DESC_GAMEPAD 的 13 字节严格对应 */
+#define INTF_GAMEPAD_HID_RPT_LEN        (13)
 // xbox controller for windows
 #define INTF_GAMEPAD_XBOX_EPI           (0x85) /* Endpoint number and attributes for Gamepad xbox input */
-#define INTF_GAMEPAD_XBOX_EPI_SIZE      (20)
-#define INTF_GAMEPAD_XBOX_EPI_INTERVAL  (USBD_INTERVAL_MS(0.125))
+#define INTF_GAMEPAD_XBOX_EPI_SIZE      (32)   /* 端点包大小，需 >= 20 字节报告 */
+#define INTF_GAMEPAD_XBOX_EPI_INTERVAL  (USBD_INTERVAL_MS(0.5)) /* 4ms */
 #define INTF_GAMEPAD_XBOX_EPO           (0x05) /* Endpoint number and attributes for Gamepad xbox output */
-#define INTF_GAMEPAD_XBOX_EPO_SIZE      (8)
-#define INTF_GAMEPAD_XBOX_EPO_INTERVAL  (USBD_INTERVAL_MS(0.125))
+#define INTF_GAMEPAD_XBOX_EPO_SIZE      (32)   /* 端点包大小，需 >= 8 字节震动报告 */
+#define INTF_GAMEPAD_XBOX_EPO_INTERVAL  (USBD_INTERVAL_MS(1))   /* 8ms */
+/* Xbox 360 输入包固定 20 字节（前 2 字节为 0x00 / 0x14） */
+#define INTF_GAMEPAD_XBOX_RPT_LEN       (20)
+/* Xbox 360 震动包固定 8 字节（前 2 字节为 0x00 / 0x08） */
+#define INTF_GAMEPAD_XBOX_OUT_RPT_LEN   (8)
 
 
 /* ---- 两个 WinUSB 功能独立开关的定义在最前面（HAL_USB_CC_WINUSB_ENABLE / HAL_USB_DT_WINUSB_ENABLE）---- */
@@ -161,6 +176,11 @@ enum {
 extern const struct usb_descriptor g_hid_descriptor;
 extern const usb_descriptor_t g_desc_rpt_kbd;
 extern const usb_descriptor_t g_desc_rpt_lighting;
+extern const usb_descriptor_t g_desc_rpt_gamepad;
+
+/* 按 g_gamepad_mode 选好 BOS / MS OS 2.0 描述符集（Xbox 模式含 XUSB10 子集），
+ * 在 usbd_desc_register() 之前调用。 */
+void hid_descriptor_apply_gamepad_mode(void);
 
 
 #endif

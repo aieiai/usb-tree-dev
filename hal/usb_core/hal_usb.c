@@ -6,6 +6,7 @@
 #include "hal_cc.h"
 #include "hal_lighting.h"
 #include "hal_dt.h"
+#include "hal_gamepad.h"
 
 #include "hid_descriptor.h"
 
@@ -20,16 +21,24 @@ extern const struct hal_usb_function hal_kbd_function;
 extern const struct hal_usb_function hal_cc_function;
 extern const struct hal_usb_function hal_lighting_function;
 extern const struct hal_usb_function hal_dt_function;
+extern const struct hal_usb_function hal_gamepad_function;
 
 static const struct hal_usb_function *const s_usb_functions[] = {
     &hal_kbd_function,
     &hal_cc_function,
     &hal_lighting_function,
     &hal_dt_function,
+    &hal_gamepad_function,
 };
 
 #define HAL_USB_FUNCTION_COUNT (sizeof(s_usb_functions) / sizeof(s_usb_functions[0]))
 
+
+/* 手柄模式为 OFF 时函数表里仍保留 gamepad，但不注册接口、不派发事件 */
+static int hal_usb_function_present(const struct hal_usb_function *fn)
+{
+    return (fn->present == NULL) || (fn->present() != 0U);
+}
 
 static void hal_usb_event_dispatch(uint8_t busid, uint8_t event)
 {
@@ -53,6 +62,9 @@ static void hal_usb_event_dispatch(uint8_t busid, uint8_t event)
     }
 
     for (i = 0; i < HAL_USB_FUNCTION_COUNT; i++) {
+        if (!hal_usb_function_present(s_usb_functions[i])) {
+            continue;
+        }
         if (s_usb_functions[i]->event != NULL) {
             s_usb_functions[i]->event(busid, event);
         }
@@ -66,9 +78,16 @@ void hal_usb_init(void)
 {
     uint32_t i;
 
+    /* 手柄模式会改变 BOS / MS OS 2.0 描述符集（Xbox 模式多一个 XUSB10 子集），
+     * 必须在注册描述符之前选好 */
+    hid_descriptor_apply_gamepad_mode();
+
     usbd_desc_register(CONFIG_USBD_BUSID, &g_hid_descriptor);
 
     for (i = 0; i < HAL_USB_FUNCTION_COUNT; i++) {
+        if (!hal_usb_function_present(s_usb_functions[i])) {
+            continue;
+        }
         if ((s_usb_functions[i]->init != NULL) && (s_usb_functions[i]->intf_num == i)) {
             s_usb_functions[i]->init(CONFIG_USBD_BUSID);
         }
@@ -76,5 +95,16 @@ void hal_usb_init(void)
 
     usbd_initialize(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE, hal_usb_event_dispatch);
 
-    USB_LOG_RAW("[usb] init done\r\n");
+    USB_LOG_RAW("[usb] init done, gamepad mode=%u\r\n", (unsigned)g_gamepad_mode);
+}
+
+int hal_usb_reconfigure(void)
+{
+    /* 模式切换改变了接口集合，只能让主机重新枚举：
+     * 断开 -> 重新注册描述符与各功能 -> 重新连接。
+     * 各功能模块的 init 已经做成可重复调用，信号量 / 线程不会重复创建。 */
+    (void)usbd_deinitialize(CONFIG_USBD_BUSID);
+    hal_usb_init();
+
+    return 0;
 }

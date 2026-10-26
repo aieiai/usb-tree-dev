@@ -53,6 +53,7 @@ static usb_osal_sem_t s_rx_ready_sem;   /* OUT 环形缓冲有新数据 */
 
 static volatile uint32_t s_dropped;
 static uint8_t s_busid;
+static uint8_t s_thread_created;
 
 
 static uint32_t ring_push(struct dt_ring *ring, const uint8_t *src, uint32_t len)
@@ -180,12 +181,14 @@ void hal_dt_usb_init(uint8_t busid)
 {
     s_busid = busid;
 
-    s_tx_pending_sem = usb_osal_sem_create(0);
-    s_tx_done_sem = usb_osal_sem_create(0);
-    s_rx_ready_sem = usb_osal_sem_create(0);
-    if ((s_tx_pending_sem == NULL) || (s_tx_done_sem == NULL) || (s_rx_ready_sem == NULL)) {
-        USB_LOG_ERR("dt semaphore create failed\r\n");
-        return;
+    if (s_tx_pending_sem == NULL) {
+        s_tx_pending_sem = usb_osal_sem_create(0);
+        s_tx_done_sem = usb_osal_sem_create(0);
+        s_rx_ready_sem = usb_osal_sem_create(0);
+        if ((s_tx_pending_sem == NULL) || (s_tx_done_sem == NULL) || (s_rx_ready_sem == NULL)) {
+            USB_LOG_ERR("dt semaphore create failed\r\n");
+            return;
+        }
     }
 
     memset(&s_dt_intf, 0, sizeof(s_dt_intf));
@@ -197,8 +200,12 @@ void hal_dt_usb_init(uint8_t busid)
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_DT_EPI, .ep_cb = ep_dt_in_callback });
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_DT_EPO, .ep_cb = ep_dt_out_callback });
 
-    if (usb_osal_thread_create("usb_dt", HAL_DT_THREAD_STACK, HAL_DT_THREAD_PRIO, hal_dt_thread, NULL) == NULL) {
-        USB_LOG_ERR("dt thread create failed\r\n");
+    if (!s_thread_created) {
+        if (usb_osal_thread_create("usb_dt", HAL_DT_THREAD_STACK, HAL_DT_THREAD_PRIO, hal_dt_thread, NULL) == NULL) {
+            USB_LOG_ERR("dt thread create failed\r\n");
+            return;
+        }
+        s_thread_created = 1;
     }
 }
 

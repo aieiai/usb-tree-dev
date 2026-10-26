@@ -94,7 +94,7 @@
 // gamepad xbox
 #define  CONFIG_DESC_GAMEPAD_XBOX \
     USB_INTERFACE_DESCRIPTOR_INIT(INTF_GAMEPAD_NUM, 0x00, 0x02, USB_DEVICE_CLASS_VEND_SPECIFIC, 0x5D, 0x01, STRID_INTF_GAMEPAD), \
-    USB_MICROSOFT_XBOX_DESCRIPTOR_INIT(INTF_GAMEPAD_XBOX_EPI, INTF_GAMEPAD_XBOX_EPI_SIZE, INTF_GAMEPAD_XBOX_EPO, INTF_GAMEPAD_XBOX_EPO_SIZE), \
+    USB_MICROSOFT_XBOX_DESCRIPTOR_INIT(INTF_GAMEPAD_XBOX_EPI, INTF_GAMEPAD_XBOX_RPT_LEN, INTF_GAMEPAD_XBOX_EPO, INTF_GAMEPAD_XBOX_OUT_RPT_LEN), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_GAMEPAD_XBOX_EPI, 0x03, INTF_GAMEPAD_XBOX_EPI_SIZE, INTF_GAMEPAD_XBOX_EPI_INTERVAL), \
     USB_ENDPOINT_DESCRIPTOR_INIT(INTF_GAMEPAD_XBOX_EPO, 0x03, INTF_GAMEPAD_XBOX_EPO_SIZE, INTF_GAMEPAD_XBOX_EPO_INTERVAL)
 
@@ -136,7 +136,7 @@ const usb_descriptor_t g_desc_rpt_dt = { .buf = desc_rpt_dt, .len = sizeof(desc_
 // Gamepad standard hid
 #define DESC_RPT_SIZ_GAMEPAD    (sizeof(desc_rpt_gamepad))
 static const uint8_t desc_rpt_gamepad[] = {
-    0x00
+    REPORT_DESC_GAMEPAD
 };
 const usb_descriptor_t g_desc_rpt_gamepad = { .buf = desc_rpt_gamepad, .len = sizeof(desc_rpt_gamepad) };
 
@@ -161,23 +161,21 @@ static const uint8_t config_descriptor_go[] = {
 };
 // Configuration + interface ...... standard hid
 static const uint8_t config_descriptor_gh[] = {
-    CONFIG_DESC_INIT(0x04),
+    CONFIG_DESC_INIT(0x05),
     CONFIG_DESC_KBD,
     CONFIG_DESC_CC,
     CONFIG_DESC_LIGHTING,
     CONFIG_DESC_DT,
-    // CONFIG_DESC_GAMEPAD_HID
-    // ......
+    CONFIG_DESC_GAMEPAD_HID
 };
 // Configuration + interface ...... xbox
 static const uint8_t config_descriptor_gx[] = {
-    CONFIG_DESC_INIT(0x04),
+    CONFIG_DESC_INIT(0x05),
     CONFIG_DESC_KBD,
     CONFIG_DESC_CC,
     CONFIG_DESC_LIGHTING,
     CONFIG_DESC_DT,
-    // CONFIG_DESC_GAMEPAD_XBOX
-    // ......
+    CONFIG_DESC_GAMEPAD_XBOX
 };
 
 
@@ -185,19 +183,32 @@ static const uint8_t config_descriptor_gx[] = {
 
 
 #if HAL_USB_WINUSB_ENABLE
-/* ---- MS OS 2.0 描述符集：按开关拼装（10 + 160 * 已启用功能数）----
- * 每个函数子集：子集头(8) + 兼容 ID(20) + DeviceInterfaceGUIDs 属性(132) = 160
+/* ---- MS OS 2.0 描述符集：按开关拼装 ----
+ * 结构（与已验证的 RAY40 工程一致）：
+ *   Set Header(10) + Configuration Subset Header(8)
+ *   + 每个 WinUSB 功能：Function Subset Header(8) + 兼容 ID(20) + DeviceInterfaceGUIDs(132) = 160
+ *   + Xbox 模式追加：Function Subset Header(8) + 兼容 ID(20) = 28
+ * Configuration Subset Header 不能省：缺了它 Windows 只会完整解析第一段，
+ * 末尾的 XUSB10 兼容 ID 会被忽略，xusb22.sys 就不会绑定手柄接口。
  * 不用 SDK 的 USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_INIT()：
  * 它把 DeviceInterfaceGUIDs 写死成 {CDB3B5AD-293B-4663-AA36-1AAE46463776}（CMSIS-DAP 的 GUID），
  * 会让 J-Link Configurator 把本设备识别成 "3rd party CMSIS-DAP"。这里用我们自己的 GUID。
  * 注意：改 GUID 时需同步修改 wPropertyDataLength、wTotalLength 和 wSubsetLength。 */
-#define MSOS20_SET_LEN   (10U \
+#define MSOS20_CONFIG_SUBSET_LEN  (8U)
+#define MSOS20_SET_LEN   (10U + MSOS20_CONFIG_SUBSET_LEN \
                           + (HAL_USB_CC_WINUSB_ENABLE ? USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_LEN : 0U) \
                           + (HAL_USB_DT_WINUSB_ENABLE ? USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_LEN : 0U))
 
 static const uint8_t _msos_v2_0[] = {
     /* ---- Set Header (10) ---- */
     USB_MSOSV2_COMP_ID_SET_HEADER_DESCRIPTOR_INIT(MSOS20_SET_LEN),
+
+    /* ---- Configuration Subset Header (8) ---- */
+    WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE),      /* wLength */
+    WBVAL(WINUSB_SUBSET_HEADER_CONFIGURATION_TYPE), /* MS_OS_20_SUBSET_HEADER_CONFIGURATION */
+    0x00,                                           /* bConfigurationIndex */
+    0x00,                                           /* bReserved */
+    WBVAL(MSOS20_SET_LEN - 10U),                    /* wTotalLength = Set Header 之后的长度 */
 
 #if HAL_USB_CC_WINUSB_ENABLE
     /* ==== Function Subset #1：interface 1 = control center（上位机）==== */
@@ -268,6 +279,31 @@ static const uint8_t _msos_v2_0[] = {
 typedef char msos20_set_len_check[(sizeof(_msos_v2_0) == MSOS20_SET_LEN) ? 1 : -1];
 
 
+/* ---- Xbox 模式追加的函数子集 ----
+ * 只含 Function Subset Header(8) + Compatible ID(20)，CompatibleID = "XUSB10"。
+ * Windows 读到它就会给该接口加载 xusb22.sys（XInput），与 VID/PID 无关；
+ * 缺了它设备管理器里只会有个无驱动接口，joy.cpl 里看不到手柄。
+ * wSubsetLength 必须等于本子集总长（8 + 20 = 28）。 */
+#define MSOS20_XBOX_SUBSET_LEN  (WINUSB_FUNCTION_SUBSET_HEADER_SIZE + WINUSB_FEATURE_COMPATIBLE_ID_SIZE)
+#define MSOS20_SET_LEN_XBOX     (MSOS20_SET_LEN + MSOS20_XBOX_SUBSET_LEN)
+
+static const uint8_t _msos_v2_0_xbox_suffix[MSOS20_XBOX_SUBSET_LEN] = {
+    WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE), /* wLength */
+    WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE), /* MS_OS_20_SUBSET_HEADER_FUNCTION */
+    INTF_GAMEPAD_NUM,                          /* bFirstInterface = gamepad */
+    0x00,                                      /* bReserved */
+    WBVAL(MSOS20_XBOX_SUBSET_LEN),             /* wSubsetLength */
+
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_SIZE),  /* wLength */
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_TYPE),  /* MS_OS_20_FEATURE_COMPATBLE_ID */
+    'X', 'U', 'S', 'B', '1', '0', 0, 0,        /* CompatibleID = "XUSB10" */
+    0, 0, 0, 0, 0, 0, 0, 0,                    /* SubCompatibleID */
+};
+
+/* Xbox 模式下把基础描述符集 + Xbox 子集拼到这块缓冲里返回（wTotalLength 需同步回填） */
+static uint8_t _msos_v2_0_xbox_buf[MSOS20_SET_LEN_XBOX];
+
+
 
 // BOS：WinUSB（MS OS 2.0）平台能力，WebUSB 由 HAL_USB_WEBUSB_ENABLE 控制
 #if HAL_USB_WEBUSB_ENABLE
@@ -285,6 +321,14 @@ static const uint8_t _desc_bos[] = {
     USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, 0x01),
 #endif
 };
+/* Xbox 模式的 BOS：唯一区别是 MS OS 2.0 描述符集长度多了 Xbox 子集 */
+static const uint8_t _desc_bos_xbox[] = {
+    USB_BOS_HEADER_DESCRIPTOR_INIT(MSOS20_BOS_TOTAL_LEN, MSOS20_BOS_NUM_CAPS),
+    USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_INIT(MSOS_VENDOR_CODE, MSOS20_SET_LEN_XBOX),
+#if HAL_USB_WEBUSB_ENABLE
+    USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, 0x01),
+#endif
+};
 static struct usb_bos_descriptor bos_desc = {
     .string = _desc_bos,
     .string_len = sizeof(_desc_bos), 
@@ -296,7 +340,7 @@ static struct usb_bos_descriptor bos_desc = {
  * 两者用同一个 vendor code 时，Windows 发来的 MS OS 2.0 描述符集请求（wIndex=0x07）
  * 会先命中 MSOS 1.0 分支，落到 default 后被 STALL，导致枚举失败（设备管理器代码 43）。 */
 
-static const struct usb_msosv2_descriptor msosv2_desc = {
+static struct usb_msosv2_descriptor msosv2_desc = {
     .compat_id = _msos_v2_0,
     .compat_id_len = sizeof(_msos_v2_0),
     .vendor_code = MSOS_VENDOR_CODE,
@@ -324,6 +368,45 @@ static struct usb_webusb_descriptor webusb_url_desc = {
 };
 #endif /* HAL_USB_WEBUSB_ENABLE */
 
+/* 按当前手柄模式选择 BOS 与 MS OS 2.0 描述符集。
+ * Xbox 模式多挂一个 XUSB10 函数子集，Windows 才会给手柄接口加载 xusb22.sys（与 VID/PID 无关）。
+ * 必须在 usbd_desc_register() 之前调用；hal_usb_init() 每次重新注册描述符前都会调一次。 */
+void hid_descriptor_apply_gamepad_mode(void)
+{
+    if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
+        uint16_t len = (uint16_t)(sizeof(_msos_v2_0) + sizeof(_msos_v2_0_xbox_suffix));
+
+        memcpy(_msos_v2_0_xbox_buf, _msos_v2_0, sizeof(_msos_v2_0));
+        memcpy(&_msos_v2_0_xbox_buf[sizeof(_msos_v2_0)], _msos_v2_0_xbox_suffix,
+               sizeof(_msos_v2_0_xbox_suffix));
+
+        /* 追加子集后要同步两处长度：
+         *   Set Header 的 wTotalLength         @ 8..9
+         *   Config Subset 的 wTotalLength      @ 16..17（= Set Header 之后的长度） */
+        _msos_v2_0_xbox_buf[8] = (uint8_t)(len & 0xFFU);
+        _msos_v2_0_xbox_buf[9] = (uint8_t)(len >> 8);
+        _msos_v2_0_xbox_buf[16] = (uint8_t)((len - 10U) & 0xFFU);
+        _msos_v2_0_xbox_buf[17] = (uint8_t)((len - 10U) >> 8);
+
+        msosv2_desc.compat_id = _msos_v2_0_xbox_buf;
+        msosv2_desc.compat_id_len = len;
+        bos_desc.string = _desc_bos_xbox;
+        bos_desc.string_len = sizeof(_desc_bos_xbox);
+    } else {
+        msosv2_desc.compat_id = _msos_v2_0;
+        msosv2_desc.compat_id_len = sizeof(_msos_v2_0);
+        bos_desc.string = _desc_bos;
+        bos_desc.string_len = sizeof(_desc_bos);
+    }
+}
+
+#endif /* HAL_USB_WINUSB_ENABLE */
+
+#if !HAL_USB_WINUSB_ENABLE
+/* 没有 WinUSB 功能时既不需要 BOS 也不需要 MS OS 2.0，模式切换不改变描述符 */
+void hid_descriptor_apply_gamepad_mode(void)
+{
+}
 #endif
 
 

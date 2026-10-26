@@ -51,9 +51,11 @@ static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 static void hal_kbd_init(uint8_t busid)
 {
-    s_tx_sem = usb_osal_sem_create(0);
     if (s_tx_sem == NULL) {
-        USB_LOG_ERR("kbd tx semaphore create failed\r\n");
+        s_tx_sem = usb_osal_sem_create(0);
+        if (s_tx_sem == NULL) {
+            USB_LOG_ERR("kbd tx semaphore create failed\r\n");
+        }
     }
 
     usbd_add_interface(busid, usbd_hid_init_intf(busid, &s_intf, g_desc_rpt_kbd.buf, g_desc_rpt_kbd.len));
