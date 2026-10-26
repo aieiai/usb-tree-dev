@@ -76,6 +76,8 @@ static void task1(void *pvParameters)
 }
 
 extern void webusb_hid_keyboard_init(uint8_t busid, uintptr_t reg_base);
+extern void gamepad_init(uint8_t busid, uintptr_t reg_base);
+
 /* Define what the initial system looks like.  */
 void tx_application_define(void *first_unused_memory)
 {
@@ -84,7 +86,9 @@ void tx_application_define(void *first_unused_memory)
     tx_byte_pool_create(&tx_byte_pool, "tx byte pool", tx_memory_area, TX_MEM_POOL_SIZE);
 
     hal_usb_init();
+    
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
+    // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
 
 
     if (usb_osal_thread_create("task1", 8192U, task1_PRIORITY, task1, NULL) == NULL) {
