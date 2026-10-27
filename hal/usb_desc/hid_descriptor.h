@@ -168,6 +168,7 @@ enum {
  * 两者的 vendor code 必须不同，否则厂商请求会互相抢答（cherryusb 按 bRequest 分发）。 */
 #define MSOS_VENDOR_CODE                (0x07)
 #define WEBUSB_VENDOR_CODE              (0x08)
+#define WEBUSB_LANDING_PAGE_CODE        (0x01)
 
 #define HAL_USB_CC_GUID                 "{1F3C7A21-8B4E-4D95-A6C1-2E7B9F4D5A38}"
 #define HAL_USB_DT_GUID                 "{6B1D7C3E-4A2F-4E8B-9C5D-1F0A2B3C4D5E}"

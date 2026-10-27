@@ -194,8 +194,7 @@ static const uint8_t config_descriptor_gx[] = {
  * 它把 DeviceInterfaceGUIDs 写死成 {CDB3B5AD-293B-4663-AA36-1AAE46463776}（CMSIS-DAP 的 GUID），
  * 会让 J-Link Configurator 把本设备识别成 "3rd party CMSIS-DAP"。这里用我们自己的 GUID。
  * 注意：改 GUID 时需同步修改 wPropertyDataLength、wTotalLength 和 wSubsetLength。 */
-#define MSOS20_CONFIG_SUBSET_LEN  (8U)
-#define MSOS20_SET_LEN   (10U + MSOS20_CONFIG_SUBSET_LEN \
+#define MSOS20_SET_LEN   (WINUSB_DESCRIPTOR_SET_HEADER_SIZE + WINUSB_FUNCTION_SUBSET_HEADER_SIZE \
                           + (HAL_USB_CC_WINUSB_ENABLE ? USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_LEN : 0U) \
                           + (HAL_USB_DT_WINUSB_ENABLE ? USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_LEN : 0U))
 
@@ -276,7 +275,7 @@ static const uint8_t _msos_v2_0[] = {
 };
 
 /* 编译期自检：数组长度必须与 MSOS20_SET_LEN 一致（开关或 GUID 改动导致长度漂移会直接报错） */
-typedef char msos20_set_len_check[(sizeof(_msos_v2_0) == MSOS20_SET_LEN) ? 1 : -1];
+_Static_assert(sizeof(_msos_v2_0) == MSOS20_SET_LEN, "MS OS 2.0 descriptor length mismatch");
 
 
 /* ---- Xbox 模式追加的函数子集 ----
@@ -287,7 +286,7 @@ typedef char msos20_set_len_check[(sizeof(_msos_v2_0) == MSOS20_SET_LEN) ? 1 : -
 #define MSOS20_XBOX_SUBSET_LEN  (WINUSB_FUNCTION_SUBSET_HEADER_SIZE + WINUSB_FEATURE_COMPATIBLE_ID_SIZE)
 #define MSOS20_SET_LEN_XBOX     (MSOS20_SET_LEN + MSOS20_XBOX_SUBSET_LEN)
 
-static const uint8_t _msos_v2_0_xbox_suffix[MSOS20_XBOX_SUBSET_LEN] = {
+static const uint8_t _msos_v2_0_xbox_suffix[] = {
     WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE), /* wLength */
     WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE), /* MS_OS_20_SUBSET_HEADER_FUNCTION */
     INTF_GAMEPAD_NUM,                          /* bFirstInterface = gamepad */
@@ -316,9 +315,9 @@ static uint8_t _msos_v2_0_xbox_buf[MSOS20_SET_LEN_XBOX];
 
 static const uint8_t _desc_bos[] = {
     USB_BOS_HEADER_DESCRIPTOR_INIT(MSOS20_BOS_TOTAL_LEN, MSOS20_BOS_NUM_CAPS),
-    USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_INIT(MSOS_VENDOR_CODE, sizeof(_msos_v2_0)),
+    USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_INIT(MSOS_VENDOR_CODE, MSOS20_SET_LEN),
 #if HAL_USB_WEBUSB_ENABLE
-    USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, 0x01),
+    USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, WEBUSB_LANDING_PAGE_CODE),
 #endif
 };
 /* Xbox 模式的 BOS：唯一区别是 MS OS 2.0 描述符集长度多了 Xbox 子集 */
@@ -326,7 +325,7 @@ static const uint8_t _desc_bos_xbox[] = {
     USB_BOS_HEADER_DESCRIPTOR_INIT(MSOS20_BOS_TOTAL_LEN, MSOS20_BOS_NUM_CAPS),
     USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_INIT(MSOS_VENDOR_CODE, MSOS20_SET_LEN_XBOX),
 #if HAL_USB_WEBUSB_ENABLE
-    USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, 0x01),
+    USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, WEBUSB_LANDING_PAGE_CODE),
 #endif
 };
 static struct usb_bos_descriptor bos_desc = {
@@ -489,13 +488,6 @@ static const uint8_t *other_speed_descriptor_callback(uint8_t speed) {
     buf[1] = USB_DESCRIPTOR_TYPE_OTHER_SPEED;
     return buf;
 }
-
-/* 不再提供 Device Qualifier 和 Other Speed Configuration：
- * 本设备只跑一种速度，返回 qualifier 会让主机去读 OTHER_SPEED_CONFIG，
- * 而它只能由全速配置复制而来，作为高速配置校验时内容非法（如 bulk 端点 mps 必须为 512），
- * 会让 Windows 报 CONFIGURATION_DESCRIPTOR_VALIDATION_FAILURE。
- * 回调置空后 cherryusb 会直接 STALL 这两个请求，符合单速设备的行为。 */
-
 
 // String
 static char const *string_descriptors[] = {
