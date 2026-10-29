@@ -43,8 +43,8 @@
 #endif
 
 /* descriptor common define */
-#define USBD_VID           0x7987
-#define USBD_PID           0x0004
+#define USBD_VID           0x7989
+#define USBD_PID           0x0001
 #define USBD_MAX_POWER     500
 
 /* attribute data into no cache ram */

@@ -78,9 +78,7 @@ void hal_usb_init(void)
 {
     uint32_t i;
 
-    /* 手柄模式会改变 BOS / MS OS 2.0 描述符集（Xbox 模式多一个 XUSB10 子集），
-     * 必须在注册描述符之前选好 */
-    hid_descriptor_apply_gamepad_mode();
+    hid_descriptor_init();
 
     usbd_desc_register(CONFIG_USBD_BUSID, &g_hid_descriptor);
 

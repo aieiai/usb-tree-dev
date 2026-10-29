@@ -5,21 +5,12 @@
 
 #include "usb_config.h"
 
-
-/* ---- WinUSB 功能独立开关（放在最前面，后面的接口/端点定义要用）----
- * 分别控制哪个接口由 MS OS 2.0 声明 WINUSB 绑定：
- *   1 = 厂商自定义类 + WinUSB，Windows 自动加载 winusb.sys；
- *   0 = 退回 HID 类（免驱）：
- *       - control center 用中断端点，可直接退回 HID；
- *       - diagnostic tracking 的批量端点会跟着换成中断端点再退回 HID。
- * 两者都关时还会关闭 BOS / MS OS 2.0，bcdUSB 退回 0x0200（隔离枚举故障用）。
- */
 #ifndef HAL_USB_CC_WINUSB_ENABLE
-#define HAL_USB_CC_WINUSB_ENABLE        (1) /* control center, interface 1 */
+#define HAL_USB_CC_WINUSB_ENABLE        (1)
 #endif
 
 #ifndef HAL_USB_DT_WINUSB_ENABLE
-#define HAL_USB_DT_WINUSB_ENABLE        (1) /* diagnostic tracking, interface 3 */
+#define HAL_USB_DT_WINUSB_ENABLE        (1)
 #endif
 
 /* 是否声明 WebUSB 平台能力（浏览器访问）。
@@ -32,6 +23,7 @@
 
 #define HAL_USB_WINUSB_ENABLE           (HAL_USB_CC_WINUSB_ENABLE || HAL_USB_DT_WINUSB_ENABLE)
 
+#define USB_PRODUCT_VERSION             (0x0100)
 
 typedef struct {
     const uint8_t *buf;
@@ -56,7 +48,8 @@ enum {
     STRID_INTF_CUSTOM,
     STRID_INTF_LIGHTING,
     STRID_INTF_DT,
-    STRID_INTF_GAMEPAD,
+    STRID_INTF_GAMEPAD_HID,
+    STRID_INTF_GAMEPAD_XBOX,
     STRID_COUNT
 };
 
@@ -134,8 +127,8 @@ enum {
  *  - HAL_GAMEPAD_MODE_XBOX : vendor class 0xFF/0x5D/0x01 + 0x21 私有描述符 + 20 字节报告。
  *    Xbox 模式下 MS OS 2.0 描述符集会额外给本接口挂 CompatibleID="XUSB10"，
  *    Windows 据此加载 xusb22.sys（XInput），因此 VID/PID 可以用任意自定义值。
- *    该模式依赖 MS OS 2.0：要求 HAL_USB_WINUSB_ENABLE=1（CC/DT 至少开一个），
- *    否则设备不会上报 BOS，Windows 就没有加载 xusb22.sys 的依据。
+ *    该模式通过独立的 MS OS 2.0 XUSB10 子集绑定 xusb22.sys，不依赖 CC/DT 的 WinUSB 开关；
+ *    Xbox 模式会自动上报 USB 2.1 设备描述符与 BOS。
  *    Linux 的 xpad 驱动按接口 class/subclass/protocol 匹配，同样可直接识别。 */
 #define INTF_GAMEPAD_NUM                (0x04) /* Interface number for Gamepad for standard hid or xbox controller */
 // standard hid gamepad
@@ -145,9 +138,9 @@ enum {
 #define INTF_GAMEPAD_HID_EPO            (0x05) /* Endpoint number and attributes for Gamepad for standard hid output */
 #define INTF_GAMEPAD_HID_EPO_SIZE       (8)
 #define INTF_GAMEPAD_HID_EPO_INTERVAL   (USBD_INTERVAL_MS(0.5))
-/* HID 模式 IN 报告长度，与 REPORT_DESC_GAMEPAD 的 13 字节严格对应 */
+/* HID 模式 IN 报告长度，与 DESC_RPT_GAMEPAD 的 13 字节严格对应 */
 #define INTF_GAMEPAD_HID_RPT_LEN        (13)
-// xbox controller for windows
+// Xbox 360 Controller for Windows
 #define INTF_GAMEPAD_XBOX_EPI           (0x85) /* Endpoint number and attributes for Gamepad xbox input */
 #define INTF_GAMEPAD_XBOX_EPI_SIZE      (32)   /* 端点包大小，需 >= 20 字节报告 */
 #define INTF_GAMEPAD_XBOX_EPI_INTERVAL  (USBD_INTERVAL_MS(0.5)) /* 4ms */
@@ -181,7 +174,7 @@ extern const usb_descriptor_t g_desc_rpt_gamepad;
 
 /* 按 g_gamepad_mode 选好 BOS / MS OS 2.0 描述符集（Xbox 模式含 XUSB10 子集），
  * 在 usbd_desc_register() 之前调用。 */
-void hid_descriptor_apply_gamepad_mode(void);
+void hid_descriptor_init(void);
 
 
 #endif

@@ -29,7 +29,7 @@
  * 一轮 27 项 ≈ 27 秒，循环播放；当前项通过 DT 通道打印。
  * 接入真实输入后删掉这个任务即可。 */
 #ifndef APP_GAMEPAD_DEMO
-#define APP_GAMEPAD_DEMO      0
+#define APP_GAMEPAD_DEMO      1
 #endif
 
 #if APP_GAMEPAD_DEMO
@@ -305,7 +305,7 @@ void tx_application_define(void *first_unused_memory)
 
 #if APP_GAMEPAD_DEMO
     /* 首轮枚举就是 HID 手柄模式，直接写模式变量即可，不需要重新枚举 */
-    g_gamepad_mode = HAL_GAMEPAD_MODE_XBOX;
+    g_gamepad_mode = HAL_GAMEPAD_MODE_HID;
 #endif
 
     hal_usb_init();
@@ -335,7 +335,7 @@ int main(void)
     board_init_gpio_pins();
     gpio_set_pin_input(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
 
-    board_timer_create(LED_FLASH_PERIOD_IN_MS, board_led_toggle);
+    // board_timer_create(LED_FLASH_PERIOD_IN_MS, board_led_toggle);
 
     board_init_usb((USB_Type *)CONFIG_USBD_REG_BASE);
     intc_set_irq_priority(CONFIG_HPM_USBD_IRQn, 2);

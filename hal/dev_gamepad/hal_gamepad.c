@@ -150,7 +150,7 @@ const struct hal_usb_function hal_gamepad_function = {
     .present = hal_gamepad_present,
 };
 
-/* HID 模式 13 字节报告，布局与 REPORT_DESC_GAMEPAD 严格对应：
+/* HID 模式 13 字节报告，布局与 DESC_RPT_GAMEPAD 严格对应：
  * [0..1] buttons，[2] hat(低 4 位)，[3..10] lx/ly/rx/ry(int16)，
  * [11..12] lt/rt。 */
 static uint16_t gamepad_encode_hid(const hal_gamepad_state_t *st, uint8_t *p)
