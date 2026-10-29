@@ -2,9 +2,8 @@
 #define HAL_GAMEPAD_H
 
 #include <stdint.h>
+#include <string.h>
 
-#include "hal_usb.h"        /* 同时引入 usbd_core.h */
-#include "hid_descriptor.h" /* gamepad_mode_ty */
 
 /* 游戏手柄接口（interface 4）：
  *  - HID 模式：标准 HID Gamepad 报告描述符，免驱，IN 报告 13 字节；
@@ -152,12 +151,6 @@ uint16_t hal_gamepad_encode(const hal_gamepad_state_t *state, uint8_t *buf, uint
  * 用于调试打印 / 应用侧处理震动、LED；中断里只做缓存，实际解析放任务上下文。 */
 int hal_gamepad_read_output(uint8_t *buf, uint16_t buf_len, uint16_t *out_len);
 
-/* 切换手柄模式并让主机重新枚举（USB 会短暂断开重连）。
- * 返回 0 成功；-1 模式非法。切到同一模式不做任何操作。 */
-int hal_gamepad_set_mode(gamepad_mode_ty mode);
-
-/* 当前手柄模式（HAL_GAMEPAD_MODE_OFF / _HID / _XBOX）。 */
-gamepad_mode_ty hal_gamepad_get_mode(void);
 
 /* 读取最近一次收到的震动强度，返回 0 表示有效，-1 表示当前模式没有震动通道。 */
 int hal_gamepad_get_rumble(uint8_t *left, uint8_t *right);

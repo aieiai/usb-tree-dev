@@ -2,8 +2,8 @@
 #define HAL_KBD_H
 
 #include <stdint.h>
+#include <string.h>
 
-#include "hal_usb.h"
 
 /* 键盘接口（interface 0）：IN 报告发送 + 主机下发的 LED Output 报告 */
 

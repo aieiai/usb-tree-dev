@@ -1,12 +1,11 @@
-#include <string.h>
-
 #include "hal_kbd.h"
+#include "../../hal_usb.h"
+#include "../descriptor/hid_descriptor.h"
 
 #include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
-#include "hid_descriptor.h"
 
 
 static struct usbd_interface s_intf;
@@ -68,7 +67,7 @@ static void hal_kbd_configured(uint8_t busid)
     (void)usbd_ep_start_read(busid, INTF_KBD_EPO, s_out_buf, sizeof(s_out_buf));
 }
 
-const struct hal_usb_function hal_kbd_function = {
+const hal_usb_fn_t hal_kbd_function = {
     .intf_num = INTF_KBD_NUM,
     .name = "kbd",
     .init = hal_kbd_init,

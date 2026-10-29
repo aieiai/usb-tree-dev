@@ -2,8 +2,8 @@
 #define HAL_CC_H
 
 #include <stdint.h>
+#include <string.h>
 
-#include "hal_usb.h"
 
 /* 上位机接口（interface 1）：厂商自定义 HID，双向中断端点。
  * 主机下发的数据进环形缓冲，应用侧用 hal_cc_read() 取走。 */

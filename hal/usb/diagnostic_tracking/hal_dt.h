@@ -2,11 +2,8 @@
 #define HAL_DT_H
 
 #include <stdint.h>
+#include "../descriptor/hid_descriptor.h"
 
-#include "tx_api.h"
-
-#include "hal_usb.h"
-#include "hid_descriptor.h"
 
 /* 诊断追踪通道（Diagnostic Tracking 接口，interface 3）：
  *  - WinUSB 模式：厂商自定义接口 + 批量端点；
@@ -26,11 +23,11 @@
 #define HAL_DT_PACKET_SIZE      (64U)
 #define HAL_DT_RX_PACKET_SIZE   (64U)
 #endif
+
 #define HAL_DT_RING_SIZE        (4096U)  /* IN 方向环形缓冲，必须是 2 的幂，满了丢新数据 */
 #define HAL_DT_RX_RING_SIZE     (1024U)  /* OUT 方向环形缓冲，必须是 2 的幂（>= RX_PACKET_SIZE * 2） */
 #define HAL_DT_TX_TIMEOUT_MS    (100U)   /* 单包发送超时：主机长时间不取数据时丢弃该包，避免卡死 */
-#define HAL_DT_THREAD_STACK     (1024U)
-#define HAL_DT_THREAD_PRIO      (TX_MAX_PRIORITIES - 2) /* 数值越大优先级越低，低于业务线程 */
+
 
 /* 注册 DT 接口与端点，必须在 usbd_initialize() 之前调用一次 */
 void hal_dt_usb_init(uint8_t busid);

@@ -3,13 +3,20 @@
 #include <string.h>
 
 #include "hal_dt.h"
+#include "../../hal_usb.h"
+#include "../descriptor/hid_descriptor.h"
 
 #include "usb_config.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 #include "usb_osal.h"
 
-#include "hid_descriptor.h"
+
+#include "tx_api.h"
+
+
+#define HAL_DT_THREAD_STACK     (1024U)
+#define HAL_DT_THREAD_PRIO      (TX_MAX_PRIORITIES - 2) /* 数值越大优先级越低，低于业务线程 */
 
 #if !HAL_USB_DT_WINUSB_ENABLE
 extern const usb_descriptor_t g_desc_rpt_dt;
@@ -293,7 +300,7 @@ static void hal_dt_configured(uint8_t busid)
     hal_dt_usb_configured();
 }
 
-const struct hal_usb_function hal_dt_function = {
+const hal_usb_fn_t hal_dt_function = {
     .intf_num = INTF_DT_NUM,
     .name = "dt",
     .init = hal_dt_init,

@@ -2,8 +2,8 @@
 #define HAL_LIGHTING_H
 
 #include <stdint.h>
+#include <string.h>
 
-#include "hal_usb.h"
 
 /* 
  * 灯效接口：interface 2。HID 报告都是 Feature 报告（走 EP0）

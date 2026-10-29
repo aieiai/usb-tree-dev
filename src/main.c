@@ -3,10 +3,6 @@
 #include "tx_task_config.h"
 
 #include "hal_usb.h"
-#include "hal_kbd.h"
-#include "hal_dt.h"
-#include "hal_lighting.h"
-#include "hal_gamepad.h"
 
 #include "usb_osal.h"
 #include "usb_config.h"

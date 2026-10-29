@@ -3,6 +3,7 @@
 
 #include "usbd_core.h"
 #include "usbd_hid.h"
+
 #include "tu_hid_device.h"
 
 
@@ -160,8 +161,7 @@ static struct usb_webusb_descriptor webusb_url_desc = {
 /* 按当前手柄模式选择 BOS 与 MS OS 2.0 描述符集。
  * Xbox 模式多挂一个 XUSB10 函数子集，Windows 才会给手柄接口加载 xusb22.sys（与 VID/PID 无关）。
  * 必须在 usbd_desc_register() 之前调用；hal_usb_init() 每次重新注册描述符前都会调一次。 */
-void hid_descriptor_init(void)
-{
+void hid_descriptor_init(void) {
     if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
         uint16_t len = (uint16_t)(sizeof(_msos_v2_0) + sizeof(_msos_v2_0_xbox_suffix));
 
@@ -278,8 +278,7 @@ static const uint8_t *other_speed_descriptor_callback(uint8_t speed) {
     uint8_t *buf       = other_speed_descriptor_buf;
     uint8_t buf_len    = sizeof(other_speed_descriptor_buf);
 
-    if (len > buf_len)
-    {
+    if (len > buf_len) {
         len = buf_len;
     }
     memcpy(buf, cur, len);
@@ -289,17 +288,17 @@ static const uint8_t *other_speed_descriptor_callback(uint8_t speed) {
 
 // String
 static char const *string_descriptors[] = {
-  (const char[]){ 0x09, 0x04 },             // 0: English (0x0409)
-  "Ray",                                    // 1: Manufacturer
-  "Trace40",                                // 2: Product
-  "TRACE40-0001",                           // 3: Serial (usb_get_serial() generate)
+    (const char[]){ 0x09, 0x04 },           // 0: English (0x0409)
+    "Ray",                                  // 1: Manufacturer
+    "Trace40",                              // 2: Product
+    "TRACE40-0001",                         // 3: Serial (usb_get_serial() generate)
 
-  "Ray Keyboard/Mouse/Consumer/System",   // 4: ITF KBD (Keyboard+Mouse+Consumer+System)
-  "Ray Control Center",                   // 5: ITF Custom (Control Center)
-  "Ray Dynamic Lighting",                 // 6: ITF Lighting (Dynamic Lighting)
-  "Ray Diagnostic Tracking",              // 7: ITF Diagnostic (Diagnostic Tracking)
-  "Ray Gamepad HID",                      // 8: ITF Gamepad (Standard HID)
-  "Ray Xbox 360 Controller for Windows",  // 9: ITF Gamepad (Xbox)
+    "Ray Keyboard/Mouse/Consumer/System",   // 4: ITF KBD (Keyboard+Mouse+Consumer+System)
+    "Ray Control Center",                   // 5: ITF Custom (Control Center)
+    "Ray Dynamic Lighting",                 // 6: ITF Lighting (Dynamic Lighting)
+    "Ray Diagnostic Tracking",              // 7: ITF Diagnostic (Diagnostic Tracking)
+    "Ray Gamepad HID",                      // 8: ITF Gamepad (Standard HID)
+    "Ray Xbox 360 Controller for Windows",  // 9: ITF Gamepad (Xbox)
 };
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index) {
     (void)speed;

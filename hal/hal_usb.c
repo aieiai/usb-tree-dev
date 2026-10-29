@@ -1,29 +1,21 @@
-#include <string.h>
-
 #include "hal_usb.h"
 
-#include "hal_kbd.h"
-#include "hal_cc.h"
-#include "hal_lighting.h"
-#include "hal_dt.h"
-#include "hal_gamepad.h"
-
-#include "hid_descriptor.h"
-
-#include "board.h"
 #include "usb_osal.h"
 #include "usbd_core.h"
+
+
+#include "board.h"
 
 volatile gamepad_mode_ty g_gamepad_mode = HAL_GAMEPAD_MODE_OFF;
 
 /* 各功能模块导出的注册项。这里的顺序 = 配置描述符里的接口顺序。 */
-extern const struct hal_usb_function hal_kbd_function;
-extern const struct hal_usb_function hal_cc_function;
-extern const struct hal_usb_function hal_lighting_function;
-extern const struct hal_usb_function hal_dt_function;
-extern const struct hal_usb_function hal_gamepad_function;
+extern const hal_usb_fn_t hal_kbd_function;
+extern const hal_usb_fn_t hal_cc_function;
+extern const hal_usb_fn_t hal_lighting_function;
+extern const hal_usb_fn_t hal_dt_function;
+extern const hal_usb_fn_t hal_gamepad_function;
 
-static const struct hal_usb_function *const s_usb_functions[] = {
+static const hal_usb_fn_t *const s_usb_functions[] = {
     &hal_kbd_function,
     &hal_cc_function,
     &hal_lighting_function,
@@ -35,7 +27,7 @@ static const struct hal_usb_function *const s_usb_functions[] = {
 
 
 /* 手柄模式为 OFF 时函数表里仍保留 gamepad，但不注册接口、不派发事件 */
-static int hal_usb_function_present(const struct hal_usb_function *fn)
+static int hal_usb_function_present(const hal_usb_fn_t *fn)
 {
     return (fn->present == NULL) || (fn->present() != 0U);
 }
@@ -96,13 +88,29 @@ void hal_usb_init(void)
     USB_LOG_RAW("[usb] init done, gamepad mode=%u\r\n", (unsigned)g_gamepad_mode);
 }
 
-int hal_usb_reconfigure(void)
+void hal_usb_reconfigure(void)
 {
-    /* 模式切换改变了接口集合，只能让主机重新枚举：
-     * 断开 -> 重新注册描述符与各功能 -> 重新连接。
-     * 各功能模块的 init 已经做成可重复调用，信号量 / 线程不会重复创建。 */
+    // 模式切换改变了接口集合，只能让主机重新枚举：断开 -> 重新注册描述符与各功能 -> 重新连接
     (void)usbd_deinitialize(CONFIG_USBD_BUSID);
     hal_usb_init();
+}
 
+int hal_usb_gamepad_set_mode(gamepad_mode_ty mode) {
+    if ((mode != HAL_GAMEPAD_MODE_OFF) && (mode != HAL_GAMEPAD_MODE_HID) && (mode != HAL_GAMEPAD_MODE_XBOX)) {
+        return -1;
+    }
+    if (mode == g_gamepad_mode) {
+        return 0;
+    }
+
+    g_gamepad_mode = mode;
+
+    hal_usb_reconfigure();
     return 0;
 }
+
+gamepad_mode_ty hal_usb_gamepad_get_mode(void) {
+    return g_gamepad_mode;
+}
+
+

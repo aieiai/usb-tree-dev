@@ -1,12 +1,11 @@
-#include <string.h>
-
 #include "hal_gamepad.h"
+#include "../../hal_usb.h"
+#include "../descriptor/hid_descriptor.h"
 
 #include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
-#include "hid_descriptor.h"
 
 extern const usb_descriptor_t g_desc_rpt_gamepad;
 
@@ -141,7 +140,7 @@ static uint8_t hal_gamepad_present(void)
     return (g_gamepad_mode != HAL_GAMEPAD_MODE_OFF) ? 1U : 0U;
 }
 
-const struct hal_usb_function hal_gamepad_function = {
+const hal_usb_fn_t hal_gamepad_function = {
     .intf_num = INTF_GAMEPAD_NUM,
     .name = "gamepad",
     .init = hal_gamepad_init,
@@ -315,26 +314,6 @@ int hal_gamepad_send(const hal_gamepad_state_t *state, uint32_t timeout_ms)
     }
 
     return hal_gamepad_send_raw(report, len, timeout_ms);
-}
-
-int hal_gamepad_set_mode(gamepad_mode_ty mode)
-{
-    if ((mode != HAL_GAMEPAD_MODE_OFF) && (mode != HAL_GAMEPAD_MODE_HID) && (mode != HAL_GAMEPAD_MODE_XBOX)) {
-        return -1;
-    }
-    if (mode == g_gamepad_mode) {
-        return 0;
-    }
-
-    /* 先写模式，描述符回调在随后的重新枚举里读它 */
-    g_gamepad_mode = mode;
-
-    return hal_usb_reconfigure();
-}
-
-gamepad_mode_ty hal_gamepad_get_mode(void)
-{
-    return g_gamepad_mode;
 }
 
 int hal_gamepad_read_output(uint8_t *buf, uint16_t buf_len, uint16_t *out_len)

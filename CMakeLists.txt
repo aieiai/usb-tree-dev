@@ -33,6 +33,7 @@ add_subdirectory(tu)
 add_subdirectory(hal)
 
 sdk_inc(config)
+sdk_inc(common)
 sdk_app_src(src/main.c)
 # sdk_app_src(src/webusb_hid_template.c)
 # sdk_app_src(src/gamepad_template.c)

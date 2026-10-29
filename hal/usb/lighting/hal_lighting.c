@@ -1,12 +1,10 @@
-#include <string.h>
-
 #include "hal_lighting.h"
+#include "../../hal_usb.h"
+#include "../descriptor/hid_descriptor.h"
 
 #include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
-
-#include "hid_descriptor.h"
 
 extern const usb_descriptor_t g_desc_rpt_lighting;
 
@@ -25,7 +23,7 @@ static void hal_lighting_init(uint8_t busid)
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_LIGHTING_EPI, .ep_cb = ep_in_callback });
 }
 
-const struct hal_usb_function hal_lighting_function = {
+const hal_usb_fn_t hal_lighting_function = {
     .intf_num = INTF_LIGHTING_NUM,    
     .name = "lighting",
     .init = hal_lighting_init,
