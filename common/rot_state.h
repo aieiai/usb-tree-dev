@@ -28,6 +28,7 @@ enum {
     rot_state_timeout,
     rot_state_invalid_argument,
     rot_state_not_supported,
+    rot_state_not_found,
 };
 
 

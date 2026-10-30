@@ -40,7 +40,6 @@ sdk_app_src(src/main.c)
 
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)
-sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
 
 if(TARGET app)
     target_compile_options(app PRIVATE "-Wextra") # "-Wignored-qualifiers"
