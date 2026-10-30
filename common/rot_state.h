@@ -6,8 +6,6 @@
 typedef uint32_t rot_state_t;
 
 
-
-
 /** @brief Status code group definition
  *  @rule:
  *      [Group]: 
@@ -19,9 +17,12 @@ typedef uint32_t rot_state_t;
 
 enum {
     rot_state_group_common = 0,
+    rot_state_group_flash,
+    rot_state_group_fdb,
 };
 
 
+// General status code
 enum {
     rot_state_success = ROT_STATE_MAKE(rot_state_group_common, 0),
     rot_state_fail,
@@ -30,10 +31,6 @@ enum {
     rot_state_not_supported,
     rot_state_not_found,
 };
-
-
-
-
 
 
 #endif

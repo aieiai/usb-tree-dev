@@ -70,6 +70,9 @@ void hal_usb_init(void)
 {
     uint32_t i;
 
+    board_init_usb((USB_Type *)CONFIG_USBD_REG_BASE);
+    intc_set_irq_priority(CONFIG_HPM_USBD_IRQn, 2);
+    
     hid_descriptor_init();
 
     usbd_desc_register(CONFIG_USBD_BUSID, &g_hid_descriptor);

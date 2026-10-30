@@ -3,6 +3,7 @@
 #include "tx_task_config.h"
 
 #include "hal_usb.h"
+#include "hal_flash.h"
 
 #include "usb_osal.h"
 #include "usb_config.h"
@@ -11,8 +12,6 @@
 #include "hpm_gpio_drv.h"
 
 
-#define task1_PRIORITY          (TX_MAX_PRIORITIES - 5U)
-#define TX_MEM_POOL_SIZE        (16U * 1024U)
 #define LED_FLASH_PERIOD_IN_MS  (300)
 
 /* 演示/自检日志：量产时改为 0 或直接删掉演示代码，DT 接口本身不受影响 */
@@ -304,7 +303,7 @@ void tx_application_define(void *first_unused_memory)
     g_gamepad_mode = HAL_GAMEPAD_MODE_HID;
 #endif
 
-    hal_usb_init();
+
     
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
     // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
@@ -333,8 +332,8 @@ int main(void)
 
     // board_timer_create(LED_FLASH_PERIOD_IN_MS, board_led_toggle);
 
-    board_init_usb((USB_Type *)CONFIG_USBD_REG_BASE);
-    intc_set_irq_priority(CONFIG_HPM_USBD_IRQn, 2);
+    hal_flash_init();
+    hal_usb_init();
 
     printf("cherry usb threadx hid_keyboard device sample.\n");
 

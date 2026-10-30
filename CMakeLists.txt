@@ -31,6 +31,7 @@ project(ray)
 
 add_subdirectory(tu)
 add_subdirectory(hal)
+add_subdirectory(fdb)
 
 sdk_inc(config)
 sdk_inc(common)
