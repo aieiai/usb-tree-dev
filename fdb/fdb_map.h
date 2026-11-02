@@ -1,7 +1,7 @@
-#ifndef FDB_CONFIG_H
-#define FDB_CONFIG_H
+#ifndef FDB_MAP_H
+#define FDB_MAP_H
 
-
+// Flash base message
 #define FDB_BASE_ADDR               (0x80000000)
 #define FDB_TOTAL_SIZ               (0x100000) /* 1MB */
 #define FDB_PAGE_SIZ                (0x1000)   /* 4KB */
@@ -23,9 +23,10 @@
 #define FDB_RSV0_SIZ                (FDB_PAGE_SIZ * 2)
 
 
-
 // Public parameter configuration area
-#define FDB_FACTORY_ADDR            (FDB_RSV0_ADDR + FDB_RSV0_SIZ)
+#define FDB_DATA_BASE_ADDR          (FDB_RSV0_ADDR + FDB_RSV0_SIZ)
+
+#define FDB_FACTORY_ADDR            (FDB_DATA_BASE_ADDR)
 #define FDB_FACTORY_SIZ             (FDB_PAGE_SIZ)
 
 #define FDB_CALIB_ADDR              (FDB_FACTORY_ADDR + FDB_FACTORY_SIZ)
@@ -38,9 +39,7 @@
 #define FDB_RSV1_SIZ                (FDB_PAGE_SIZ)
 
 
-
 // Multiple on-board parameter configurations area
-
 #define FDB_BIF_ADDR                (FDB_RSV1_ADDR + FDB_RSV1_SIZ)
 #define FDB_BIN_SIZ                 (FDB_PAGE_SIZ)
 
@@ -62,16 +61,15 @@
 #define FDB_OBCFG_NUM               (4)
 #define FDB_OBCFG_ADDR              (FDB_BIF_ADDR)
 #define FDB_OBCFG_SIZ               (FDB_BIN_SIZ + FDB_MAP_SIZ + FDB_ADV_SIZ + FDB_RGB_SIZ + FDB_RSV2_SIZ + FDB_MACRO_SIZ)
-
 // Cache
 #define FDB_OBCFG_CACHE_ADDR        (FDB_OBCFG_ADDR + (FDB_OBCFG_SIZ * FDB_OBCFG_NUM))
 #define FDB_OBCFG_CACHE_SIZ         (FDB_OBCFG_SIZ)
 
 
 // Flash data base end addr
-#define FDB_END_ADDR                (FDB_OBCFG_CACHE_ADDR + FDB_OBCFG_CACHE_SIZ)
+#define FDB_DATA_END_ADDR           (FDB_OBCFG_CACHE_ADDR + FDB_OBCFG_CACHE_SIZ)
 
-_Static_assert(                     FDB_END_ADDR <= (FDB_BASE_ADDR + FDB_TOTAL_SIZ), "");
+_Static_assert(                     FDB_DATA_END_ADDR <= (FDB_BASE_ADDR + FDB_TOTAL_SIZ), "");
 
 
 

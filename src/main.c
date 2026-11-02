@@ -12,6 +12,7 @@
 #include "hpm_gpio_drv.h"
 
 
+#define TAG "main: "
 #define LED_FLASH_PERIOD_IN_MS  (300)
 
 /* 演示/自检日志：量产时改为 0 或直接删掉演示代码，DT 接口本身不受影响 */
@@ -332,7 +333,10 @@ int main(void)
 
     // board_timer_create(LED_FLASH_PERIOD_IN_MS, board_led_toggle);
 
-    hal_flash_init();
+    rot_state_t flash_state = hal_flash_init();
+    if (flash_state != rot_state_success) {
+        printf(TAG "hal_flash init failed: 0x%08x\r\n", (unsigned)flash_state);
+    }
     hal_usb_init();
 
     printf("cherry usb threadx hid_keyboard device sample.\n");

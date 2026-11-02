@@ -10,14 +10,15 @@
 sdk_inc(./)
 
 sdk_app_src(
-    hal_usb.c
-    hal_flash.c
-    
-    
     usb/descriptor/hid_descriptor.c
     usb/keyboard/hal_kbd.c
     usb/control_center/hal_cc.c
     usb/lighting/hal_lighting.c
     usb/diagnostic_tracking/hal_dt.c
     usb/gamepad/hal_gamepad.c
+    hal_usb.c
+    
+    hal_flash.c
+    
+    
 )

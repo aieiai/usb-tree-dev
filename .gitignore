@@ -25,3 +25,8 @@ build_cmake/*
 /.vscode
 
 *__pycache__/
+
+# host 单元测试产物
+/tests/*/*.exe
+/tests/*/*.o
+
