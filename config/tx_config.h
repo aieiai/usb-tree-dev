@@ -1,0 +1,16 @@
+#ifndef TX_TASK_CONFIG_H
+#define TX_TASK_CONFIG_H
+
+
+#define TASK0_STACK_SIZE    (256U * 4)
+#define GAMEPAD_TASK_STACK  (256U * 4)
+#define FDB_TASK_STACK      (512U * 4)
+
+#define TASK0_PRIORITY      (TX_MAX_PRIORITIES - 5U)
+#define GAMEPAD_TASK_PRIORITY (TX_MAX_PRIORITIES - 4U)
+#define FDB_TASK_PRIORITY     (TX_MAX_PRIORITIES - 3U)
+
+
+
+#endif
+

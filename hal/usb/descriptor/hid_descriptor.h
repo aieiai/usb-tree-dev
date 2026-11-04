@@ -35,6 +35,7 @@ typedef enum {
     HAL_GAMEPAD_MODE_OFF = 0,
     HAL_GAMEPAD_MODE_HID,
     HAL_GAMEPAD_MODE_XBOX,
+    HAL_GAMEPAD_MODE_MAX,
 } gamepad_mode_ty;
 
 extern volatile gamepad_mode_ty g_gamepad_mode;

@@ -2,7 +2,6 @@
 #include "../../hal_usb.h"
 #include "../descriptor/hid_descriptor.h"
 
-#include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 

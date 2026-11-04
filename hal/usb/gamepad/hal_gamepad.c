@@ -2,10 +2,10 @@
 #include "../../hal_usb.h"
 #include "../descriptor/hid_descriptor.h"
 
-#include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
+#include "tx_api.h"
 
 extern const usb_descriptor_t g_desc_rpt_gamepad;
 
@@ -13,7 +13,7 @@ static struct usbd_interface s_intf;
 
 /* IN 端点的发送完成信号量，以及发送缓冲区。
  * 缓冲区会被端点当作 DMA 源地址使用，必须常驻且地址固定，不能放在栈上。 */
-static usb_osal_sem_t s_tx_sem;
+static TX_SEMAPHORE s_tx_sem;
 static uint8_t s_tx_buf[INTF_GAMEPAD_XBOX_RPT_LEN] __attribute__((aligned(4)));
 
 /* Xbox 模式 OUT 端点：主机每下发一包震动数据都要重新装载 */
@@ -60,8 +60,8 @@ static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)ep;
     (void)nbytes;
 
-    if (s_tx_sem != NULL) {
-        usb_osal_sem_give(s_tx_sem);
+    if (tx_semaphore_put(&s_tx_sem) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_put failed\r\n");
     }
 }
 
@@ -71,13 +71,15 @@ static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
     /* 先缓存原始帧，交给任务上下文解析 */
     if ((nbytes > 0U) && (nbytes <= sizeof(s_out_last))) {
-        size_t flag = usb_osal_enter_critical_section();
+        TX_INTERRUPT_SAVE_AREA
+        TX_DISABLE
+        size_t flag = interrupt_save;
 
         memcpy(s_out_last, s_out_buf, nbytes);
         s_out_last_len = nbytes;
         s_out_seq++;
-
-        usb_osal_leave_critical_section(flag);
+        interrupt_save = flag;
+        TX_RESTORE
     }
 
     /* Xbox 震动包：[0x00][0x08][0x00][左马达][右马达][0][0][0] */
@@ -95,11 +97,8 @@ static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 static void hal_gamepad_init(uint8_t busid)
 {
     /* 模式切换会重新走一遍初始化，信号量只在第一次创建 */
-    if (s_tx_sem == NULL) {
-        s_tx_sem = usb_osal_sem_create(0);
-        if (s_tx_sem == NULL) {
-            USB_LOG_ERR("gamepad tx semaphore create failed\r\n");
-        }
+    if (tx_semaphore_create(&s_tx_sem, "gamepad_tx_sem", 0U) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_create failed\r\n");
     }
 
     if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
@@ -273,7 +272,7 @@ int hal_gamepad_send_raw(const uint8_t *report, uint16_t len, uint32_t timeout_m
     if ((report == NULL) || (len == 0U) || (len > sizeof(s_tx_buf))) {
         return -1;
     }
-    if ((g_gamepad_mode == HAL_GAMEPAD_MODE_OFF) || (s_tx_sem == NULL)) {
+    if ((g_gamepad_mode == HAL_GAMEPAD_MODE_OFF)) {
         return -2;
     }
     if (!usb_device_is_configured(CONFIG_USBD_BUSID)) {
@@ -283,7 +282,7 @@ int hal_gamepad_send_raw(const uint8_t *report, uint16_t len, uint32_t timeout_m
     ep_addr = (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) ? INTF_GAMEPAD_XBOX_EPI : INTF_GAMEPAD_HID_EPI;
 
     /* 丢弃上一次可能残留的完成信号，避免误判本次传输已完成 */
-    while (usb_osal_sem_take(s_tx_sem, 0) == 0) {
+    while (tx_semaphore_get(&s_tx_sem, timeout_ms) == TX_SUCCESS) {
     }
 
     memcpy(s_tx_buf, report, len);
@@ -292,7 +291,7 @@ int hal_gamepad_send_raw(const uint8_t *report, uint16_t len, uint32_t timeout_m
         return -3;
     }
 
-    return (usb_osal_sem_take(s_tx_sem, timeout_ms) == 0) ? 0 : -4;
+    return (tx_semaphore_get(&s_tx_sem, timeout_ms) == TX_SUCCESS) ? 0 : -4;
 }
 
 int hal_gamepad_send(const hal_gamepad_state_t *state, uint32_t timeout_ms)
@@ -325,9 +324,13 @@ int hal_gamepad_read_output(uint8_t *buf, uint16_t buf_len, uint16_t *out_len)
         return -1;
     }
 
-    flag = usb_osal_enter_critical_section();
+    TX_INTERRUPT_SAVE_AREA
+    TX_DISABLE
+    flag = interrupt_save;
+
     if (s_out_seq == s_out_read_seq) {
-        usb_osal_leave_critical_section(flag);
+        interrupt_save = flag;
+        TX_RESTORE
         return 0;
     }
 
@@ -337,7 +340,8 @@ int hal_gamepad_read_output(uint8_t *buf, uint16_t buf_len, uint16_t *out_len)
         len = buf_len;
     }
     memcpy(buf, s_out_last, len);
-    usb_osal_leave_critical_section(flag);
+    interrupt_save = flag;
+    TX_RESTORE
 
     *out_len = (uint16_t)len;
     return 1;

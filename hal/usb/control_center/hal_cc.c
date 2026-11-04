@@ -3,7 +3,7 @@
 #include "../../hal_usb.h"
 #include "../descriptor/hid_descriptor.h"
 
-#include "usb_osal.h"
+#include "tx_api.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
@@ -28,12 +28,14 @@ static void ring_push(const uint8_t *src, uint32_t len) {
     uint32_t space;
     uint32_t pos;
     uint32_t first;
-
-    flag = usb_osal_enter_critical_section();
+    TX_INTERRUPT_SAVE_AREA
+    TX_DISABLE
+    flag = interrupt_save;
     space = HAL_CC_RX_RING_SIZE - (uint32_t)(s_ring_tail - s_ring_head);
     if (space < len) {
         s_dropped += len;
-        usb_osal_leave_critical_section(flag);
+        interrupt_save = flag;
+        TX_RESTORE
         return;
     }
     pos = s_ring_tail & (HAL_CC_RX_RING_SIZE - 1U);
@@ -46,7 +48,8 @@ static void ring_push(const uint8_t *src, uint32_t len) {
         memcpy(&s_ring[0], src + first, len - first);
     }
     s_ring_tail += len;
-    usb_osal_leave_critical_section(flag);
+    interrupt_save = flag;
+    TX_RESTORE
 }
 
 static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes) {
@@ -100,7 +103,10 @@ int hal_cc_read(uint8_t *buf, uint32_t len) {
         return -1;
     }
 
-    flag = usb_osal_enter_critical_section();
+    TX_INTERRUPT_SAVE_AREA
+    TX_DISABLE
+    flag = interrupt_save;
+
     used = s_ring_tail - s_ring_head;
     n = (used < len) ? used : len;
     pos = s_ring_head & (HAL_CC_RX_RING_SIZE - 1U);
@@ -113,7 +119,8 @@ int hal_cc_read(uint8_t *buf, uint32_t len) {
         memcpy(buf + first, &s_ring[0], n - first);
     }
     s_ring_head += n;
-    usb_osal_leave_critical_section(flag);
+    interrupt_save = flag;
+    TX_RESTORE
 
     return (int)n;
 }

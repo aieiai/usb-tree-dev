@@ -16,8 +16,8 @@
 
 #define CONFIG_USB_PRINTF(...) rt_kprintf(__VA_ARGS__)
 #else
-#define CONFIG_USB_PRINTF(...) printf(__VA_ARGS__)
-// #define CONFIG_USB_PRINTF(...)  ((void)0)
+// #define CONFIG_USB_PRINTF(...) printf(__VA_ARGS__)
+#define CONFIG_USB_PRINTF(...)  ((void)0)
 #endif
 
 #ifndef CONFIG_USB_DBG_LEVEL

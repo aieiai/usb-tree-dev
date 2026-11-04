@@ -1,8 +1,6 @@
 #include "hal_usb.h"
 
-#include "usb_osal.h"
 #include "usbd_core.h"
-
 
 #include "board.h"
 

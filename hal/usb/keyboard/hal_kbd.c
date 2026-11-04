@@ -2,17 +2,17 @@
 #include "../../hal_usb.h"
 #include "../descriptor/hid_descriptor.h"
 
-#include "usb_osal.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
+#include "tx_api.h"
 
 
 static struct usbd_interface s_intf;
 
 /* IN 端点的发送完成信号量，以及发送缓冲区。
  * 缓冲区会被端点当作 DMA 源地址使用，必须常驻且地址固定，不能放在栈上。 */
-static usb_osal_sem_t s_tx_sem;
+static TX_SEMAPHORE s_tx_sem;
 static uint8_t s_tx_buf[HAL_KBD_REPORT_MAX] __attribute__((aligned(4)));
 
 /* LED Output 报告：OUT 端点每收到一包都要重新装载，否则只能收到第一包 */
@@ -26,9 +26,8 @@ static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)ep;
     (void)nbytes;
 
-    /* 中断上下文，tx_semaphore_put 可在 ISR 中调用 */
-    if (s_tx_sem != NULL) {
-        usb_osal_sem_give(s_tx_sem);
+    if (tx_semaphore_put(&s_tx_sem) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_put failed\r\n");
     }
 }
 
@@ -50,11 +49,8 @@ static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 static void hal_kbd_init(uint8_t busid)
 {
-    if (s_tx_sem == NULL) {
-        s_tx_sem = usb_osal_sem_create(0);
-        if (s_tx_sem == NULL) {
-            USB_LOG_ERR("kbd tx semaphore create failed\r\n");
-        }
+    if (tx_semaphore_create(&s_tx_sem, "kbdtx_sem", 0U) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_create failed\r\n");
     }
 
     usbd_add_interface(busid, usbd_hid_init_intf(busid, &s_intf, g_desc_rpt_kbd.buf, g_desc_rpt_kbd.len));
@@ -85,7 +81,7 @@ int hal_kbd_send(const uint8_t *report, uint16_t len, uint32_t timeout_ms)
     }
 
     /* 丢弃上一次可能残留的完成信号，避免误判本次传输已完成 */
-    while (usb_osal_sem_take(s_tx_sem, 0) == 0) {
+    while (tx_semaphore_get(&s_tx_sem, timeout_ms) == TX_SUCCESS) {
     }
 
     memcpy(s_tx_buf, report, len);
@@ -94,7 +90,7 @@ int hal_kbd_send(const uint8_t *report, uint16_t len, uint32_t timeout_ms)
         return -3;
     }
 
-    return (usb_osal_sem_take(s_tx_sem, timeout_ms) == 0) ? 0 : -4;
+    return (tx_semaphore_get(&s_tx_sem, timeout_ms) == TX_SUCCESS) ? 0 : -4;
 }
 
 uint8_t hal_kbd_get_leds(void)

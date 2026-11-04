@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <title>Ray 日志通道 (WebUSB)</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark;
+          --font-mono: "Cascadia Mono", Consolas, "Sarasa Mono SC",
+                       "Noto Sans Mono CJK SC", "NSimSun", monospace; }
   body { margin: 0; background: #101418; color: #d6dee6;
-         font: 13px/1.5 "Cascadia Mono", Consolas, monospace; }
+         font: 13px/1.5 var(--font-mono); }
   header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
            padding: 10px 14px; background: #171d24; border-bottom: 1px solid #26303a; }
   button { background: #2b6cb0; color: #fff; border: 0; border-radius: 4px;

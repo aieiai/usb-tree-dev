@@ -69,7 +69,7 @@
 // Flash data base end addr
 #define FDB_DATA_END_ADDR           (FDB_OBCFG_CACHE_ADDR + FDB_OBCFG_CACHE_SIZ)
 
-_Static_assert(                     FDB_DATA_END_ADDR <= (FDB_BASE_ADDR + FDB_TOTAL_SIZ), "");
+_Static_assert(                     FDB_DATA_END_ADDR <= (FDB_BASE_ADDR + FDB_TOTAL_SIZ), "FDB_DATA_END_ADDR must be less than FDB_BASE_ADDR + FDB_TOTAL_SIZ");
 
 
 

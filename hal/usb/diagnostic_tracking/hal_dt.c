@@ -9,8 +9,6 @@
 #include "usb_config.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
-#include "usb_osal.h"
-
 
 #include "tx_api.h"
 
@@ -54,9 +52,11 @@ static uint8_t s_rx_buf[HAL_DT_RX_PACKET_SIZE] __attribute__((aligned(4)));
 
 static struct usbd_interface s_dt_intf;
 
-static usb_osal_sem_t s_tx_pending_sem; /* 环形缓冲有待发送数据 / 主机已配置 */
-static usb_osal_sem_t s_tx_done_sem;    /* 批量 IN 传输完成 */
-static usb_osal_sem_t s_rx_ready_sem;   /* OUT 环形缓冲有新数据 */
+static TX_THREAD thread_dt;
+static uint8_t thread_dt_stack[HAL_DT_THREAD_STACK];
+static TX_SEMAPHORE s_tx_pending_sem; /* 环形缓冲有待发送数据 / 主机已配置 */
+static TX_SEMAPHORE s_tx_done_sem;    /* 批量 IN 传输完成 */
+static TX_SEMAPHORE s_rx_ready_sem;   /* OUT 环形缓冲有新数据 */
 
 static volatile uint32_t s_dropped;
 static uint8_t s_busid;
@@ -70,10 +70,14 @@ static uint32_t ring_push(struct dt_ring *ring, const uint8_t *src, uint32_t len
     uint32_t first;
     size_t flag;
 
-    flag = usb_osal_enter_critical_section();
+    TX_INTERRUPT_SAVE_AREA
+    TX_DISABLE
+    flag = interrupt_save;
+
     space = ring->size - (uint32_t)(ring->tail - ring->head);
     if (space < len) {
-        usb_osal_leave_critical_section(flag);
+        interrupt_save = flag;
+        TX_RESTORE
         return 0;
     }
 
@@ -87,7 +91,8 @@ static uint32_t ring_push(struct dt_ring *ring, const uint8_t *src, uint32_t len
         memcpy(&ring->buf[0], src + first, len - first);
     }
     ring->tail += len;
-    usb_osal_leave_critical_section(flag);
+    interrupt_save = flag;
+    TX_RESTORE
 
     return len;
 }
@@ -100,7 +105,10 @@ static uint32_t ring_pop(struct dt_ring *ring, uint8_t *dst, uint32_t len)
     uint32_t first;
     size_t flag;
 
-    flag = usb_osal_enter_critical_section();
+    TX_INTERRUPT_SAVE_AREA
+    TX_DISABLE
+    flag = interrupt_save;
+
     used = ring->tail - ring->head;
     n = (used < len) ? used : len;
 
@@ -114,7 +122,8 @@ static uint32_t ring_pop(struct dt_ring *ring, uint8_t *dst, uint32_t len)
         memcpy(dst + first, &ring->buf[0], n - first);
     }
     ring->head += n;
-    usb_osal_leave_critical_section(flag);
+    interrupt_save = flag;
+    TX_RESTORE
 
     return n;
 }
@@ -125,9 +134,8 @@ static void ep_dt_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)ep;
     (void)nbytes;
 
-    /* 中断上下文，tx_semaphore_put 可在 ISR 中调用 */
-    if (s_tx_done_sem != NULL) {
-        usb_osal_sem_give(s_tx_done_sem);
+    if (tx_semaphore_put(&s_tx_done_sem) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_put failed\r\n");
     }
 }
 
@@ -136,8 +144,10 @@ static void ep_dt_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)ep;
 
     if ((nbytes > 0U) && (nbytes <= sizeof(s_rx_buf))) {
-        if ((ring_push(&s_rx_ring, s_rx_buf, nbytes) == nbytes) && (s_rx_ready_sem != NULL)) {
-            usb_osal_sem_give(s_rx_ready_sem);
+        if ((ring_push(&s_rx_ring, s_rx_buf, nbytes) == nbytes)) {
+            if (tx_semaphore_put(&s_rx_ready_sem) != TX_SUCCESS) {
+                USB_LOG_ERR("tx_semaphore_put failed\r\n");
+            }
         }
     }
 
@@ -149,12 +159,14 @@ static void ep_dt_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 /* 发送线程：把环形缓冲里的诊断数据按 HAL_DT_PACKET_SIZE 一包搬到批量 IN 端点。
  * 业务侧只往环形缓冲写，不会因为主机不读数据而被卡住。 */
-static void hal_dt_thread(void *argument)
+static void hal_dt_thread(ULONG entry_input)
 {
-    (void)argument;
+    (void)entry_input;
 
     while (1) {
-        (void)usb_osal_sem_take(s_tx_pending_sem, HAL_DT_TX_TIMEOUT_MS);
+        if (tx_semaphore_get(&s_tx_pending_sem, HAL_DT_TX_TIMEOUT_MS) != TX_SUCCESS) {
+            continue;
+        }
 
         if (!usb_device_is_configured(s_busid)) {
             continue;
@@ -168,14 +180,14 @@ static void hal_dt_thread(void *argument)
             }
 
             /* 清掉可能残留的完成信号，避免误判本次传输已完成 */
-            (void)usb_osal_sem_take(s_tx_done_sem, 0);
+            (void)tx_semaphore_get(&s_tx_done_sem, TX_NO_WAIT);
 
             if (usbd_ep_start_write(s_busid, INTF_DT_EPI, s_tx_buf, len) < 0) {
                 s_dropped += len;
                 break;
             }
 
-            if (usb_osal_sem_take(s_tx_done_sem, HAL_DT_TX_TIMEOUT_MS) != 0) {
+            if (tx_semaphore_get(&s_tx_done_sem, HAL_DT_TX_TIMEOUT_MS) != TX_SUCCESS) {
                 /* 主机长时间不取数据，丢弃这一包，避免整个通道卡死 */
                 s_dropped += len;
                 break;
@@ -188,14 +200,14 @@ void hal_dt_usb_init(uint8_t busid)
 {
     s_busid = busid;
 
-    if (s_tx_pending_sem == NULL) {
-        s_tx_pending_sem = usb_osal_sem_create(0);
-        s_tx_done_sem = usb_osal_sem_create(0);
-        s_rx_ready_sem = usb_osal_sem_create(0);
-        if ((s_tx_pending_sem == NULL) || (s_tx_done_sem == NULL) || (s_rx_ready_sem == NULL)) {
-            USB_LOG_ERR("dt semaphore create failed\r\n");
-            return;
-        }
+    if (tx_semaphore_create(&s_tx_pending_sem, "dt_tx_pending_sem", 0U) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_create failed\r\n");
+    }
+    if (tx_semaphore_create(&s_tx_done_sem, "dt_tx_done_sem", 0U) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_create failed\r\n");
+    }
+    if (tx_semaphore_create(&s_rx_ready_sem, "dt_rx_ready_sem", 0U) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_create failed\r\n");
     }
 
     memset(&s_dt_intf, 0, sizeof(s_dt_intf));
@@ -208,9 +220,12 @@ void hal_dt_usb_init(uint8_t busid)
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_DT_EPO, .ep_cb = ep_dt_out_callback });
 
     if (!s_thread_created) {
-        if (usb_osal_thread_create("usb_dt", HAL_DT_THREAD_STACK, HAL_DT_THREAD_PRIO, hal_dt_thread, NULL) == NULL) {
-            USB_LOG_ERR("dt thread create failed\r\n");
-            return;
+        uint32_t ret = tx_thread_create(&thread_dt, "thread_dt", hal_dt_thread, 0, thread_dt_stack, HAL_DT_THREAD_STACK, HAL_DT_THREAD_PRIO, HAL_DT_THREAD_PRIO, TX_NO_TIME_SLICE, TX_AUTO_START);
+        if (ret != TX_SUCCESS) {
+            perror("thread_dt creation failed!.\n");
+            for (;;) {
+                ;
+            }
         }
         s_thread_created = 1;
     }
@@ -218,18 +233,16 @@ void hal_dt_usb_init(uint8_t busid)
 
 void hal_dt_usb_configured(void)
 {
-    if (s_tx_pending_sem == NULL) {
-        return;
-    }
-
     /* 主机每次重新配置后都要重新装载 OUT 端点 */
     (void)usbd_ep_start_read(s_busid, INTF_DT_EPO, s_rx_buf, sizeof(s_rx_buf));
-    usb_osal_sem_give(s_tx_pending_sem);
+    if (tx_semaphore_put(&s_tx_pending_sem) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_put failed\r\n");
+    }
 }
 
 void hal_dt_write(const void *data, uint32_t len)
 {
-    if ((data == NULL) || (len == 0U) || (s_tx_pending_sem == NULL)) {
+    if ((data == NULL) || (len == 0U)) {
         return;
     }
 
@@ -239,7 +252,9 @@ void hal_dt_write(const void *data, uint32_t len)
         return;
     }
 
-    usb_osal_sem_give(s_tx_pending_sem);
+    if (tx_semaphore_put(&s_tx_pending_sem) != TX_SUCCESS) {
+        USB_LOG_ERR("tx_semaphore_put failed\r\n");
+    }
 }
 
 void hal_dt_puts(const char *str)
@@ -277,10 +292,10 @@ int hal_dt_read(void *buf, uint32_t len, uint32_t timeout_ms)
 {
     uint32_t n;
 
-    if ((buf == NULL) || (len == 0U) || (s_rx_ready_sem == NULL)) {
+    if ((buf == NULL) || (len == 0U)) {
         return -1;
     }
-    if (usb_osal_sem_take(s_rx_ready_sem, timeout_ms) != 0) {
+    if (tx_semaphore_get(&s_rx_ready_sem, timeout_ms) != TX_SUCCESS) {
         return -1;
     }
 

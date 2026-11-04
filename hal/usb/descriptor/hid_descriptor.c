@@ -198,7 +198,7 @@ static const uint8_t *device_descriptor_callback(uint8_t speed) {
 
     uint8_t *buf = device_descriptor;
 
-    uint16_t bcdDevice = USB_PRODUCT_VERSION;
+    uint16_t bcdDevice = USB_PRODUCT_VERSION + g_gamepad_mode;
     uint16_t bcdUSB    = (HAL_USB_WINUSB_ENABLE || (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX)) ? USB_2_1 : USB_2_0;
 
     // bcdUSB, bcdDevice
@@ -305,6 +305,10 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index) {
     if (index >= (sizeof(string_descriptors) / sizeof(char *))) {
         return NULL;
     }
+    if (index == 3) {
+        return (g_gamepad_mode == HAL_GAMEPAD_MODE_OFF) ? "TRACE40-0002-GO" : (g_gamepad_mode == HAL_GAMEPAD_MODE_HID) ? "TRACE40-0002-GH" : (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) ? "TRACE40-0002-GX" : string_descriptors[index];
+    }
+
     return string_descriptors[index];
 }
 
