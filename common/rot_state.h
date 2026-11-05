@@ -19,6 +19,7 @@ enum {
     rot_state_group_common = 0,
     rot_state_group_flash,
     rot_state_group_fdb,
+    rot_state_group_hal_cc,
 };
 
 

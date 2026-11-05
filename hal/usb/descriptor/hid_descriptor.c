@@ -155,6 +155,7 @@ static struct usb_webusb_descriptor webusb_url_desc = {
     .vendor_code = WEBUSB_VENDOR_CODE,
     .string = (uint8_t *)_webusb_url_desc,
     .string_len = WEBUSB_URL_DESC_LEN,
+    .req_limit = 1,
 };
 #endif /* HAL_USB_WEBUSB_ENABLE */
 

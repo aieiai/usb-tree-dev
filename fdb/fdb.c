@@ -3,304 +3,268 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "rot_utils.h"
 
 #include "fdb_map.h"
 #include "hal_flash.h"
-#include "hal_osal.h"
+
+#include "tx_api.h"
 #include "tx_config.h"
 
 #define TAG "fdb: "
 
-#define FDB_MAGIC                 (0x46444231UL)
-#define FDB_VERSION               (1U)
-#define FDB_SAVE_DELAY_MS         (5000U)
-#define FDB_IMMEDIATE_TIMEOUT_MS  (5000U)
-#define FDB_TYPE_BIT(type)        (1UL << (uint32_t)(type))
+#define FDB_SAVE_DELAY_MS       (5000U)
+#define FDB_NOW_TIMEOUT_MS      (5000U)
+#define FDB_ITEM_BIT(item_ty)   (1UL << (uint32_t)(item_ty))
 
-_Static_assert(FDB_TYPE_COUNT <= 32U, "FDB dirty mask supports at most 32 types");
+_Static_assert(FDB_ITEM_TY_MAX <= 32U, "FDB dirty mask supports at most 32 types");
 
 typedef struct {
     uint32_t    offset;
-    uint32_t    size;
+    uint32_t    cap;
     const char *name;
-    uint32_t    save_delay_ms;
-} fdb_type_info_t;
+} msg_t;
 
-typedef union {
-    fdb_fac_t   fac;
-    fdb_calib_t calib;
-    fdb_common_t common;
-    fdb_bif_t   bif;
-    fdb_map_t   map;
-    fdb_adv_t   adv;
-    fdb_rgb_t   rgb;
-    fdb_rsv2_t  rsv2;
-    fdb_macro_t macro;
-} fdb_record_t;
+typedef struct {
+    void    *buf;
+    uint32_t buf_size;
+    bool     update;
+    bool     registered;
+    const msg_t *msg;
+} item_t;
 
-_Static_assert(sizeof(fdb_record_t) <= FDB_PAGE_SIZ, "FDB record must fit in one Flash sector");
+sobi_t g_sobi;
 
-static const fdb_type_info_t s_type_info[FDB_TYPE_COUNT] = {
-    [FDB_TYPE_FACTORY] = {
-        .offset = FDB_FACTORY_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_fac_t),
-        .name = "fdb_factory",
-        .save_delay_ms = 0U,
-    },
-    [FDB_TYPE_CALIB] = {
-        .offset = FDB_CALIB_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_calib_t),
-        .name = "fdb_calib",
-        .save_delay_ms = 0U,
-    },
-    [FDB_TYPE_COMMON] = {
-        .offset = FDB_COMMON_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_common_t),
-        .name = "fdb_common",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
-    [FDB_TYPE_BIF] = {
-        .offset = FDB_BIF_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_bif_t),
-        .name = "fdb_bif",
-        .save_delay_ms = 0U,
-    },
-    [FDB_TYPE_MAP] = {
-        .offset = FDB_MAP_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_map_t),
-        .name = "fdb_map",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
-    [FDB_TYPE_ADV] = {
-        .offset = FDB_ADV_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_adv_t),
-        .name = "fdb_adv",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
-    [FDB_TYPE_RGB] = {
-        .offset = FDB_RGB_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_rgb_t),
-        .name = "fdb_rgb",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
-    [FDB_TYPE_RSV2] = {
-        .offset = FDB_RSV2_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_rsv2_t),
-        .name = "fdb_rsv2",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
-    [FDB_TYPE_MACRO] = {
-        .offset = FDB_MACRO_ADDR - FDB_BASE_ADDR,
-        .size = sizeof(fdb_macro_t),
-        .name = "fdb_macro",
-        .save_delay_ms = FDB_SAVE_DELAY_MS,
-    },
+static volatile item_t items[FDB_ITEM_TY_MAX];
+static const msg_t msgs[FDB_ITEM_TY_MAX] = {
+    [FDB_ITEM_TY_FAC]    = { .offset = FDB_FACTORY_ADDR - FDB_BASE_ADDR,  .cap = FDB_FACTORY_SIZ, .name = "fdb_factory", },
+    [FDB_ITEM_TY_CALIB]  = { .offset = FDB_CALIB_ADDR - FDB_BASE_ADDR,    .cap = FDB_CALIB_SIZ,   .name = "fdb_calib",   },
+    [FDB_ITEM_TY_COMMON] = { .offset = FDB_COMMON_ADDR - FDB_BASE_ADDR,   .cap = FDB_COMMON_SIZ,  .name = "fdb_common",  },
+    [FDB_ITEM_TY_SOBI]   = { .offset = FDB_SOBI_ADDR - FDB_BASE_ADDR,     .cap = FDB_SOBI_SIZ,     .name = "fdb_sobi",   },
+    [FDB_ITEM_TY_MAP]    = { .offset = FDB_MAP_ADDR - FDB_BASE_ADDR,      .cap = FDB_MAP_SIZ,     .name = "fdb_map",     },
+    [FDB_ITEM_TY_ADV]    = { .offset = FDB_ADV_ADDR - FDB_BASE_ADDR,      .cap = FDB_ADV_SIZ,     .name = "fdb_adv",     },
+    [FDB_ITEM_TY_RGB]    = { .offset = FDB_RGB_ADDR - FDB_BASE_ADDR,      .cap = FDB_RGB_SIZ,     .name = "fdb_rgb",     },
+    [FDB_ITEM_TY_MACRO]  = { .offset = FDB_MACRO_ADDR - FDB_BASE_ADDR,    .cap = FDB_MACRO_SIZ,   .name = "fdb_macro",   },
 };
 
-fdb_data_t fdb_data;
+static TX_THREAD fdb_thread;
+static TX_MUTEX s_api_mutex;
+static TX_MUTEX s_data_mutex;
+static TX_SEMAPHORE s_wake_sem;
+static TX_SEMAPHORE s_done_sem;
+static uint8_t fdb_thread_stack[FDB_TASK_STACK] __attribute__((aligned(8U)));
 
-static hal_osal_thread_t s_thread;
-static uint8_t s_thread_stack[FDB_TASK_STACK] __attribute__((aligned(8U)));
 
-static hal_osal_mutex_t s_api_mutex;
-static hal_osal_mutex_t s_data_mutex;
-static hal_osal_sem_t s_wake_sem;
-static hal_osal_sem_t s_done_sem;
+static uint32_t s_generation[FDB_ITEM_TY_MAX];
+static rot_state_t s_save_result[FDB_ITEM_TY_MAX];
 
-static fdb_record_t s_pending[FDB_TYPE_COUNT];
-static fdb_record_t s_save_record;
-static uint32_t s_generation[FDB_TYPE_COUNT];
-static rot_state_t s_save_result[FDB_TYPE_COUNT];
 static volatile uint32_t s_dirty_mask;
+static volatile uint32_t s_now_mask;
 static bool s_initialized;
 
-static bool fdb_type_valid(fdb_type_t type)
-{
-    return (uint32_t)type < (uint32_t)FDB_TYPE_COUNT;
+static bool _mutex_lock(TX_MUTEX *mutex) {
+    return (TX_SUCCESS == tx_mutex_get(mutex, TX_NO_WAIT)) || (TX_SUCCESS == tx_mutex_get(mutex, TX_WAIT_FOREVER));
+}
+static void _mutex_unlock(TX_MUTEX *mutex) {
+    (void)tx_mutex_put(mutex);
+}
+static bool _sem_wait(TX_SEMAPHORE *semaphore, ULONG timeout) {
+    return TX_SUCCESS == tx_semaphore_get(semaphore, timeout);
+}
+static void _sem_post(TX_SEMAPHORE *semaphore) {
+    (void)tx_semaphore_ceiling_put(semaphore, 1U);
+}
+static void _sem_reset(TX_SEMAPHORE *semaphore) {
+    while (TX_SUCCESS == tx_semaphore_get(semaphore, TX_NO_WAIT)) {}
 }
 
-static void *fdb_global_record(fdb_type_t type)
+static bool _type_valid(fdb_item_ty type) 
 {
-    switch (type) {
-    case FDB_TYPE_FACTORY:
-        return &fdb_data.fac;
-    case FDB_TYPE_CALIB:
-        return &fdb_data.calib;
-    case FDB_TYPE_COMMON:
-        return &fdb_data.common;
-    case FDB_TYPE_BIF:
-        return &fdb_data.bif;
-    case FDB_TYPE_MAP:
-        return &fdb_data.map;
-    case FDB_TYPE_ADV:
-        return &fdb_data.adv;
-    case FDB_TYPE_RGB:
-        return &fdb_data.rgb;
-    case FDB_TYPE_RSV2:
-        return &fdb_data.rsv2;
-    case FDB_TYPE_MACRO:
-        return &fdb_data.macro;
-    default:
+    return (uint32_t)type < (uint32_t)FDB_ITEM_TY_MAX;
+}
+
+static void *_registered_record(fdb_item_ty type)
+{
+    if (!_type_valid(type) || !items[type].registered) {
         return NULL;
     }
+    return items[type].buf;
 }
 
-static void fdb_stamp_header(fdb_head_t *header, fdb_type_t type)
+static void _state_snapshot(uint32_t *dirty, uint32_t *now)
 {
-    const char *name = s_type_info[type].name;
-    size_t name_len = strlen(name);
-
-    header->magic = FDB_MAGIC;
-    header->version = FDB_VERSION;
-    memset(header->name, 0, sizeof(header->name));
-    if (name_len > sizeof(header->name)) {
-        name_len = sizeof(header->name);
+    *dirty = 0U;
+    *now = 0U;
+    if (!_mutex_lock(&s_data_mutex)) {
+        return;
     }
-    memcpy(header->name, name, name_len);
+    *dirty = s_dirty_mask;
+    *now = s_now_mask;
+    _mutex_unlock(&s_data_mutex);
 }
 
-static bool fdb_header_valid(const fdb_head_t *header, fdb_type_t type)
-{
-    const char *name = s_type_info[type].name;
-    size_t name_len = strlen(name);
-
-    if ((header->magic != FDB_MAGIC) || (header->version != FDB_VERSION)) {
-        return false;
-    }
-    if (name_len > sizeof(header->name)) {
-        return false;
-    }
-    if (memcmp(header->name, name, name_len) != 0) {
-        return false;
-    }
-    for (size_t i = name_len; i < sizeof(header->name); i++) {
-        if (header->name[i] != 0U) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static uint32_t fdb_dirty_snapshot(void)
-{
-    uint32_t dirty;
-
-    if (!hal_osal_mutex_lock(&s_data_mutex)) {
-        return 0U;
-    }
-    dirty = s_dirty_mask;
-    (void)hal_osal_mutex_unlock(&s_data_mutex);
-    return dirty;
-}
-
-static bool fdb_type_is_dirty(fdb_type_t type)
+static bool _type_is_dirty(fdb_item_ty type)
 {
     bool dirty;
 
-    if (!hal_osal_mutex_lock(&s_data_mutex)) {
+    if (!_mutex_lock(&s_data_mutex)) {
         return false;
     }
-    dirty = (s_dirty_mask & FDB_TYPE_BIT(type)) != 0U;
-    (void)hal_osal_mutex_unlock(&s_data_mutex);
+    dirty = (s_dirty_mask & FDB_ITEM_BIT(type)) != 0U;
+    _mutex_unlock(&s_data_mutex);
     return dirty;
 }
 
-static rot_state_t fdb_snapshot_type(fdb_type_t type)
+static rot_state_t _snapshot_type(fdb_item_ty type, fdb_save_ty save_type)
 {
-    void *source = fdb_global_record(type);
-
-    if (source == NULL) {
-        return rot_state_fdb_invalid_type;
+    if (_registered_record(type) == NULL) {
+        return rot_state_fdb_not_registered;
     }
-    if (!hal_osal_mutex_lock(&s_data_mutex)) {
+    if (!_mutex_lock(&s_data_mutex)) {
         return rot_state_fdb_lock_fail;
     }
 
-    fdb_stamp_header((fdb_head_t *)source, type);
-    memcpy(&s_pending[type], source, s_type_info[type].size);
     s_generation[type]++;
-    s_dirty_mask |= FDB_TYPE_BIT(type);
+    s_dirty_mask |= FDB_ITEM_BIT(type);
+    if (save_type == FDB_SAVE_TY_NOW) {
+        s_now_mask |= FDB_ITEM_BIT(type);
+    } else {
+        s_now_mask &= ~FDB_ITEM_BIT(type);
+    }
 
-    (void)hal_osal_mutex_unlock(&s_data_mutex);
+    _mutex_unlock(&s_data_mutex);
     return rot_state_success;
 }
 
-static rot_state_t fdb_save_type(fdb_type_t type)
+static rot_state_t _item_read(fdb_item_ty type)
 {
-    const fdb_type_info_t *info = &s_type_info[type];
-    uint32_t type_bit = FDB_TYPE_BIT(type);
-    uint32_t generation;
-    uint32_t write_size = (info->size + 3U) & ~3U;
+    if (!_type_valid(type)) {
+        return rot_state_fdb_invalid_type;
+    }
+
     rot_state_t result;
+    const volatile item_t *item = &items[type];
 
-    if ((write_size == 0U) || (write_size > FDB_PAGE_SIZ)) {
-        return rot_state_fdb_save_fail;
-    }
-    if (!hal_osal_mutex_lock(&s_data_mutex)) {
-        return rot_state_fdb_lock_fail;
-    }
-    memcpy(&s_save_record, &s_pending[type], info->size);
-    generation = s_generation[type];
-    (void)hal_osal_mutex_unlock(&s_data_mutex);
-
-    result = hal_flash_erase(info->offset, FDB_PAGE_SIZ);
-    if (result == rot_state_success) {
-        result = hal_flash_write(info->offset, &s_save_record, write_size);
-    }
-
-    if (!hal_osal_mutex_lock(&s_data_mutex)) {
-        return rot_state_fdb_lock_fail;
-    }
-    if (s_generation[type] == generation) {
-        s_dirty_mask &= ~type_bit;
-    }
-    s_save_result[type] = result;
-    (void)hal_osal_mutex_unlock(&s_data_mutex);
-
+    memset(item->buf, 0, item->buf_size);
+    result = hal_flash_read(item->msg->offset, item->buf, item->buf_size);
     if (result != rot_state_success) {
-        printf(TAG "save %s failed: 0x%08x\r\n", info->name, (unsigned)result);
+        printf(TAG "read %s failed: 0x%08x\r\n", item->msg->name, (unsigned)result);
+        return result;
+    }
+
+    printf(TAG "%s loaded %u byte(s)\r\n", item->msg->name, (unsigned)item->buf_size);
+    return rot_state_success;
+}
+
+static rot_state_t _item_write(fdb_item_ty type)
+{
+    const volatile item_t *item;
+    const msg_t *msg;
+    rot_state_t result;
+    bool equal = false;
+
+    if (!_type_valid(type)) {
+        return rot_state_fdb_invalid_type;
+    }
+    item = &items[type];
+    msg = item->msg;
+    if ((!item->registered) || (item->buf == NULL) || (msg == NULL) || (item->buf_size == 0U) ||
+        ((item->buf_size & 3U) != 0U) || (item->buf_size > msg->cap)) {
+        return rot_state_invalid_argument;
+    }
+
+    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FDB_PAGE_SIZ);
+    result = hal_flash_compare(msg->offset, item->buf, item->buf_size, &equal);
+    if (result != rot_state_success) {
+        return result;
+    }
+    if (equal) {
+        return rot_state_success;
+    }
+
+    result = hal_flash_erase(msg->offset, erase_size);
+    if (result == rot_state_success) {
+        result = hal_flash_write(msg->offset, item->buf, item->buf_size);
     }
     return result;
 }
 
-static void fdb_thread_entry(void *argument)
+static rot_state_t _save_type(fdb_item_ty type)
+{
+    const volatile item_t *item = &items[type];
+    uint32_t type_bit = FDB_ITEM_BIT(type);
+    uint32_t generation;
+    rot_state_t result;
+
+    if ((!item->registered) || (item->buf == NULL) || (item->msg == NULL) || (item->buf_size == 0U) || 
+        ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg->cap)) {
+        return rot_state_fdb_save_fail;
+    }
+    if (!_mutex_lock(&s_data_mutex)) {
+        return rot_state_fdb_lock_fail;
+    }
+    generation = s_generation[type];
+    _mutex_unlock(&s_data_mutex);
+
+    result = _item_write(type);
+
+    if (!_mutex_lock(&s_data_mutex)) {
+        return rot_state_fdb_lock_fail;
+    }
+    if (s_generation[type] == generation) {
+        s_dirty_mask &= ~type_bit;
+        s_now_mask &= ~type_bit;
+    }
+    s_save_result[type] = result;
+    _mutex_unlock(&s_data_mutex);
+
+    if (result != rot_state_success) {
+        printf(TAG "save %s failed: 0x%08x\r\n", item->msg->name, (unsigned)result);
+    }
+    return result;
+}
+
+static void fdb_thread_entry(ULONG argument)
 {
     (void)argument;
 
     for (;;) {
         uint32_t dirty;
-        bool saved_immediate = false;
+        uint32_t now_mask;
+        bool saved_now = false;
 
-        (void)hal_osal_sem_wait(&s_wake_sem, HAL_OSAL_WAIT_FOREVER);
+        (void)_sem_wait(&s_wake_sem, TX_WAIT_FOREVER);
 
         for (;;) {
-            dirty = fdb_dirty_snapshot();
+            _state_snapshot(&dirty, &now_mask);
             if (dirty == 0U) {
                 break;
             }
 
-            saved_immediate = false;
-            for (uint32_t i = 0U; i < (uint32_t)FDB_TYPE_COUNT; i++) {
-                if (((dirty & FDB_TYPE_BIT(i)) != 0U) &&
-                    (s_type_info[i].save_delay_ms == 0U)) {
-                    (void)fdb_save_type((fdb_type_t)i);
-                    saved_immediate = true;
+            saved_now = false;
+            for (uint32_t i = 0U; i < (uint32_t)FDB_ITEM_TY_MAX; i++) {
+                if (((dirty & FDB_ITEM_BIT(i)) != 0U) &&
+                    ((now_mask & FDB_ITEM_BIT(i)) != 0U)) {
+                    (void)_save_type((fdb_item_ty)i);
+                    saved_now = true;
                 }
             }
-            if (saved_immediate) {
-                (void)hal_osal_sem_post(&s_done_sem);
+            if (saved_now) {
+                _sem_post(&s_done_sem);
                 continue;
             }
 
-            if (hal_osal_sem_wait(&s_wake_sem, FDB_SAVE_DELAY_MS)) {
+            if (_sem_wait(&s_wake_sem, FDB_SAVE_DELAY_MS)) {
                 continue;
             }
 
-            dirty = fdb_dirty_snapshot();
-            for (uint32_t i = 0U; i < (uint32_t)FDB_TYPE_COUNT; i++) {
-                if (((dirty & FDB_TYPE_BIT(i)) != 0U) &&
-                    (s_type_info[i].save_delay_ms != 0U)) {
-                    (void)fdb_save_type((fdb_type_t)i);
+            _state_snapshot(&dirty, &now_mask);
+            if ((dirty & now_mask) != 0U) {
+                continue;
+            }
+            for (uint32_t i = 0U; i < (uint32_t)FDB_ITEM_TY_MAX; i++) {
+                if ((dirty & FDB_ITEM_BIT(i)) != 0U) {
+                    (void)_save_type((fdb_item_ty)i);
                 }
             }
             break;
@@ -308,43 +272,93 @@ static void fdb_thread_entry(void *argument)
     }
 }
 
-static void fdb_load_records(void)
+rot_state_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size)
 {
-    uint32_t loaded_count = 0U;
-    uint32_t default_count = 0U;
+    volatile item_t *item;
+    rot_state_t result;
 
-    s_dirty_mask = 0U;
+    if (!s_initialized) {
+        return rot_state_fdb_not_init;
+    }
+    if (!_type_valid(type)) {
+        return rot_state_fdb_invalid_type;
+    }
+    if ((buf == NULL) || (buf_size == 0U) || ((buf_size & 3U) != 0U) || (buf_size > msgs[type].cap)) {
+        return rot_state_invalid_argument;
+    }
 
-    for (uint32_t i = 0U; i < (uint32_t)FDB_TYPE_COUNT; i++) {
-        fdb_type_t type = (fdb_type_t)i;
-        void *record = fdb_global_record(type);
-        rot_state_t result;
-        bool valid = false;
+    item = &items[type];
+    if (item->registered) {
+        return ((item->buf == buf) && (item->buf_size == buf_size)) ? rot_state_success : rot_state_invalid_argument;
+    }
 
-        s_generation[i] = 0U;
-        s_save_result[i] = rot_state_success;
+    item->buf        = buf;
+    item->buf_size   = buf_size;
+    item->update     = false;
+    item->registered = true;
+    item->msg        = &msgs[type];
 
-        result = hal_flash_read_mem(s_type_info[i].offset, record, s_type_info[i].size);
-        if (result == rot_state_success) {
-            valid = fdb_header_valid((fdb_head_t *)record, type);
-        } 
-        else {
-            printf(TAG "read %s failed: 0x%08x\r\n", s_type_info[i].name, (unsigned)result);
+    s_generation[type]  = 0U;
+    s_save_result[type] = rot_state_success;
+
+    result = _item_read(type);
+    if (result != rot_state_success) {
+        item->buf = NULL;
+        item->buf_size = 0U;
+        item->update = false;
+        item->registered = false;
+        item->msg = NULL;
+    }
+    return result;
+}
+
+rot_state_t fdb_update(fdb_item_ty type, fdb_save_ty save_type)
+{
+    bool now;
+    rot_state_t result;
+
+    if (!s_initialized) {
+        return rot_state_fdb_not_init;
+    }
+    if (!_type_valid(type)) {
+        return rot_state_fdb_invalid_type;
+    }
+    if ((uint32_t)save_type >= (uint32_t)FDB_SAVE_TY_MAX) {
+        return rot_state_fdb_invalid_save_type;
+    }
+    if (!_mutex_lock(&s_api_mutex)) {
+        return rot_state_fdb_lock_fail;
+    }
+
+    now = save_type == FDB_SAVE_TY_NOW;
+    if (now) {
+        _sem_reset(&s_done_sem);
+    }
+
+    result = _snapshot_type(type, save_type);
+    if (result == rot_state_success) {
+        _sem_post(&s_wake_sem);
+    }
+
+    if ((result == rot_state_success) && now) {
+        while (_type_is_dirty(type)) {
+            if (!_sem_wait(&s_done_sem, FDB_NOW_TIMEOUT_MS)) {
+                result = rot_state_timeout;
+                break;
+            }
         }
-        if (!valid) {
-            memset(record, 0, s_type_info[i].size);
-            fdb_stamp_header((fdb_head_t *)record, type);
-            memcpy(&s_pending[i], record, s_type_info[i].size);
-            s_dirty_mask |= FDB_TYPE_BIT(i);
-            default_count++;
-        } 
-        else {
-            loaded_count++;
+        if (result == rot_state_success) {
+            if (!_mutex_lock(&s_data_mutex)) {
+                result = rot_state_fdb_lock_fail;
+            } else {
+                result = s_save_result[type];
+                _mutex_unlock(&s_data_mutex);
+            }
         }
     }
 
-    printf(TAG "loaded %u record(s), initialized %u default record(s)\r\n",
-           (unsigned)loaded_count, (unsigned)default_count);
+    _mutex_unlock(&s_api_mutex);
+    return result;
 }
 
 rot_state_t fdb_init(void)
@@ -359,75 +373,23 @@ rot_state_t fdb_init(void)
     if (result != rot_state_success) {
         return rot_state_fdb_init_fail;
     }
-    if (!hal_osal_mutex_create(&s_api_mutex, "fdb_api") ||
-        !hal_osal_mutex_create(&s_data_mutex, "fdb_data") ||
-        !hal_osal_sem_create(&s_wake_sem, "fdb_wake", 0U, 1U) ||
-        !hal_osal_sem_create(&s_done_sem, "fdb_done", 0U, 1U)) {
+    if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "fdb_api", TX_INHERIT)) ||
+        (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "fdb_data", TX_INHERIT)) ||
+        (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "fdb_wake", 0U)) ||
+        (TX_SUCCESS != tx_semaphore_create(&s_done_sem, "fdb_done", 0U))) {
         return rot_state_fdb_init_fail;
     }
 
-    fdb_load_records();
+    s_dirty_mask = 0U;
+    s_now_mask = 0U;
+
+    if (TX_SUCCESS != tx_thread_create(&fdb_thread, "thread_fdb", fdb_thread_entry, 0U, fdb_thread_stack, sizeof(fdb_thread_stack), FDB_TASK_PRIORITY, FDB_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
+        return rot_state_fdb_init_fail;
+    }
     s_initialized = true;
 
-    if (!hal_osal_thread_create(&s_thread,
-                                "thread_fdb",
-                                s_thread_stack,
-                                sizeof(s_thread_stack),
-                                FDB_TASK_PRIORITY,
-                                fdb_thread_entry,
-                                NULL)) {
-        s_initialized = false;
-        return rot_state_fdb_init_fail;
-    }
-
     if (s_dirty_mask != 0U) {
-        (void)hal_osal_sem_post(&s_wake_sem);
+        _sem_post(&s_wake_sem);
     }
     return rot_state_success;
-}
-
-rot_state_t fdb_update(fdb_type_t type)
-{
-    bool immediate;
-    rot_state_t result;
-
-    if (!s_initialized) {
-        return rot_state_fdb_not_init;
-    }
-    if (!fdb_type_valid(type)) {
-        return rot_state_fdb_invalid_type;
-    }
-    if (!hal_osal_mutex_lock(&s_api_mutex)) {
-        return rot_state_fdb_lock_fail;
-    }
-
-    immediate = s_type_info[type].save_delay_ms == 0U;
-    if (immediate) {
-        (void)hal_osal_sem_reset(&s_done_sem);
-    }
-
-    result = fdb_snapshot_type(type);
-    if (result == rot_state_success) {
-        (void)hal_osal_sem_post(&s_wake_sem);
-    }
-
-    if ((result == rot_state_success) && immediate) {
-        while (fdb_type_is_dirty(type)) {
-            if (!hal_osal_sem_wait(&s_done_sem, FDB_IMMEDIATE_TIMEOUT_MS)) {
-                result = rot_state_timeout;
-                break;
-            }
-        }
-        if (result == rot_state_success) {
-            if (!hal_osal_mutex_lock(&s_data_mutex)) {
-                result = rot_state_fdb_lock_fail;
-            } else {
-                result = s_save_result[type];
-                (void)hal_osal_mutex_unlock(&s_data_mutex);
-            }
-        }
-    }
-
-    (void)hal_osal_mutex_unlock(&s_api_mutex);
-    return result;
 }

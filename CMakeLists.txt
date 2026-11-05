@@ -32,12 +32,11 @@ project(ray)
 add_subdirectory(tu)
 add_subdirectory(hal)
 add_subdirectory(fdb)
+add_subdirectory(rot_cc)
 
 sdk_inc(config)
 sdk_inc(common)
 sdk_app_src(src/main.c)
-# sdk_app_src(src/webusb_hid_template.c)
-# sdk_app_src(src/gamepad_template.c)
 
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)

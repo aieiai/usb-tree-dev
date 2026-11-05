@@ -1,88 +1,28 @@
-
 #include "hal_cc.h"
+
 #include "../../hal_usb.h"
 #include "../descriptor/hid_descriptor.h"
 
-#include "tx_api.h"
+#include "hpm_interrupt.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
-
-
-
 
 #if !HAL_USB_CC_WINUSB_ENABLE
 extern const usb_descriptor_t g_desc_rpt_cc;
 #endif
 
+_Static_assert(HAL_CC_PACKET_SIZE == INTF_CC_EP_SIZE, "CC packet size mismatch");
+
 static struct usbd_interface s_intf;
+static uint8_t s_rx_buf[HAL_CC_PACKET_SIZE] __attribute__((aligned(4)));
+static uint8_t s_tx_buf[HAL_CC_PACKET_SIZE] __attribute__((aligned(4)));
+static hal_cc_callbacks_t ctx_cb;
+static volatile bool s_tx_busy;
+static uint8_t s_busid;
+static bool s_initialized;
 
-static uint8_t s_rx_buf[INTF_CC_EP_SIZE] __attribute__((aligned(4)));
-static uint8_t s_ring[HAL_CC_RX_RING_SIZE];
-static volatile uint32_t s_ring_head;
-static volatile uint32_t s_ring_tail;
-static volatile uint32_t s_dropped;
-
-
-static void ring_push(const uint8_t *src, uint32_t len) {
-    size_t flag;
-    uint32_t space;
-    uint32_t pos;
-    uint32_t first;
-    TX_INTERRUPT_SAVE_AREA
-    TX_DISABLE
-    flag = interrupt_save;
-    space = HAL_CC_RX_RING_SIZE - (uint32_t)(s_ring_tail - s_ring_head);
-    if (space < len) {
-        s_dropped += len;
-        interrupt_save = flag;
-        TX_RESTORE
-        return;
-    }
-    pos = s_ring_tail & (HAL_CC_RX_RING_SIZE - 1U);
-    first = HAL_CC_RX_RING_SIZE - pos;
-    if (first > len) {
-        first = len;
-    }
-    memcpy(&s_ring[pos], src, first);
-    if (len > first) {
-        memcpy(&s_ring[0], src + first, len - first);
-    }
-    s_ring_tail += len;
-    interrupt_save = flag;
-    TX_RESTORE
-}
-
-static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes) {
-    (void)busid;
-    (void)ep;
-    (void)nbytes;
-}
-
-static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes) {
-    (void)ep;
-
-    if ((nbytes > 0U) && (nbytes <= sizeof(s_rx_buf))) {
-        ring_push(s_rx_buf, nbytes);
-    }
-
-    if (usb_device_is_configured(busid)) {
-        (void)usbd_ep_start_read(busid, INTF_CC_EPO, s_rx_buf, sizeof(s_rx_buf));
-    }
-}
-
-static void hal_cc_init(uint8_t busid) {
-#if HAL_USB_CC_WINUSB_ENABLE
-    usbd_add_interface(busid, &s_intf);
-#else
-    usbd_add_interface(busid, usbd_hid_init_intf(busid, &s_intf, g_desc_rpt_cc.buf, g_desc_rpt_cc.len));
-#endif
-    usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_CC_EPI, .ep_cb = ep_in_callback });
-    usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_CC_EPO, .ep_cb = ep_out_callback });
-}
-
-static void hal_cc_configured(uint8_t busid) {
-    (void)usbd_ep_start_read(busid, INTF_CC_EPO, s_rx_buf, sizeof(s_rx_buf));
-}
+static void hal_cc_init(uint8_t busid);
+static void hal_cc_configured(uint8_t busid);
 
 const hal_usb_fn_t hal_cc_function = {
     .intf_num = INTF_CC_NUM,
@@ -92,39 +32,93 @@ const hal_usb_fn_t hal_cc_function = {
     .event = NULL,
 };
 
-int hal_cc_read(uint8_t *buf, uint32_t len) {
-    size_t flag;
-    uint32_t used;
-    uint32_t n;
-    uint32_t pos;
-    uint32_t first;
 
-    if ((buf == NULL) || (len == 0U)) {
-        return -1;
+static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    (void)busid;
+    (void)ep;
+
+    s_tx_busy = false;
+    if (ctx_cb.tx_complete != NULL) {
+        ctx_cb.tx_complete(rot_state_success, (uint16_t)nbytes, ctx_cb.ctx);
     }
-
-    TX_INTERRUPT_SAVE_AREA
-    TX_DISABLE
-    flag = interrupt_save;
-
-    used = s_ring_tail - s_ring_head;
-    n = (used < len) ? used : len;
-    pos = s_ring_head & (HAL_CC_RX_RING_SIZE - 1U);
-    first = HAL_CC_RX_RING_SIZE - pos;
-    if (first > n) {
-        first = n;
-    }
-    memcpy(buf, &s_ring[pos], first);
-    if (n > first) {
-        memcpy(buf + first, &s_ring[0], n - first);
-    }
-    s_ring_head += n;
-    interrupt_save = flag;
-    TX_RESTORE
-
-    return (int)n;
 }
 
-uint32_t hal_cc_dropped(void) {
-    return s_dropped;
+static void ep_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    (void)ep;
+
+    if ((nbytes > 0U) && (nbytes <= sizeof(s_rx_buf)) && (ctx_cb.rx != NULL)) {
+        ctx_cb.rx(s_rx_buf, (uint16_t)nbytes, ctx_cb.ctx);
+    }
+
+    if (usb_device_is_configured(busid)) {
+        (void)usbd_ep_start_read(busid, INTF_CC_EPO, s_rx_buf, sizeof(s_rx_buf));
+    }
+}
+
+static void hal_cc_init(uint8_t busid)
+{
+    s_busid = busid;
+    s_initialized = true;
+
+#if HAL_USB_CC_WINUSB_ENABLE
+    usbd_add_interface(busid, &s_intf);
+#else
+    usbd_add_interface(busid, usbd_hid_init_intf(busid, &s_intf, g_desc_rpt_cc.buf, g_desc_rpt_cc.len));
+#endif
+    usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_CC_EPI, .ep_cb = ep_in_callback });
+    usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_CC_EPO, .ep_cb = ep_out_callback });
+}
+
+static void hal_cc_configured(uint8_t busid)
+{
+    s_tx_busy = false;
+    (void)usbd_ep_start_read(busid, INTF_CC_EPO, s_rx_buf, sizeof(s_rx_buf));
+}
+
+int hal_cc_register_callbacks(const hal_cc_callbacks_t *cb)
+{
+    uint32_t irq_state = disable_global_irq(CSR_MSTATUS_MIE_MASK);
+
+    if (cb == NULL) {
+        memset(&ctx_cb, 0, sizeof(ctx_cb));
+    }
+    else {
+        ctx_cb = *cb;
+    }
+    restore_global_irq(irq_state);
+    return rot_state_success;
+}
+
+int hal_cc_send(const void *data, uint32_t len)
+{
+    uint32_t irq_state;
+
+    if ((data == NULL) || (len == 0U) || (len > HAL_CC_PACKET_SIZE)) {
+        return rot_state_hal_cc_arg;
+    }
+    if (!s_initialized || !usb_device_is_configured(s_busid)) {
+        return rot_state_hal_cc_not_ready;
+    }
+
+    irq_state = disable_global_irq(CSR_MSTATUS_MIE_MASK);
+    if (s_tx_busy) {
+        restore_global_irq(irq_state);
+        return rot_state_hal_cc_busy;
+    }
+    s_tx_busy = true;
+    restore_global_irq(irq_state);
+
+    memcpy(s_tx_buf, data, len);
+    if (usbd_ep_start_write(s_busid, INTF_CC_EPI, s_tx_buf, len) < 0) {
+        s_tx_busy = false;
+        return rot_state_hal_cc_start;
+    }
+    return rot_state_success;
+}
+
+bool hal_cc_is_busy(void)
+{
+    return s_tx_busy;
 }

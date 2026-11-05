@@ -121,6 +121,7 @@ static void hal_gamepad_configured(uint8_t busid)
     if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
         const hal_gamepad_state_t idle = { .hat = HAL_GAMEPAD_HAT_NONE };
         int ret;
+        (void)ret;
 
         (void)usbd_ep_start_read(busid, INTF_GAMEPAD_XBOX_EPO, s_out_buf, sizeof(s_out_buf));
 
@@ -128,8 +129,7 @@ static void hal_gamepad_configured(uint8_t busid)
          * 应用若还没开始发数据，这里先补一帧空闲状态。 */
         (void)gamepad_encode_xbox(&idle, s_boot_buf);
         ret = usbd_ep_start_write(busid, INTF_GAMEPAD_XBOX_EPI, s_boot_buf, INTF_GAMEPAD_XBOX_RPT_LEN);
-        USB_LOG_RAW("[usb] gamepad xbox boot report tx=%d (ep=0x%02x, %u bytes)\r\n",
-                    ret, INTF_GAMEPAD_XBOX_EPI, (unsigned)INTF_GAMEPAD_XBOX_RPT_LEN);
+        USB_LOG_RAW("[usb] gamepad xbox boot report tx=%d (ep=0x%02x, %u bytes)\r\n", ret, INTF_GAMEPAD_XBOX_EPI, (unsigned)INTF_GAMEPAD_XBOX_RPT_LEN);
     }
 }
 

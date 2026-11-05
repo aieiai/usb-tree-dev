@@ -40,10 +40,10 @@
 
 
 // Multiple on-board parameter configurations area
-#define FDB_BIF_ADDR                (FDB_RSV1_ADDR + FDB_RSV1_SIZ)
-#define FDB_BIN_SIZ                 (FDB_PAGE_SIZ)
+#define FDB_SOBI_ADDR               (FDB_RSV1_ADDR + FDB_RSV1_SIZ)
+#define FDB_SOBI_SIZ                (FDB_PAGE_SIZ)
 
-#define FDB_MAP_ADDR                (FDB_BIF_ADDR + FDB_BIN_SIZ)
+#define FDB_MAP_ADDR                (FDB_SOBI_ADDR + FDB_SOBI_SIZ)
 #define FDB_MAP_SIZ                 (FDB_PAGE_SIZ)
 
 #define FDB_ADV_ADDR                (FDB_MAP_ADDR + FDB_MAP_SIZ)
@@ -59,8 +59,8 @@
 #define FDB_MACRO_SIZ               (FDB_PAGE_SIZ * 2)
 
 #define FDB_OBCFG_NUM               (4)
-#define FDB_OBCFG_ADDR              (FDB_BIF_ADDR)
-#define FDB_OBCFG_SIZ               (FDB_BIN_SIZ + FDB_MAP_SIZ + FDB_ADV_SIZ + FDB_RGB_SIZ + FDB_RSV2_SIZ + FDB_MACRO_SIZ)
+#define FDB_OBCFG_ADDR              (FDB_SOBI_ADDR)
+#define FDB_OBCFG_SIZ               (FDB_SOBI_SIZ + FDB_MAP_SIZ + FDB_ADV_SIZ + FDB_RGB_SIZ + FDB_RSV2_SIZ + FDB_MACRO_SIZ)
 // Cache
 #define FDB_OBCFG_CACHE_ADDR        (FDB_OBCFG_ADDR + (FDB_OBCFG_SIZ * FDB_OBCFG_NUM))
 #define FDB_OBCFG_CACHE_SIZ         (FDB_OBCFG_SIZ)

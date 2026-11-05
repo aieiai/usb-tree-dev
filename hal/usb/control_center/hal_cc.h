@@ -1,20 +1,42 @@
 #ifndef HAL_CC_H
 #define HAL_CC_H
 
+#include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
+#include "rot_state.h"
 
+#define HAL_CC_PACKET_SIZE (64U)
 
-/* 上位机接口（interface 1）：厂商自定义 HID，双向中断端点。
- * 主机下发的数据进环形缓冲，应用侧用 hal_cc_read() 取走。 */
+enum {
+    rot_state_hal_cc_fail = ROT_STATE_MAKE(rot_state_group_hal_cc, 1),
+    rot_state_hal_cc_arg,
+    rot_state_hal_cc_start,
+    rot_state_hal_cc_busy,
+    rot_state_hal_cc_not_ready,
+};
 
-/* OUT 方向环形缓冲，必须是 2 的幂 */
-#define HAL_CC_RX_RING_SIZE (256U)
+typedef void (*hal_cc_rx_callback_t)(const uint8_t *data, uint16_t len, void *ctx);
+typedef void (*hal_cc_tx_complete_callback_t)(rot_state_t state, uint16_t len, void *ctx);
 
-/* 非阻塞读取主机下发的数据，返回实际长度 */
-int hal_cc_read(uint8_t *buf, uint32_t len);
-/* 因环形缓冲满而丢弃的字节数 */
-uint32_t hal_cc_dropped(void);
+typedef struct {
+    hal_cc_rx_callback_t rx;
+    hal_cc_tx_complete_callback_t tx_complete;
+    void *ctx;
+} hal_cc_callbacks_t;
 
+/*
+ * Register raw endpoint callbacks. These callbacks run in USB interrupt
+ * context, so they must copy data and return quickly. Register them before the
+ * host configures the interface; passing NULL clears all callbacks.
+ */
+int hal_cc_register_callbacks(const hal_cc_callbacks_t *callbacks);
+
+/*
+ * Queue one packet for transmission. Data is copied into the HAL TX buffer.
+ * tx_complete is called in USB interrupt context after IN transfer completion.
+ */
+int hal_cc_send(const void *data, uint32_t len);
+
+bool hal_cc_is_busy(void);
 
 #endif

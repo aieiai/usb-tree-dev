@@ -53,7 +53,7 @@ static uint8_t s_rx_buf[HAL_DT_RX_PACKET_SIZE] __attribute__((aligned(4)));
 static struct usbd_interface s_dt_intf;
 
 static TX_THREAD thread_dt;
-static uint8_t thread_dt_stack[HAL_DT_THREAD_STACK];
+static uint8_t thread_dt_stack[HAL_DT_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_SEMAPHORE s_tx_pending_sem; /* 环形缓冲有待发送数据 / 主机已配置 */
 static TX_SEMAPHORE s_tx_done_sem;    /* 批量 IN 传输完成 */
 static TX_SEMAPHORE s_rx_ready_sem;   /* OUT 环形缓冲有新数据 */
@@ -220,7 +220,7 @@ void hal_dt_usb_init(uint8_t busid)
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_DT_EPO, .ep_cb = ep_dt_out_callback });
 
     if (!s_thread_created) {
-        uint32_t ret = tx_thread_create(&thread_dt, "thread_dt", hal_dt_thread, 0, thread_dt_stack, HAL_DT_THREAD_STACK, HAL_DT_THREAD_PRIO, HAL_DT_THREAD_PRIO, TX_NO_TIME_SLICE, TX_AUTO_START);
+        uint32_t ret = tx_thread_create(&thread_dt, "thread_dt", hal_dt_thread, 0, thread_dt_stack, sizeof(thread_dt_stack), HAL_DT_THREAD_PRIO, HAL_DT_THREAD_PRIO, TX_NO_TIME_SLICE, TX_AUTO_START);
         if (ret != TX_SUCCESS) {
             perror("thread_dt creation failed!.\n");
             for (;;) {

@@ -17,7 +17,6 @@ enum {
     rot_state_flash_unaligned,
     rot_state_flash_not_init,
     rot_state_flash_read_fail,
-    rot_state_flash_mutex_lock_fail,
 };
 
 rot_state_t hal_flash_init(void);
@@ -27,7 +26,8 @@ uint32_t hal_flash_get_page_size(void);
 uint32_t hal_flash_get_block_size(void);
 
 rot_state_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size);
-rot_state_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_size);
+// rot_state_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_size);
+rot_state_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t buf_size, bool *equal);
 rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_size);
 rot_state_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size);
 

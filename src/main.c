@@ -5,6 +5,7 @@
 #include "hal_flash.h"
 
 #include "fdb.h"
+#include "rot_cc.h"
 
 #include "usb_config.h"
 
@@ -16,17 +17,13 @@
 #define TAG "main: "
 #define LED_FLASH_PERIOD_IN_MS  (300)
 
-/* 演示/自检日志：量产时改为 0 或直接删掉演示代码，DT 接口本身不受影响 */
-#ifndef APP_LOG_DEMO
-#define APP_LOG_DEMO           1
-#endif
 
 /* 手柄演示：1 = 启动即以 Xbox 模式枚举，并创建一个 4ms 周期的手柄上报任务。
  * 该任务做逐位自检：每个按键 / 方向 / 摇杆轴 / 扳机依次单独动作一遍，
  * 一轮 27 项 ≈ 27 秒，循环播放；当前项通过 DT 通道打印。
  * 接入真实输入后删掉这个任务即可。 */
 #ifndef APP_GAMEPAD_DEMO
-#define APP_GAMEPAD_DEMO      1
+#define APP_GAMEPAD_DEMO      0
 #endif
 
 #if APP_GAMEPAD_DEMO
@@ -49,10 +46,8 @@ typedef struct {
 
 
 
-static TX_THREAD thread_0;
 static TX_THREAD thread_gp;
-static uint8_t thread_0_stack[TASK0_STACK_SIZE] __attribute__((aligned(8)));
-static uint8_t thread_gp_stack[GAMEPAD_TASK_STACK] __attribute__((aligned(8)));
+static uint8_t thread_gp_stack[GAMEPAD_TASK_STACK] __attribute__((aligned(8U)));
 
 TX_BYTE_POOL tx_byte_pool;
 
@@ -249,105 +244,10 @@ extern void webusb_hid_keyboard_init(uint8_t busid, uintptr_t reg_base);
 extern void gamepad_init(uint8_t busid, uintptr_t reg_base);
 extern void gamepad_test(uint8_t busid);
 
-#if APP_LOG_DEMO
-/* 演示用：把 Windows 下发的第 0 颗灯颜色记下来，在诊断数据里显示，便于确认灯效数据到了 */
-static volatile uint8_t s_lamp0[4];
-
-void hal_lighting_set_color(uint16_t lamp_id, uint8_t red, uint8_t green, uint8_t blue, uint8_t intensity)
-{
-    if (lamp_id == 0U) {
-        s_lamp0[0] = red;
-        s_lamp0[1] = green;
-        s_lamp0[2] = blue;
-        s_lamp0[3] = intensity;
-    }
-}
-#endif
-
-static void soc_reset(void)
-{
-    disable_global_irq(CSR_MSTATUS_MIE_MASK);
-    #define SOC_ROM_FLAG_REG    (*(volatile uint32_t *)(0xF40D4000UL + 8U))
-    SOC_ROM_FLAG_REG = 0;                            // warning: this is rom reset flag,
-    ppor_sw_reset(HPM_PPOR, 1000);
-    while (1)
-    {
-    }
-}
-static void task0(ULONG entry_input)
-{
-    (void)entry_input;
-    uint32_t tick = 0;
-    uint8_t rx[64];
-
-#if APP_LOG_DEMO
-    printf("[cherryusb hid keyboard with freertos sample]: task started.\n");
-    hal_dt_puts("[ray] diagnostic tracking channel ready\r\n");
-#endif
-
-    uint32_t cnt = 0;
-    while (1) {
-#if APP_LOG_DEMO
-
-        if ( cnt >= 1000 )
-        {
-            /* DT OUT 端点：上位机下发的数据，这里回显一下，方便验证双向通道 */
-            int n = hal_dt_read(rx, sizeof(rx), 0);
-            if (n > 0) {
-                hal_dt_printf("[ray] host -> dev, %d bytes\r\n", n);
-            }
-            cnt = 0;
-
-            /* kbd_led 反映键盘 LED 输出报告；lamp0 反映 Windows 下发的灯效颜色 */
-            hal_dt_printf("[ray] alive, tick=%u, dropped=%u, kbd_led=0x%02x, lamp0=%02x%02x%02x\r\n",
-                        (unsigned)tick++, (unsigned)hal_dt_dropped(), hal_kbd_get_leds(),
-                        s_lamp0[0], s_lamp0[1], s_lamp0[2]);
-        }
-        cnt++;
-#else
-        (void)tick;
-        (void)rx;
-#endif
-
-        static uint8_t btn_st_pre = !BOARD_BUTTON_PRESSED_VALUE;
-        uint8_t btn_st = gpio_read_pin(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
-        if (btn_st != btn_st_pre) {
-            tx_thread_sleep(20);
-            btn_st = gpio_read_pin(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
-        }
-        if (btn_st != btn_st_pre) {
-            btn_st_pre = btn_st;
-            if (btn_st == BOARD_BUTTON_PRESSED_VALUE) {
-                fdb_data.bif.gp_mode++;
-                fdb_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
-                
-                if (rot_state_success == fdb_update(FDB_TYPE_BIF)) {
-                    tx_thread_sleep(100);
-                    soc_reset();
-                    while(1)
-                    {
-                    }
-                }
-
-                hal_dt_printf("btn down (level=%u, gp_mode=%u)\r\n", (unsigned)btn_st, fdb_data.bif.gp_mode);
-            } 
-            else {
-                hal_dt_printf("btn up (level=%u)\r\n", (unsigned)btn_st);
-            }
-        }
-
-        
-        /* 手柄上报由 gamepad_demo_task 以 4ms 周期负责 */
-        // gamepad_test(CONFIG_USBD_BUSID);
-        tx_thread_sleep(1);
-    }
-}
-
 /* Define what the initial system looks like.  */
 void tx_application_define(void *first_unused_memory)
 {
     (void)first_unused_memory;
-    uint32_t ret = TX_SUCCESS;
 
     rot_state_t fdb_state = fdb_init();
     if (fdb_state != rot_state_success) {
@@ -356,22 +256,17 @@ void tx_application_define(void *first_unused_memory)
 
     
 #if APP_GAMEPAD_DEMO
-    g_gamepad_mode = fdb_data.bif.gp_mode;
+    g_gamepad_mode = HAL_GAMEPAD_MODE_OFF;
 #endif
     hal_usb_init();
+
+    rot_cc_init();
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
     // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
 
-    ret = tx_thread_create(&thread_0, "thread_0", task0, 0, thread_0_stack, TASK0_STACK_SIZE, TASK0_PRIORITY, TASK0_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
-    if (ret != TX_SUCCESS) {
-        perror("thread_0 creation failed!.\n");
-        for (;;) {
-            ;
-        }
-    }
-
 #if APP_GAMEPAD_DEMO
-    ret = tx_thread_create(&thread_gp, "thread_gp", gamepad_demo_task, 0, thread_gp_stack, GAMEPAD_TASK_STACK, GAMEPAD_TASK_PRIORITY, GAMEPAD_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+    uint32_t ret = TX_SUCCESS;
+    ret = tx_thread_create(&thread_gp, "thread_gp", gamepad_demo_task, 0, thread_gp_stack, sizeof(thread_gp_stack), GAMEPAD_TASK_PRIORITY, GAMEPAD_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
     if (ret != TX_SUCCESS) {
         perror("Gamepad demo task creation failed!.\n");
         for (;;) {

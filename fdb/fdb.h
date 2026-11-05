@@ -2,7 +2,6 @@
 #define FDB_H
 
 #include <stdint.h>
-#include <string.h>
 #include "rot_state.h"
 
 
@@ -10,92 +9,53 @@ enum {
     rot_state_fdb_init_fail = ROT_STATE_MAKE(rot_state_group_fdb, 1),
     rot_state_fdb_not_init,
     rot_state_fdb_invalid_type,
+    rot_state_fdb_not_registered,
+    rot_state_fdb_invalid_save_type,
     rot_state_fdb_save_fail,
     rot_state_fdb_lock_fail,
 };
 
 typedef enum {
-    FDB_TYPE_FACTORY = 0,
-    FDB_TYPE_CALIB,
-    FDB_TYPE_COMMON,
-    FDB_TYPE_BIF,
-    FDB_TYPE_MAP,
-    FDB_TYPE_ADV,
-    FDB_TYPE_RGB,
-    FDB_TYPE_RSV2,
-    FDB_TYPE_MACRO,
-    FDB_TYPE_COUNT,
-} fdb_type_t;
+    FDB_ITEM_TY_FAC = 0,
+    FDB_ITEM_TY_CALIB,
+    FDB_ITEM_TY_COMMON,
+    FDB_ITEM_TY_SOBI,
+    FDB_ITEM_TY_MAP,
+    FDB_ITEM_TY_ADV,
+    FDB_ITEM_TY_RGB,
+    FDB_ITEM_TY_MACRO,
+    FDB_ITEM_TY_MAX,
+} fdb_item_ty;
 
+typedef enum {
+    FDB_SAVE_TY_NOW = 0,
+    FDB_SAVE_TY_D5S,
+    FDB_SAVE_TY_MAX,
+} fdb_save_ty;
+
+
+// System on-board information
 typedef struct {
     uint32_t magic;
     uint32_t version;
-    uint8_t name[16];
-} __attribute__((aligned(4))) fdb_head_t;
+    uint8_t  name[32];
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_fac_t;
+    uint8_t  gp_mode;
+    uint8_t  sys_mode;
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_calib_t;
+    struct __attribute__((packed)) {
+        uint8_t cc_popup : 1;
+    } en;
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_common_t;
 
-typedef struct {
-    fdb_head_t header;
-    uint8_t gp_mode;
-} __attribute__((aligned(4))) fdb_bif_t;
+} __attribute__((aligned(4))) sobi_t;
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_map_t;
+extern sobi_t g_sobi;
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_adv_t;
 
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_rgb_t;
-
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_rsv2_t;
-
-typedef struct {
-    fdb_head_t header;
-} __attribute__((aligned(4))) fdb_macro_t;
-
-typedef struct {
-    fdb_fac_t     fac;
-    fdb_calib_t   calib;
-    fdb_common_t  common;
-    fdb_bif_t     bif;
-    fdb_map_t     map;
-    fdb_adv_t     adv;
-    fdb_rgb_t     rgb;
-    fdb_rsv2_t    rsv2;
-    fdb_macro_t   macro;
-} fdb_data_t;
-
-extern fdb_data_t fdb_data;
-
-/*
- * Initialization is boot-only. At runtime, callers update fields in fdb_data
- * and call fdb_update() for the corresponding type.
- * Example: fdb_data.bif.gp_mode = mode; (void)fdb_update(FDB_TYPE_BIF);
- *
- * FDB_TYPE_FACTORY, FDB_TYPE_CALIB and FDB_TYPE_BIF are saved immediately.
- * Other types are saved after 5 seconds without another update.
- * fdb_update() must be called from thread context. Immediate types block until
- * the save completes; delayed types return after their snapshot is queued.
- */
 rot_state_t fdb_init(void);
-rot_state_t fdb_update(fdb_type_t type);
+rot_state_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size);
+rot_state_t fdb_update(fdb_item_ty type, fdb_save_ty save_type);
 
 
 #endif
