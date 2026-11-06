@@ -4,11 +4,13 @@
 
 #define GAMEPAD_TASK_STACK      (256U * 4)
 #define FDB_TASK_STACK          (512U * 4)
-#define ROT_CC_TASK_STACK       (512U * 4)
+#define ROTCC_TASK_STACK        (512U * 4)
+#define CST_TASK_STACK          (256U * 4)
 
 #define GAMEPAD_TASK_PRIORITY   (TX_MAX_PRIORITIES - 4U)
 #define FDB_TASK_PRIORITY       (TX_MAX_PRIORITIES - 3U)
-#define ROT_CC_TASK_PRIORITY    (TX_MAX_PRIORITIES - 2U)
+#define ROTCC_TASK_PRIORITY     (TX_MAX_PRIORITIES - 2U)
+#define CST_TASK_PRIORITY       (TX_MAX_PRIORITIES - 1U)
 
 
 

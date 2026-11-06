@@ -2,171 +2,1310 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Ray 日志通道 (WebUSB)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title> USB Debug Tool </title>
 <style>
-  :root { color-scheme: dark;
-          --font-mono: "Cascadia Mono", Consolas, "Sarasa Mono SC",
-                       "Noto Sans Mono CJK SC", "NSimSun", monospace; }
-  body { margin: 0; background: #101418; color: #d6dee6;
-         font: 13px/1.5 var(--font-mono); }
-  header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-           padding: 10px 14px; background: #171d24; border-bottom: 1px solid #26303a; }
-  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 4px;
-           padding: 6px 14px; font: inherit; cursor: pointer; }
-  button:disabled { background: #38414a; color: #8a97a3; cursor: default; }
-  button.ghost { background: #38414a; }
-  #status { padding: 6px 14px; color: #8a97a3; border-bottom: 1px solid #26303a; }
-  #status b { color: #4fd1c5; font-weight: normal; }
-  #log { margin: 0; padding: 10px 14px; height: calc(100vh - 150px);
-         overflow: auto; white-space: pre-wrap; word-break: break-all; }
-  #log .err { color: #f56565; }
-  footer { display: flex; gap: 8px; padding: 8px 14px; background: #171d24;
-           border-top: 1px solid #26303a; }
-  #cmd { flex: 1; background: #0c1014; color: #d6dee6; border: 1px solid #2b3540;
-         border-radius: 4px; padding: 6px 10px; font: inherit; }
+  :root {
+    color-scheme: dark;
+    --bg: #0d1115;
+    --panel: #151b21;
+    --panel2: #1b232b;
+    --line: #2a3540;
+    --text: #d7e0e8;
+    --muted: #8b98a5;
+    --accent: #38b2ac;
+    --blue: #2b6cb0;
+    --red: #e53e3e;
+    --green: #38a169;
+    --font-mono: "Cascadia Mono", Consolas, "Sarasa Mono SC", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 var(--font-mono);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 12px 0 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  button, select, input {
+    font: inherit;
+  }
+  button {
+    border: 0;
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: #fff;
+    background: var(--blue);
+    cursor: pointer;
+  }
+  button.secondary { background: #394653; }
+  button.danger { background: #7b2d2d; }
+  button:disabled {
+    color: #7f8a95;
+    background: #303840;
+    cursor: not-allowed;
+  }
+  input, select {
+    min-width: 0;
+    padding: 6px 8px;
+    color: var(--text);
+    background: #0a0e12;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  label { color: var(--muted); }
+  #status {
+    padding: 7px 14px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  #status b { color: var(--accent); font-weight: normal; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(470px, 0.95fr) minmax(420px, 1.05fr);
+    gap: 10px;
+    padding: 10px;
+    height: calc(100vh - 92px);
+  }
+  #left {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  #interfaces {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .interface {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .interface-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel2);
+  }
+  .interface-head strong { font-size: 14px; }
+  .grow { flex: 1; }
+  .muted { color: var(--muted); }
+  .hint {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0 10px 7px;
+  }
+  .claim {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .claim.ok { color: var(--accent); }
+  .claim.fail { color: #fc8181; }
+  .endpoints { padding: 4px 10px 10px; }
+  .endpoint {
+    padding: 8px 0;
+    border-top: 1px solid #222c35;
+  }
+  .endpoint:first-child { border-top: 0; }
+  .endpoint-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .endpoint-name { min-width: 185px; }
+  .endpoint-name b { color: var(--accent); font-weight: normal; }
+  .read-state {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+  }
+  .upgrade-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px 10px;
+  }
+  .upgrade-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .upgrade-row input[type="file"] { flex: 1; min-width: 230px; }
+  #firmwareState { color: var(--accent); }
+  #firmwareState.warn { color: #f6ad55; }
+  #firmwareState.err { color: #fc8181; }
+  #firmwareProgress {
+    width: 100%;
+    height: 10px;
+    accent-color: var(--accent);
+  }
+  #firmwareMeta {
+    min-height: 17px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .send-row {
+    display: flex;
+    gap: 7px;
+    margin-top: 7px;
+  }
+  .send-row input { flex: 1; }
+  #right {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  #log-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--line);
+  }
+  #log {
+    flex: 1;
+    margin: 0;
+    padding: 9px 10px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #090c0f;
+  }
+  .warn { color: #f6ad55; }
+  .err { color: #fc8181; }
+  @media (max-width: 980px) {
+    main { display: block; height: auto; }
+    #left { margin-bottom: 10px; }
+    #interfaces { max-height: 52vh; margin-bottom: 10px; }
+    #right { height: 46vh; }
+  }
 </style>
 </head>
 <body>
-
 <header>
+  <h1> USB Debug Tool </h1>
   <button id="btnConnect">连接设备</button>
-  <button id="btnDisconnect" class="ghost" disabled>断开</button>
-  <button id="btnClear" class="ghost">清屏</button>
-  <label><input type="checkbox" id="chkHex"> 以十六进制显示</label>
+  <button id="btnDisconnect" class="danger" disabled>断开</button>
+  <label><input id="chkAllInterfaces" type="checkbox"> 尝试占用全部接口</label>
+  <label>显示
+    <select id="displayMode">
+      <option value="text">文本</option>
+      <option value="hex">HEX</option>
+    </select>
+  </label>
+  <label>发送
+    <select id="inputMode">
+      <option value="text">文本</option>
+      <option value="hex">HEX</option>
+    </select>
+  </label>
+  <label><input id="chkLf" type="checkbox" checked> 文本追加 LF</label>
+  <button id="btnClear" class="secondary">清空日志</button>
 </header>
 
-<div id="status">未连接。点「连接设备」后在弹窗里选择 <b>Trace40</b>(VID 0x7989 / PID 0x0001)。</div>
-<pre id="log"></pre>
+<div id="status">未连接。选择 USB 设备。</div>
 
-<footer>
-  <input id="cmd" placeholder="输入要下发给设备的文本，回车发送（走 OUT 端点）">
-  <button id="btnSend" disabled>发送</button>
-</footer>
+<main>
+  <section id="left">
+    <section class="interface">
+      <div class="interface-head">
+        <strong class="grow">CC 固件升级</strong>
+        <span class="muted">CC FW v1 · 64B packet</span>
+      </div>
+      <div class="hint">
+        升级协议只走 CC（OUT 0x02 / IN 0x82），DT 仅用于日志。文件需包含
+        16 字节官方升级头，每个数据包最多携带 54 字节。
+      </div>
+      <div class="upgrade-body">
+        <div class="upgrade-row">
+          <input id="firmwareFile" type="file" accept=".bin,.img,.fw,.ota">
+          <button id="btnFirmwareStart" disabled>开始升级</button>
+          <button id="btnFirmwareCancel" class="danger" disabled>取消</button>
+        </div>
+        <div id="firmwareState" aria-live="polite">请选择升级文件。</div>
+        <progress id="firmwareProgress" max="1" value="0"></progress>
+        <div id="firmwareMeta">0 B / 0 B</div>
+      </div>
+    </section>
+    <section id="interfaces">
+      <div class="interface">
+        <div class="interface-head"><strong>尚未连接</strong></div>
+        <div class="hint">连接后会列出所有接口、端点和 claim 结果。</div>
+      </div>
+    </section>
+  </section>
+  <section id="right">
+    <div id="log-head">
+      <strong class="grow">数据日志</strong>
+      <span id="traffic" class="muted">RX 0 B · TX 0 B</span>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
 
 <script>
 'use strict';
 
 const VID = 0x7989;
 const PID = 0x0001;
-const DT_INTF = 3;               // diagnostic tracking 接口号
-const PACKET = 512;              // bulk 端点 wMaxPacketSize（高速）
+const MAX_LOG_CHARS = 300000;
 
-const $log = document.getElementById('log');
+const CC_FW = Object.freeze({
+  MAGIC_0: 0x52,
+  MAGIC_1: 0x43,
+  VERSION: 1,
+  HEADER_SIZE: 8,
+  CRC_SIZE: 2,
+  MAX_PACKET_SIZE: 64,
+  MAX_PAYLOAD_SIZE: 54,
+  START: 0x10,
+  DATA: 0x11,
+  END: 0x12,
+  ABORT: 0x13,
+  ACK: 0x80,
+  NAK: 0x81
+});
+const CC_FW_RESPONSE_TIMEOUT_MS = 15000;
+const CC_FW_MAX_RETRIES = 10;
+const UPGRADE_IMAGE_MAGIC = 0xbeaf5aa5;
+const UPGRADE_DEVICE_ID = 0x6750;
+
+const INTERFACE_HINTS = {
+  0: {
+    name: 'KBD 键鼠',
+    auto: false,
+    note: 'HID 接口。Windows 键鼠驱动通常占用；尝试 claim 可能会暂时影响键鼠输入。'
+  },
+  1: {
+    name: 'CC Control Center',
+    auto: true,
+    note: '通信与固件升级接口，IN 0x82 / OUT 0x02，64 字节中断端点。'
+  },
+  2: {
+    name: 'Lighting',
+    auto: false,
+    note: 'HID 灯效接口，描述符只暴露 IN 端点；输出通常走 HID SET_REPORT。'
+  },
+  3: {
+    name: 'DT Diagnostic Tracking',
+    auto: true,
+    note: '诊断日志接口，IN 0x84 / OUT 0x04；固件协议不经过此接口。'
+  }
+};
+
 const $status = document.getElementById('status');
+const $interfaces = document.getElementById('interfaces');
+const $log = document.getElementById('log');
+const $traffic = document.getElementById('traffic');
+const $displayMode = document.getElementById('displayMode');
+const $inputMode = document.getElementById('inputMode');
+const $chkLf = document.getElementById('chkLf');
+const $chkAll = document.getElementById('chkAllInterfaces');
+const $firmwareFile = document.getElementById('firmwareFile');
+const $btnFirmwareStart = document.getElementById('btnFirmwareStart');
+const $btnFirmwareCancel = document.getElementById('btnFirmwareCancel');
+const $firmwareState = document.getElementById('firmwareState');
+const $firmwareProgress = document.getElementById('firmwareProgress');
+const $firmwareMeta = document.getElementById('firmwareMeta');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
-const btnSend = document.getElementById('btnSend');
-const chkHex = document.getElementById('chkHex');
-const $cmd = document.getElementById('cmd');
 
 let device = null;
-let epIn = null;
-let epOut = null;
-let reading = false;
-const dec = new TextDecoder('utf-8');
-const enc = new TextEncoder();
+let links = [];
+let session = 0;
+let rxBytes = 0;
+let txBytes = 0;
+let firmwareSession = null;
+let firmwareStarting = false;
+let firmwareProgressUpdatedAt = 0;
 
-function append(text, isErr) {
-  const atBottom = $log.scrollTop + $log.clientHeight >= $log.scrollHeight - 8;
-  if (isErr) {
-    const span = document.createElement('span');
-    span.className = 'err';
-    span.textContent = text;
-    $log.appendChild(span);
-  } else {
-    $log.appendChild(document.createTextNode(text));
-  }
-  if (atBottom) $log.scrollTop = $log.scrollHeight;
+function nowText() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false });
 }
 
-function toHex(buf) {
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0')).join(' ') + '\n';
+function appendLine(text, className = '') {
+  const line = document.createElement('span');
+  if (className) line.className = className;
+  line.textContent = `${nowText()} ${text}\n`;
+  $log.appendChild(line);
+  if ($log.textContent.length > MAX_LOG_CHARS) {
+    $log.textContent = $log.textContent.slice(-MAX_LOG_CHARS);
+  }
+  $log.scrollTop = $log.scrollHeight;
+}
+
+function asUint8Array(data) {
+  if (data instanceof Uint8Array) return data;
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  return new Uint8Array(data);
+}
+
+function toHex(data) {
+  return Array.from(asUint8Array(data))
+    .map(v => v.toString(16).padStart(2, '0'))
+    .join(' ');
+}
+
+function formatData(data) {
+  if ($displayMode.value === 'hex') return toHex(data);
+  return new TextDecoder('utf-8').decode(data);
+}
+
+function parseHex(text) {
+  const normalized = text
+    .replace(/0x/gi, '')
+    .replace(/[\s,;:_-]+/g, '');
+  if (!normalized || normalized.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(normalized)) {
+    throw new Error('HEX 数据必须由偶数个十六进制字符组成');
+  }
+  const out = new Uint8Array(normalized.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(normalized.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function encodeInput(text) {
+  let data = $inputMode.value === 'hex'
+    ? parseHex(text)
+    : new TextEncoder().encode($chkLf.checked ? text + '\n' : text);
+  if (data.length === 0) throw new Error('发送内容不能为空');
+  return data;
+}
+
+function endpointType(type) {
+  return type === 'interrupt' ? '中断' : type === 'bulk' ? '批量' : type;
+}
+
+function endpointKey(ep) {
+  return `${ep.direction}:${ep.endpointNumber}`;
+}
+
+function endpoinTag(ep) {
+  const address = ep.endpointNumber | (ep.direction === 'in' ? 0x80 : 0x00);
+  return `${ep.direction.toUpperCase()} 0x${address.toString(16).padStart(2, '0')}`;
+}
+
+function makeButton(text, className = '') {
+  const button = document.createElement('button');
+  button.textContent = text;
+  if (className) button.className = className;
+  return button;
+}
+
+function ccFwCrc16(data) {
+  let crc = 0;
+  for (const byte of data) {
+    crc ^= byte << 8;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      crc &= 0xffff;
+    }
+  }
+  return crc;
+}
+
+function readLe16(data, offset) {
+  return data[offset] | (data[offset + 1] << 8);
+}
+
+function readLe32(data, offset) {
+  return (data[offset] |
+          (data[offset + 1] << 8) |
+          (data[offset + 2] << 16) |
+          (data[offset + 3] << 24)) >>> 0;
+}
+
+function writeLe16(data, offset, value) {
+  data[offset] = value & 0xff;
+  data[offset + 1] = (value >>> 8) & 0xff;
+}
+
+function writeLe32(data, offset, value) {
+  data[offset] = value & 0xff;
+  data[offset + 1] = (value >>> 8) & 0xff;
+  data[offset + 2] = (value >>> 16) & 0xff;
+  data[offset + 3] = (value >>> 24) & 0xff;
+}
+
+function makeCcFwPacket(type, seq, payload = new Uint8Array()) {
+  if (payload.length > CC_FW.MAX_PAYLOAD_SIZE) {
+    throw new Error(`CC 数据包载荷不能超过 ${CC_FW.MAX_PAYLOAD_SIZE} 字节`);
+  }
+
+  const packet = new Uint8Array(
+    CC_FW.HEADER_SIZE + payload.length + CC_FW.CRC_SIZE
+  );
+  packet[0] = CC_FW.MAGIC_0;
+  packet[1] = CC_FW.MAGIC_1;
+  packet[2] = CC_FW.VERSION;
+  packet[3] = type;
+  writeLe16(packet, 4, seq);
+  writeLe16(packet, 6, payload.length);
+  packet.set(payload, CC_FW.HEADER_SIZE);
+
+  const crc = ccFwCrc16(packet.subarray(0, packet.length - CC_FW.CRC_SIZE));
+  writeLe16(packet, packet.length - CC_FW.CRC_SIZE, crc);
+  return packet;
+}
+
+function parseCcFwPacket(data) {
+  const packet = asUint8Array(data);
+  if (packet.length < CC_FW.HEADER_SIZE + CC_FW.CRC_SIZE ||
+      packet[0] !== CC_FW.MAGIC_0 ||
+      packet[1] !== CC_FW.MAGIC_1 ||
+      packet[2] !== CC_FW.VERSION) {
+    return null;
+  }
+
+  const payloadLength = readLe16(packet, 6);
+  const expectedLength =
+    CC_FW.HEADER_SIZE + payloadLength + CC_FW.CRC_SIZE;
+  if (payloadLength > CC_FW.MAX_PAYLOAD_SIZE ||
+      expectedLength !== packet.length) {
+    return null;
+  }
+
+  const expectedCrc = readLe16(packet, packet.length - CC_FW.CRC_SIZE);
+  const actualCrc = ccFwCrc16(
+    packet.subarray(0, packet.length - CC_FW.CRC_SIZE)
+  );
+  if (expectedCrc !== actualCrc) return null;
+
+  return {
+    type: packet[3],
+    seq: readLe16(packet, 4),
+    payload: packet.subarray(CC_FW.HEADER_SIZE, CC_FW.HEADER_SIZE + payloadLength),
+    status: payloadLength >= 4 ? readLe32(packet, CC_FW.HEADER_SIZE) : null
+  };
+}
+
+function ccFwStatusText(status) {
+  if (status === 0) return '成功';
+  const group = Math.floor(status / 512);
+  const code = status % 512;
+  if (group === 0) {
+    const common = ['成功', '失败', '超时', '参数错误', '不支持', '未找到'];
+    return common[code] || `通用错误 0x${status.toString(16)}`;
+  }
+  if (group === 6) {
+    const upgrade = [
+      '', '升级初始化失败', '升级未初始化', '升级忙', '升级槽无效',
+      '文件头无效', '镜像过大', '数据不完整', '校验失败',
+      '镜像无效', '升级记录无效', '镜像验证失败'
+    ];
+    return upgrade[code] || `升级错误 0x${status.toString(16)}`;
+  }
+  return `设备错误 0x${status.toString(16).padStart(8, '0')}`;
+}
+
+function isFirmwareActive() {
+  return firmwareStarting || firmwareSession !== null;
+}
+
+function formatByteCount(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+function setFirmwareState(text, className = '') {
+  $firmwareState.textContent = text;
+  $firmwareState.className = className;
+}
+
+function updateFirmwareProgress(done, total) {
+  const now = Date.now();
+  if (done > 0 && done < total && now - firmwareProgressUpdatedAt < 100) {
+    return;
+  }
+  firmwareProgressUpdatedAt = now;
+  $firmwareProgress.max = Math.max(1, total);
+  $firmwareProgress.value = Math.min(done, total);
+  const percent = total > 0 ? Math.floor(done * 100 / total) : 0;
+  $firmwareMeta.textContent =
+    `${formatByteCount(done)} / ${formatByteCount(total)} · ${percent}%`;
+}
+
+function makeCcSessionId() {
+  if (globalThis.crypto?.getRandomValues) {
+    const value = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(value);
+    if (value[0] !== 0) return value[0];
+  }
+  const fallback = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+  return fallback || 1;
+}
+
+class CcFwAbortError extends Error {
+  constructor(message = 'CC 固件传输已取消') {
+    super(message);
+    this.name = 'CcFwAbortError';
+  }
+}
+
+class CcUpgradeClient {
+  constructor({ bytes, sessionId, link, epIn, epOut, write, log, onProgress }) {
+    this.bytes = bytes;
+    this.sessionId = sessionId || makeCcSessionId();
+    this.link = link;
+    this.epIn = epIn;
+    this.epOut = epOut;
+    this.write = write;
+    this.log = log;
+    this.onProgress = onProgress;
+    this.responses = [];
+    this.waiter = null;
+    this.cancelled = false;
+  }
+
+  receive(data) {
+    if (this.cancelled) return;
+    const response = parseCcFwPacket(data);
+    if (!response) {
+      this.log(`忽略格式或 CRC 无效的 CC 响应：${toHex(data)}`, 'warn');
+      return;
+    }
+    this.responses.push(response);
+    this.pump();
+  }
+
+  cancel() {
+    if (this.cancelled) return;
+    this.cancelled = true;
+    this.settleWaiter(new CcFwAbortError());
+  }
+
+  settleWaiter(error, value) {
+    const waiter = this.waiter;
+    if (!waiter) return;
+    clearTimeout(waiter.timer);
+    this.waiter = null;
+    if (error) waiter.reject(error);
+    else waiter.resolve(value);
+  }
+
+  pump() {
+    const waiter = this.waiter;
+    if (!waiter) return;
+
+    while (this.responses.length > 0) {
+      const response = this.responses.shift();
+      if (response.seq !== waiter.seq) {
+        this.log(`忽略旧响应 seq=${response.seq}（等待 seq=${waiter.seq}）`, 'warn');
+        continue;
+      }
+      if (response.type === CC_FW.ACK || response.type === CC_FW.NAK) {
+        this.settleWaiter(null, response);
+        return;
+      }
+      this.log(`忽略未知 CC 响应类型 0x${response.type.toString(16)}`, 'warn');
+    }
+  }
+
+  waitResponse(seq, timeoutMs, label) {
+    if (this.cancelled) return Promise.reject(new CcFwAbortError());
+    if (this.waiter) {
+      return Promise.reject(new Error('CC 接收状态冲突：已有等待中的响应'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter = {
+        seq,
+        label,
+        resolve,
+        reject,
+        timer: 0
+      };
+      this.waiter = waiter;
+      waiter.timer = setTimeout(() => {
+        if (this.waiter !== waiter) return;
+        this.waiter = null;
+        reject(new Error(`${label}超时（${timeoutMs / 1000} 秒）`));
+      }, timeoutMs);
+      this.pump();
+    });
+  }
+
+  checkCancelled() {
+    if (this.cancelled) throw new CcFwAbortError();
+  }
+
+  async send(data, label) {
+    this.checkCancelled();
+    await this.write(data, label);
+    this.checkCancelled();
+  }
+
+  async request(type, seq, payload, label) {
+    const packet = makeCcFwPacket(type, seq, payload);
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= CC_FW_MAX_RETRIES; attempt++) {
+      await this.send(packet, `${label}（第 ${attempt} 次）`);
+      try {
+        const response = await this.waitResponse(
+          seq,
+          CC_FW_RESPONSE_TIMEOUT_MS,
+          `${label}应答`
+        );
+        if (response.type === CC_FW.ACK) {
+          if (response.status !== 0) {
+            throw new Error(`${label}失败：${ccFwStatusText(response.status)}`);
+          }
+          return response;
+        }
+
+        lastError = new Error(
+          `${label}被设备拒绝：${ccFwStatusText(response.status)}`
+        );
+        this.log(lastError.message, 'warn');
+      } catch (error) {
+        if (this.cancelled || error instanceof CcFwAbortError) throw error;
+        lastError = error;
+        this.log(
+          `${label}失败，重试 ${attempt}/${CC_FW_MAX_RETRIES}：` +
+          `${error.message || error}`,
+          'warn'
+        );
+      }
+    }
+
+    throw lastError || new Error(`${label}发送失败`);
+  }
+
+  async run() {
+    const startPayload = new Uint8Array(8);
+    writeLe32(startPayload, 0, this.bytes.length);
+    writeLe32(startPayload, 4, this.sessionId);
+
+    this.log(
+      `开始 CC 会话 0x${this.sessionId.toString(16).padStart(8, '0')}，` +
+      `${this.bytes.length} 字节`
+    );
+    await this.request(CC_FW.START, 0, startPayload, 'START');
+
+    let offset = 0;
+    let seq = 0;
+    while (offset < this.bytes.length) {
+      this.checkCancelled();
+      const end = Math.min(offset + CC_FW.MAX_PAYLOAD_SIZE, this.bytes.length);
+      await this.request(
+        CC_FW.DATA,
+        seq,
+        this.bytes.subarray(offset, end),
+        `DATA seq=${seq} @ ${offset}`
+      );
+      offset = end;
+      this.onProgress(offset, this.bytes.length);
+      seq = (seq + 1) & 0xffff;
+    }
+
+    this.log('文件数据已全部确认，请求设备校验并提交');
+    await this.request(CC_FW.END, 0, new Uint8Array(), 'END');
+    this.onProgress(this.bytes.length, this.bytes.length);
+    this.log('CC 固件传输与设备校验完成');
+  }
+}
+
+function findCcFirmwareTarget() {
+  const link = links.find(item => item.number === 1) ||
+               links.find(item => item.alt.endpoints.some(
+                 ep => ep.endpointNumber === 2 &&
+                       (ep.direction === 'out' || ep.direction === 'in')
+               ));
+  if (!link) return null;
+
+  const epOut = link.alt.endpoints.find(
+    ep => ep.direction === 'out' && ep.endpointNumber === 2
+  );
+  const epIn = link.alt.endpoints.find(
+    ep => ep.direction === 'in' && ep.endpointNumber === 2
+  );
+  return epOut && epIn ? { link, epOut, epIn } : null;
+}
+
+function refreshFirmwareControls() {
+  const active = isFirmwareActive();
+  $firmwareFile.disabled = active;
+  $chkAll.disabled = active;
+  $btnFirmwareStart.disabled =
+    active || !device || !device.opened || !$firmwareFile.files[0];
+  $btnFirmwareCancel.disabled = !firmwareSession;
+}
+
+async function writeCcFwFrame(target, data, label) {
+  if (!device || !device.opened || !target.link.claimed) {
+    throw new Error(`Interface ${target.link.number} 不可用`);
+  }
+  if (data.length > CC_FW.MAX_PACKET_SIZE) {
+    throw new Error(`CC 包超过 ${CC_FW.MAX_PACKET_SIZE} 字节`);
+  }
+  const result = await device.transferOut(target.epOut.endpointNumber, data);
+  if (result.status !== 'ok') {
+    throw new Error(`transferOut status=${result.status}`);
+  }
+  txBytes += data.length;
+  $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
+  const type = data[3];
+  const seq = data.length >= 6 ? readLe16(data, 4) : 0;
+  if (type !== CC_FW.DATA || seq === 0 || (seq & 0x3f) === 0) {
+    appendLine(
+      `[CC FW TX IF${target.link.number} ${endpoinTag(target.epOut)} ` +
+      `${data.length}B] ${label}`
+    );
+  }
+}
+
+async function sendCcFwAbort(target) {
+  if (!target || !device || !device.opened || !target.link.claimed) return;
+  await writeCcFwFrame(
+    target,
+    makeCcFwPacket(CC_FW.ABORT, 0),
+    'ABORT'
+  ).catch(error => {
+    appendLine(`[CC FW] 发送取消帧失败：${error.message || error}`, 'warn');
+  });
+}
+
+async function startFirmwareUpgrade() {
+  if (isFirmwareActive()) return;
+  const file = $firmwareFile.files[0];
+  if (!file) {
+    setFirmwareState('请选择升级文件。', 'err');
+    return;
+  }
+  if (!device || !device.opened) {
+    setFirmwareState('请先连接设备。', 'err');
+    return;
+  }
+
+  firmwareStarting = true;
+  let current = null;
+  let target = null;
+  let handlerKey = null;
+  let succeeded = false;
+  refreshControls();
+
+  try {
+    target = findCcFirmwareTarget();
+    if (!target) {
+      throw new Error('没有找到 CC Interface 1 的 IN/OUT 端点');
+    }
+
+    setFirmwareState(`读取文件 ${file.name} ...`);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length < 16) {
+      throw new Error('升级文件小于 16 字节，无法包含升级头');
+    }
+    if (readLe32(bytes, 0) !== UPGRADE_IMAGE_MAGIC) {
+      throw new Error('升级文件头 magic 不匹配');
+    }
+    if (readLe32(bytes, 4) !== UPGRADE_DEVICE_ID) {
+      throw new Error('升级文件头的设备 ID 不匹配');
+    }
+    if (readLe32(bytes, 8) === 0) {
+      throw new Error('升级文件头的镜像长度为 0');
+    }
+    if (!device || !device.opened || !links.includes(target.link)) {
+      throw new Error('设备已断开');
+    }
+    updateFirmwareProgress(0, bytes.length);
+
+    current = new CcUpgradeClient({
+      bytes,
+      link: target.link,
+      epIn: target.epIn,
+      epOut: target.epOut,
+      write: (data, label) => writeCcFwFrame(target, data, label),
+      log: (text, className = '') => appendLine(`[CC FW] ${text}`, className),
+      onProgress: updateFirmwareProgress
+    });
+    firmwareSession = current;
+    refreshControls();
+
+    handlerKey = endpointKey(target.epIn);
+    target.link.rxHandlers.set(handlerKey, data => current.receive(data));
+
+    if (!target.link.claimed) {
+      const claimed = await claimLink(target.link);
+      if (!claimed || !target.link.claimed) {
+        throw new Error(`Interface ${target.link.number} 占用失败`);
+      }
+    }
+
+    if (!target.link.reads.has(handlerKey)) {
+      startRead(target.link, target.epIn);
+    }
+
+    setFirmwareState(`正在通过 CC 升级 ${file.name}（${formatByteCount(bytes.length)}）...`);
+    await current.run();
+    succeeded = true;
+    setFirmwareState(`设备校验完成：${file.name}`);
+    appendLine(
+      `[CC FW] ${file.name} 升级完成，共 ${bytes.length} 字节`,
+      ''
+    );
+  } catch (error) {
+    if ((current && current.cancelled) || error instanceof CcFwAbortError) {
+      setFirmwareState('CC 固件传输已取消。', 'warn');
+      appendLine('[CC FW] 传输已取消', 'warn');
+    } else {
+      const message = error.message || String(error);
+      setFirmwareState(`升级失败：${message}`, 'err');
+      appendLine(`[CC FW 失败] ${message}`, 'err');
+    }
+  } finally {
+    if (current && !succeeded) {
+      await sendCcFwAbort(target);
+    }
+    if (target && handlerKey !== null) {
+      target.link.rxHandlers.delete(handlerKey);
+    }
+    if (firmwareSession === current) firmwareSession = null;
+    firmwareStarting = false;
+    refreshControls();
+  }
+}
+
+function cancelFirmwareUpgrade() {
+  if (!firmwareSession) return;
+  setFirmwareState('正在取消 CC 固件传输...', 'warn');
+  firmwareSession.cancel();
+}
+
+function renderInterfaces() {
+  $interfaces.textContent = '';
+  if (!links.length) {
+    const empty = document.createElement('div');
+    empty.className = 'interface';
+    empty.innerHTML = '<div class="interface-head"><strong>尚无接口数据</strong></div>';
+    $interfaces.appendChild(empty);
+    return;
+  }
+
+  for (const link of links) {
+    const hint = INTERFACE_HINTS[link.number] || {};
+    const card = document.createElement('section');
+    card.className = 'interface';
+
+    const head = document.createElement('div');
+    head.className = 'interface-head';
+    const title = document.createElement('strong');
+    title.textContent = `Interface ${link.number} · ${hint.name || '未命名接口'}`;
+    head.appendChild(title);
+
+    const cls = document.createElement('span');
+    cls.className = 'grow';
+    cls.textContent = `class=0x${link.interfaceClass.toString(16).padStart(2, '0')}`;
+    cls.style.color = '#8b98a5';
+    head.appendChild(cls);
+
+    const claimButton = makeButton(link.claimed ? '释放接口' : '占用接口',
+                                   link.claimed ? 'secondary' : '');
+    claimButton.disabled = !device || !device.opened || isFirmwareActive();
+    claimButton.addEventListener('click', async () => {
+      if (isFirmwareActive()) return;
+      if (link.claimed) await releaseLink(link);
+      else await claimLink(link);
+      refreshControls();
+    });
+    head.appendChild(claimButton);
+
+    const claimState = document.createElement('span');
+    claimState.className = `claim ${link.claimed ? 'ok' : ''}`;
+    claimState.textContent = link.claimed ? '已占用' : '未占用';
+    head.appendChild(claimState);
+    card.appendChild(head);
+
+    link.claimButton = claimButton;
+    link.claimState = claimState;
+
+    if (hint.note) {
+      const hintNode = document.createElement('div');
+      hintNode.className = 'hint';
+      hintNode.textContent = hint.note;
+      card.appendChild(hintNode);
+    }
+
+    const endpoints = document.createElement('div');
+    endpoints.className = 'endpoints';
+    if (!link.alt.endpoints.length) {
+      const none = document.createElement('div');
+      none.className = 'hint';
+      none.textContent = '该接口没有端点';
+      endpoints.appendChild(none);
+    }
+
+    for (const ep of link.alt.endpoints) {
+      const row = document.createElement('div');
+      row.className = 'endpoint';
+
+      const line = document.createElement('div');
+      line.className = 'endpoint-line';
+      const name = document.createElement('span');
+      name.className = 'endpoint-name';
+      name.innerHTML = `<b>${endpoinTag(ep)}</b> · ` +
+                       `${endpointType(ep.type)} · ${ep.packetSize} B`;
+      line.appendChild(name);
+
+      if (ep.direction === 'in') {
+        const state = document.createElement('span');
+        state.className = 'read-state';
+        state.textContent = link.reads.has(endpointKey(ep)) ? '监听中' : '未监听';
+        const start = makeButton('开始监听', 'secondary');
+        start.disabled = !link.claimed || link.reads.has(endpointKey(ep));
+        start.addEventListener('click', () => {
+          startRead(link, ep);
+          refreshControls();
+        });
+        line.appendChild(start);
+        line.appendChild(state);
+        link.ui.set(endpointKey(ep), { state, start });
+      } else {
+        const note = document.createElement('span');
+        note.className = 'read-state';
+        note.textContent = link.number === 3 ? '日志只读' : '可发送';
+        line.appendChild(note);
+        link.ui.set(endpointKey(ep), { note });
+      }
+      row.appendChild(line);
+
+      if (ep.direction === 'out' && link.number !== 3) {
+        const sendRow = document.createElement('div');
+        sendRow.className = 'send-row';
+        const input = document.createElement('input');
+        input.placeholder = $inputMode.value === 'hex'
+          ? '例如：01 02 0a ff'
+          : '输入文本，按回车或点击发送';
+        const send = makeButton('发送');
+        send.disabled = !link.claimed || isFirmwareActive();
+        input.disabled = isFirmwareActive();
+        send.addEventListener('click', () => sendPacket(link, ep, input));
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') sendPacket(link, ep, input);
+        });
+        sendRow.appendChild(input);
+        sendRow.appendChild(send);
+        row.appendChild(sendRow);
+        link.ui.get(endpointKey(ep)).send = send;
+        link.ui.get(endpointKey(ep)).input = input;
+      }
+
+      endpoints.appendChild(row);
+    }
+    card.appendChild(endpoints);
+    $interfaces.appendChild(card);
+  }
+}
+
+function refreshControls() {
+  for (const link of links) {
+    if (link.claimButton) {
+      link.claimButton.textContent = link.claimed ? '释放接口' : '占用接口';
+      link.claimButton.disabled = !device || !device.opened || isFirmwareActive();
+      link.claimState.textContent = link.claimed ? '已占用' : '未占用';
+      link.claimState.className = `claim ${link.claimed ? 'ok' : ''}`;
+    }
+    for (const ep of link.alt.endpoints) {
+      const ui = link.ui.get(endpointKey(ep));
+      if (!ui) continue;
+      if (ep.direction === 'in') {
+        ui.start.disabled = !link.claimed || link.reads.has(endpointKey(ep));
+        ui.start.textContent = link.reads.has(endpointKey(ep)) ? '监听中' : '开始监听';
+        ui.state.textContent = link.reads.has(endpointKey(ep)) ? '监听中' : '未监听';
+      } else if (ui.send) {
+        ui.send.disabled = !link.claimed || isFirmwareActive();
+        ui.input.disabled = isFirmwareActive();
+      }
+    }
+  }
+  refreshFirmwareControls();
+}
+
+function destroyLinks() {
+  session++;
+  for (const link of links) {
+    for (const state of link.reads.values()) state.active = false;
+  }
+  links = [];
+  renderInterfaces();
 }
 
 async function connect() {
   if (!navigator.usb) {
-    append('[错误] 当前浏览器没有 WebUSB（需要 Chrome/Edge，且页面在 localhost 或 https 下）\n', true);
+    appendLine('[错误] 当前浏览器不支持 WebUSB，请使用 localhost 或 HTTPS 下的 Chrome/Edge。', 'err');
     return;
   }
+
   try {
-    device = await navigator.usb.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+    if (device) await disconnect();
+    device = await navigator.usb.requestDevice({
+      filters: [{ vendorId: VID, productId: PID }]
+    });
     await device.open();
     if (device.configuration === null) await device.selectConfiguration(1);
 
-    const intf = device.configuration.interfaces.find(i => i.interfaceNumber === DT_INTF);
-    if (!intf) throw new Error('找不到 interface ' + DT_INTF);
-    await device.claimInterface(DT_INTF);
+    const token = ++session;
+    links = device.configuration.interfaces.map(interfaceObject => {
+      const alt = interfaceObject.alternate;
+      return {
+        number: interfaceObject.interfaceNumber,
+        interfaceClass: alt.interfaceClass,
+        interfaceObject,
+        alt,
+        claimed: false,
+        reads: new Map(),
+        rxHandlers: new Map(),
+        ui: new Map(),
+        token
+      };
+    });
+    renderInterfaces();
 
-    const eps = intf.alternate.endpoints;
-    epIn = eps.find(e => e.direction === 'in');
-    epOut = eps.find(e => e.direction === 'out');
-    if (!epIn) throw new Error('接口 ' + DT_INTF + ' 上没有 IN 端点');
-
-    $status.innerHTML = '已连接：<b>' + device.productName + '</b> · ' +
-      '接口 ' + DT_INTF + ' · IN 0x' + epIn.endpointNumber.toString(16).padStart(2, '0') +
-      ' · OUT ' + (epOut ? '0x' + epOut.endpointNumber.toString(16).padStart(2, '0') : '无');
+    $status.innerHTML = `已连接：<b>${device.productName}</b> · ` +
+      `configuration ${device.configuration.configurationValue} · ` +
+      `${links.length} interfaces`;
     btnConnect.disabled = true;
     btnDisconnect.disabled = false;
-    btnSend.disabled = !epOut;
-    readLoop();
-  } catch (e) {
-    append('[连接失败] ' + e.message + '\n', true);
+
+    appendLine(`设备已打开：${device.manufacturer || ''} ${device.productName || ''}`);
+    for (const link of links) {
+      const endpoints = link.alt.endpoints
+        .map(ep => endpoinTag(ep))
+        .join(', ') || '无端点';
+      appendLine(`Interface ${link.number}: class=0x${link.interfaceClass.toString(16).padStart(2, '0')}, ${endpoints}`);
+    }
+
+    for (const link of links) {
+      const auto = Boolean(INTERFACE_HINTS[link.number]?.auto);
+      if (auto || $chkAll.checked) await claimLink(link);
+    }
+    refreshControls();
+  } catch (error) {
+    appendLine(`[连接失败] ${error.message || error}`, 'err');
+    if (device && device.opened) await device.close().catch(() => {});
+    device = null;
+    destroyLinks();
+    $status.textContent = '连接失败。';
+    btnConnect.disabled = false;
+    btnDisconnect.disabled = true;
+    refreshControls();
   }
 }
 
-async function readLoop() {
-  if (reading) return;
-  reading = true;
-  while (reading && device && device.opened) {
+async function claimLink(link) {
+  if (!device || !device.opened || link.claimed) return true;
+  try {
+    await device.claimInterface(link.number);
+    link.claimed = true;
+    appendLine(`Interface ${link.number} claim 成功`, '');
+    for (const ep of link.alt.endpoints) {
+      if (ep.direction === 'in') startRead(link, ep);
+    }
+    return true;
+  } catch (error) {
+    appendLine(`Interface ${link.number} claim 失败：${error.message || error}`, 'err');
+    return false;
+  }
+}
+
+async function releaseLink(link) {
+  if (!link.claimed) return;
+  for (const state of link.reads.values()) state.active = false;
+  link.reads.clear();
+  try {
+    await device.releaseInterface(link.number);
+    appendLine(`Interface ${link.number} 已释放`);
+  } catch (error) {
+    appendLine(`Interface ${link.number} 释放失败：${error.message || error}`, 'err');
+  }
+  link.claimed = false;
+}
+
+async function startRead(link, ep) {
+  const key = endpointKey(ep);
+  if (!link.claimed || link.reads.has(key)) return;
+  const state = { active: true, count: 0, bytes: 0 };
+  link.reads.set(key, state);
+  refreshControls();
+
+  while (state.active && device && device.opened && link.claimed) {
     try {
-      const r = await device.transferIn(epIn.endpointNumber, PACKET);
-      if (r.status !== 'ok' || !r.data || r.data.byteLength === 0) continue;
-      append(chkHex.checked ? toHex(r.data.buffer) : dec.decode(r.data));
-    } catch (e) {
-      if (reading) append('[读取出错] ' + e.message + '\n', true);
+      const result = await device.transferIn(ep.endpointNumber, ep.packetSize);
+      if (!state.active) break;
+      if (result.status !== 'ok' || !result.data || result.data.byteLength === 0) continue;
+      state.count++;
+      state.bytes += result.data.byteLength;
+      rxBytes += result.data.byteLength;
+      $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
+      const ui = link.ui.get(key);
+      if (ui) ui.state.textContent = `监听中 · ${state.count} 包 / ${state.bytes} B`;
+      const rxHandler = link.rxHandlers.get(key);
+      if (rxHandler) {
+        try {
+          await rxHandler(result.data);
+        } catch (handlerError) {
+          appendLine(`[CC FW RX 处理失败] ${handlerError.message || handlerError}`,
+                     'err');
+        }
+      } else {
+        appendLine(`[RX IF${link.number} ${endpoinTag(ep)} ` +
+                   `${result.data.byteLength}B] ${formatData(result.data)}`);
+      }
+    } catch (error) {
+      if (state.active) {
+        appendLine(`[RX 错误 IF${link.number} ${endpoinTag(ep)}] ` +
+                   `${error.message || error}`, 'err');
+      }
       break;
     }
   }
-  reading = false;
+
+  link.reads.delete(key);
+  refreshControls();
 }
 
-async function disconnect() {
-  reading = false;
+async function sendPacket(link, ep, input) {
+  if (!device || !device.opened) return;
+  if (isFirmwareActive()) {
+    appendLine('[发送失败] 固件升级期间不能发送手动数据', 'warn');
+    return;
+  }
+  if (!link.claimed) {
+    appendLine(`[发送失败] Interface ${link.number} 未占用`, 'err');
+    return;
+  }
+
   try {
-    if (device && device.opened) {
-      await device.releaseInterface(DT_INTF).catch(() => {});
-      await device.close();
+    const data = encodeInput(input.value);
+    if (data.length > ep.packetSize) {
+      throw new Error(`单包最多 ${ep.packetSize} 字节，当前 ${data.length} 字节`);
     }
-  } catch (e) { /* ignore */ }
-  device = null; epIn = null; epOut = null;
-  btnConnect.disabled = false;
-  btnDisconnect.disabled = true;
-  btnSend.disabled = true;
-  $status.textContent = '已断开。';
-}
-
-async function send() {
-  if (!epOut || !$cmd.value) return;
-  const data = enc.encode($cmd.value + '\n');
-  try {
-    await device.transferOut(epOut.endpointNumber, data);
-    append('[已下发 ' + data.length + ' 字节] ' + $cmd.value + '\n');
-    $cmd.value = '';
-  } catch (e) {
-    append('[发送失败] ' + e.message + '\n', true);
+    const result = await device.transferOut(ep.endpointNumber, data);
+    if (result.status !== 'ok') {
+      throw new Error(`transferOut status=${result.status}`);
+    }
+    txBytes += data.length;
+    $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
+    appendLine(`[TX IF${link.number} ${endpoinTag(ep)} ${data.length}B] ` +
+               formatData(data));
+    input.value = '';
+  } catch (error) {
+    appendLine(`[发送失败 IF${link.number} ${endpoinTag(ep)}] ` +
+               `${error.message || error}`, 'err');
   }
 }
 
+async function disconnect() {
+  btnConnect.disabled = true;
+  btnDisconnect.disabled = true;
+  if (firmwareSession) firmwareSession.cancel();
+  for (const link of links) {
+    for (const state of link.reads.values()) state.active = false;
+  }
+  if (device && device.opened) {
+    for (const link of links) {
+      if (link.claimed) {
+        await device.releaseInterface(link.number).catch(() => {});
+      }
+    }
+    await device.close().catch(() => {});
+  }
+  device = null;
+  destroyLinks();
+  $status.textContent = '已断开。';
+  btnConnect.disabled = false;
+  btnDisconnect.disabled = true;
+  refreshControls();
+}
+
+$firmwareFile.addEventListener('change', () => {
+  const file = $firmwareFile.files[0];
+  if (!file) {
+    setFirmwareState('请选择升级文件。');
+    updateFirmwareProgress(0, 0);
+    refreshFirmwareControls();
+    return;
+  }
+  updateFirmwareProgress(0, file.size);
+  setFirmwareState(`已选择 ${file.name}，等待开始升级。`);
+  refreshFirmwareControls();
+});
+$btnFirmwareStart.addEventListener('click', startFirmwareUpgrade);
+$btnFirmwareCancel.addEventListener('click', cancelFirmwareUpgrade);
 btnConnect.addEventListener('click', connect);
 btnDisconnect.addEventListener('click', disconnect);
-document.getElementById('btnClear').addEventListener('click', () => { $log.textContent = ''; });
-btnSend.addEventListener('click', send);
-$cmd.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+document.getElementById('btnClear').addEventListener('click', () => {
+  $log.textContent = '';
+  rxBytes = 0;
+  txBytes = 0;
+  $traffic.textContent = 'RX 0 B · TX 0 B';
+});
+$chkLf.addEventListener('change', () => {
+  for (const link of links) {
+    for (const ep of link.alt.endpoints) {
+      if (ep.direction !== 'out') continue;
+      const input = link.ui.get(endpointKey(ep))?.input;
+      if (input) input.placeholder = $inputMode.value === 'hex'
+        ? '例如：01 02 0a ff'
+        : '输入文本，按回车或点击发送';
+    }
+  }
+});
+$inputMode.addEventListener('change', () => {
+  for (const link of links) {
+    for (const ep of link.alt.endpoints) {
+      if (ep.direction !== 'out') continue;
+      const input = link.ui.get(endpointKey(ep))?.input;
+      if (input) input.placeholder = $inputMode.value === 'hex'
+        ? '例如：01 02 0a ff'
+        : '输入文本，按回车或点击发送';
+    }
+  }
+});
+$chkAll.addEventListener('change', async () => {
+  if (!$chkAll.checked || !device || !device.opened) return;
+  for (const link of links) {
+    if (!link.claimed) await claimLink(link);
+  }
+  refreshControls();
+});
 
-navigator.usb?.addEventListener('disconnect', e => {
-  if (device && e.device === device) {
-    append('[设备已拔出]\n', true);
+navigator.usb?.addEventListener('disconnect', event => {
+  if (device && event.device === device) {
+    appendLine('[设备已拔出]', 'err');
     disconnect();
   }
 });

@@ -179,12 +179,16 @@ rot_state_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_siz
     if (buf == NULL) {
         return rot_state_invalid_argument;
     }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
+    }
 
     uint32_t ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
     _flash_invalidate_dcache(offset_addr, buf_size);
     memcpy(buf, (void *)(FDB_BASE_ADDR + offset_addr), buf_size);
     restore_global_irq(ctx);
 
+    (void)_mutex_put();
     return rot_state_success;
 }
 
@@ -200,6 +204,9 @@ rot_state_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U) || (((uintptr_t)buf & 3U) != 0U)) {
         return rot_state_flash_unaligned;
     }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
+    }
 
     _flash_invalidate_dcache(offset_addr, buf_size);
 
@@ -213,8 +220,10 @@ rot_state_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
     if (st != status_success) {
         printf(TAG "read failed at 0x%08x, size %u, st = %d\r\n",
                (unsigned)offset_addr, (unsigned)buf_size, (int)st);
+        (void)_mutex_put();
         return rot_state_flash_read_fail;
     }
+    (void)_mutex_put();
     return rot_state_success;
 }
 
@@ -229,6 +238,9 @@ rot_state_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t bu
     }
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U)) {
         return rot_state_flash_unaligned;
+    }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
     }
 
     const uint8_t *src = (const uint8_t *)buf;
@@ -268,9 +280,11 @@ rot_state_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t bu
     restore_global_irq(ctx);
 
     if (st != status_success) {
+        (void)_mutex_put();
         return rot_state_flash_read_fail;
     }
     *equal = is_equal && (left == 0U);
+    (void)_mutex_put();
     return rot_state_success;
 }
 
@@ -285,6 +299,9 @@ rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_
     }
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U)) {
         return rot_state_flash_unaligned;
+    }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
     }
 
     const uint8_t *src = (const uint8_t *)buf;
@@ -309,6 +326,7 @@ rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_
     }
 
     _flash_invalidate_dcache(offset_addr, buf_size);
+    (void)_mutex_put();
     return ret;
 }
 
@@ -322,6 +340,9 @@ rot_state_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size)
     if ((offset_addr % hal_fm.sector_siz) != 0U || (buf_size % hal_fm.sector_siz) != 0U) {
         return rot_state_flash_unaligned;
     }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
+    }
 
     uint32_t ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
     _fencerw();
@@ -331,6 +352,7 @@ rot_state_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size)
     restore_global_irq(ctx);
 
     _flash_invalidate_dcache(offset_addr, buf_size);
+    (void)_mutex_put();
 
     if (st != status_success) {
         return rot_state_flash_erase_fail;
@@ -356,6 +378,23 @@ uint32_t hal_flash_get_page_size(void)
 uint32_t hal_flash_get_block_size(void)
 {
     return hal_fm.ready ? hal_fm.block_siz : 0U;
+}
+
+rot_state_t hal_flash_get_active_app_slot(uint8_t *slot)
+{
+    if (slot == NULL) {
+        return rot_state_invalid_argument;
+    }
+    if (!hal_fm.ready) {
+        return rot_state_flash_not_init;
+    }
+    if (!_mutex_get()) {
+        return rot_state_flash_busy;
+    }
+
+    *slot = rom_xpi_nor_is_remap_enabled(hal_fm.base) ? 1U : 0U;
+    (void)_mutex_put();
+    return rot_state_success;
 }
 
 rot_state_t hal_flash_init(void)

@@ -1,5 +1,5 @@
-#ifndef ROT_STATUE_CODE_H
-#define ROT_STATUE_CODE_H
+#ifndef ROT_STATE_H
+#define ROT_STATE_H
 
 #include <stdint.h>
 
@@ -20,6 +20,9 @@ enum {
     rot_state_group_flash,
     rot_state_group_fdb,
     rot_state_group_hal_cc,
+    rot_state_group_rotcc,
+    rot_state_group_rotdt,
+    rot_state_group_upgrade,
 };
 
 

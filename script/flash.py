@@ -7,14 +7,14 @@
 功能说明：
     1. 从本地化 SDK 的板卡 yaml 读取 openocd-probe 和 openocd-soc；
     2. J-Link 使用 SEGGER Commander，其他探针使用工程内 OpenOCD；
-    3. 默认烧录 build/output/<APP_NAME>.bin，烧录后执行 verify 和 reset；
+    3. 默认烧录 build/output/<APP_NAME>.elf，烧录后执行 verify 和 reset；
     4. 不访问原 SDK 环境。
 
 参数说明：
     --board     目标板卡，默认自动识别本地化目录
     --probe     调试器类型，默认从板卡 yaml 读取
     --soc       OpenOCD SoC 配置名，默认从板卡 yaml 读取
-    --elf       显式选择 ELF 文件；默认使用 BIN
+    --elf       显式选择 ELF 文件；默认使用 build/output/<APP_NAME>.elf
     --bin       显式选择 BIN 文件；不带路径时使用 build/output/<APP_NAME>.bin
     --address   BIN 的 Flash 写入地址，默认从板卡 OpenOCD 配置读取
     --no-verify 烧录后不校验 Flash
@@ -22,7 +22,7 @@
     --dry-run   只打印 OpenOCD 命令，不实际烧录
 
 使用示例：
-    # 1. 默认烧录 user_app.bin
+    # 1. 默认烧录 user_app.elf
     python script/flash.py
 
     # 2. 只查看将要执行的 OpenOCD 命令
@@ -252,7 +252,7 @@ def main(argv=None):
     )
     parser.add_argument(
         "--elf",
-        help="显式烧录 ELF 文件；默认使用 build/output/<APP_NAME>.bin",
+        help="显式烧录 ELF 文件；默认使用 build/output/<APP_NAME>.elf",
     )
     parser.add_argument(
         "--bin",
@@ -356,7 +356,7 @@ def main(argv=None):
             firmware = None
             is_bin = False
             flash_address = None
-        elif args.bin is not None or not args.elf:
+        elif args.bin is not None:
             is_bin = True
             bin_path = args.bin or (
                 "build/output/%s.bin" % lp.get_app_name(lp.PROJECT_DIR)
@@ -373,15 +373,11 @@ def main(argv=None):
                     "无法从板卡 OpenOCD 配置读取 Flash 起始地址，"
                     "请用 --address 0x... 指定 BIN 写入地址"
                 )
-        elif args.elf:
-            is_bin = False
-            firmware = Path(args.elf)
-            if not firmware.is_absolute():
-                firmware = lp.PROJECT_DIR / firmware
-            flash_address = None
         else:
             is_bin = False
-            firmware = Path(args.elf)
+            firmware = Path(args.elf or (
+                "build/output/%s.elf" % lp.get_app_name(lp.PROJECT_DIR)
+            ))
             if not firmware.is_absolute():
                 firmware = lp.PROJECT_DIR / firmware
             flash_address = None

@@ -11,11 +11,10 @@
 extern const usb_descriptor_t g_desc_rpt_cc;
 #endif
 
-_Static_assert(HAL_CC_PACKET_SIZE == INTF_CC_EP_SIZE, "CC packet size mismatch");
 
 static struct usbd_interface s_intf;
-static uint8_t s_rx_buf[HAL_CC_PACKET_SIZE] __attribute__((aligned(4)));
-static uint8_t s_tx_buf[HAL_CC_PACKET_SIZE] __attribute__((aligned(4)));
+static uint8_t s_rx_buf[INTF_CC_EP_SIZE] __attribute__((aligned(4)));
+static uint8_t s_tx_buf[INTF_CC_EP_SIZE] __attribute__((aligned(4)));
 static hal_cc_callbacks_t ctx_cb;
 static volatile bool s_tx_busy;
 static uint8_t s_busid;
@@ -75,6 +74,9 @@ static void hal_cc_configured(uint8_t busid)
 {
     s_tx_busy = false;
     (void)usbd_ep_start_read(busid, INTF_CC_EPO, s_rx_buf, sizeof(s_rx_buf));
+    if (ctx_cb.configured != NULL) {
+        ctx_cb.configured(ctx_cb.ctx);
+    }
 }
 
 int hal_cc_register_callbacks(const hal_cc_callbacks_t *cb)
@@ -95,7 +97,7 @@ int hal_cc_send(const void *data, uint32_t len)
 {
     uint32_t irq_state;
 
-    if ((data == NULL) || (len == 0U) || (len > HAL_CC_PACKET_SIZE)) {
+    if ((data == NULL) || (len == 0U) || (len > INTF_CC_EP_SIZE)) {
         return rot_state_hal_cc_arg;
     }
     if (!s_initialized || !usb_device_is_configured(s_busid)) {
