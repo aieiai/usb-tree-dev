@@ -6,25 +6,33 @@
 #include "usb_config.h"
 
 #ifndef HAL_USB_CC_WINUSB_ENABLE
-#define HAL_USB_CC_WINUSB_ENABLE        (1)
+#define HAL_USB_CC_WINUSB_ENABLE    (1)
 #endif
 
 #ifndef HAL_USB_DT_WINUSB_ENABLE
-#define HAL_USB_DT_WINUSB_ENABLE        (1)
+#define HAL_USB_DT_WINUSB_ENABLE    (1)
 #endif
 
 /* 是否声明 WebUSB 平台能力（浏览器访问）。
  * Windows 上 WebUSB 靠 WinUSB 才能打开接口，所以依赖 DT 的 WinUSB 开关；
  * Linux/macOS 不需要 WinUSB（接口无内核驱动即可），但也只有 DT 接口存在才有意义。 */
 #ifndef HAL_USB_WEBUSB_ENABLE
-#define HAL_USB_WEBUSB_ENABLE           (1)
-#define HAL_USB_WEBURL                  "https://www.usb.org"
+#define HAL_USB_WEBUSB_ENABLE       (1)
+/**
+ * WebUSB 跳转地址，填写完整 URL 如:
+ *      https://example.com/webusb
+ *      https://example.tinyusb.org/webusb-serial/index.html
+ * URL 描述符会自动去掉 scheme 并按实际长度生成，无需再维护字符列表或长度
+ */
+#ifndef HAL_USB_WEBURL
+#define HAL_USB_WEBURL              "D:/Users/ray/Desktops/usb-tree-dev/tests/cc/web/webusb_dt.html"
+#endif
 #endif
 
 
-#define HAL_USB_WINUSB_ENABLE           (HAL_USB_CC_WINUSB_ENABLE || HAL_USB_DT_WINUSB_ENABLE)
+#define HAL_USB_WINUSB_ENABLE       (HAL_USB_CC_WINUSB_ENABLE || HAL_USB_DT_WINUSB_ENABLE)
 
-#define USB_PRODUCT_VERSION             (0x0100)
+#define USB_PRODUCT_VERSION         (0x0100)
 
 typedef struct {
     const uint8_t *buf;

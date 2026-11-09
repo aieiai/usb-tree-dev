@@ -224,18 +224,7 @@
     #else
         #define MSOS20_BOS_TOTAL_LEN    (5 + USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_LEN + USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_LEN)
         #define MSOS20_BOS_NUM_CAPS     (2)
-        #define WEBUSB_DESC             USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, WEBUSB_LANDING_PAGE_CODE)\
-        
-        #define WEBUSB_URL_CHARS \
-            'r', 'a', 'y', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm', '/', 'w', 'e', 'b', 'u', 's', 'b'
-        #define WEBUSB_URL_LEN        (sizeof((const char[]){ WEBUSB_URL_CHARS })) /* 花括号字符表不带结尾 0 */
-        #define WEBUSB_URL_DESC_LEN   (3U + WEBUSB_URL_LEN) /* bLength + bDescriptorType + bScheme */
-
-        #define WEB_URL_DESC                                                                    \
-            (uint8_t)WEBUSB_URL_DESC_LEN,                                                       \
-            WEBUSB_URL_TYPE,         /* bDescriptorType = URL descriptor */                     \
-            WEBUSB_URL_SCHEME_HTTPS, /* bScheme：https */                                       \
-            WEBUSB_URL_CHARS         /* URL 本身不带 scheme */
+        #define WEBUSB_DESC             USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(WEBUSB_VENDOR_CODE, WEBUSB_LANDING_PAGE_CODE)
         
     #endif
     

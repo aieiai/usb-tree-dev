@@ -146,23 +146,53 @@ static struct usb_msosv2_descriptor msosv2_desc = {
 
 #if HAL_USB_WEBUSB_ENABLE
 // WebUSB：URL 描述符由厂商请求返回（cherryusb 在 bRequest = WEBUSB_VENDOR_CODE 时下发）
-/* 把下面这串字符换成你自己的站点（不带 https://），浏览器会用它作为访问入口的跳转地址。
- * 长度由 sizeof 自动算出，改字符串不需要同步改长度。 */
-static const uint8_t _webusb_url_desc[] = {
-    WEB_URL_DESC
-};
+#define WEBUSB_URL_HEADER_LEN               (3U) /* bLength + bDescriptorType + bScheme */
+#define WEBUSB_URL_SCHEME_HTTPS_PREFIX      "https://"
+#define WEBUSB_URL_SCHEME_HTTP_PREFIX       "http://"
+
+/* 先按 URL 宏分配最大空间，hid_descriptor_init() 会去掉 scheme 后填充实际内容。
+ * 描述符中的 bLength 是 8 位字段，正文最多 252 字节。 */
+static uint8_t _webusb_url_desc[WEBUSB_URL_HEADER_LEN + sizeof(HAL_USB_WEBURL) - 1U];
+_Static_assert(sizeof(HAL_USB_WEBURL) - 1U <= 0xFFU - WEBUSB_URL_HEADER_LEN,
+               "HAL_USB_WEBURL is too long for a WebUSB URL descriptor");
+
 static struct usb_webusb_descriptor webusb_url_desc = {
     .vendor_code = WEBUSB_VENDOR_CODE,
     .string = (uint8_t *)_webusb_url_desc,
-    .string_len = WEBUSB_URL_DESC_LEN,
+    .string_len = sizeof(_webusb_url_desc),
     .req_limit = 1,
 };
+
+static void webusb_url_descriptor_init(void) {
+    const char *url = HAL_USB_WEBURL;
+    uint8_t scheme = WEBUSB_URL_SCHEME_HTTPS;
+
+    if (strncmp(url, WEBUSB_URL_SCHEME_HTTPS_PREFIX, sizeof(WEBUSB_URL_SCHEME_HTTPS_PREFIX) - 1U) == 0) {
+        url += sizeof(WEBUSB_URL_SCHEME_HTTPS_PREFIX) - 1U;
+    }
+    else if (strncmp(url, WEBUSB_URL_SCHEME_HTTP_PREFIX, sizeof(WEBUSB_URL_SCHEME_HTTP_PREFIX) - 1U) == 0) {
+        scheme = WEBUSB_URL_SCHEME_HTTP;
+        url += sizeof(WEBUSB_URL_SCHEME_HTTP_PREFIX) - 1U;
+    }
+
+    size_t url_len = strlen(url);
+
+    _webusb_url_desc[0] = (uint8_t)(WEBUSB_URL_HEADER_LEN + url_len);
+    _webusb_url_desc[1] = WEBUSB_URL_TYPE;
+    _webusb_url_desc[2] = scheme;
+    memcpy(&_webusb_url_desc[WEBUSB_URL_HEADER_LEN], url, url_len);
+    webusb_url_desc.string_len = (uint32_t)(WEBUSB_URL_HEADER_LEN + url_len);
+}
 #endif /* HAL_USB_WEBUSB_ENABLE */
 
 /* 按当前手柄模式选择 BOS 与 MS OS 2.0 描述符集。
  * Xbox 模式多挂一个 XUSB10 函数子集，Windows 才会给手柄接口加载 xusb22.sys（与 VID/PID 无关）。
  * 必须在 usbd_desc_register() 之前调用；hal_usb_init() 每次重新注册描述符前都会调一次。 */
 void hid_descriptor_init(void) {
+#if HAL_USB_WEBUSB_ENABLE
+    webusb_url_descriptor_init();
+#endif
+
     if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
         uint16_t len = (uint16_t)(sizeof(_msos_v2_0) + sizeof(_msos_v2_0_xbox_suffix));
 
