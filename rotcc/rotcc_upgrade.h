@@ -27,7 +27,7 @@
 #define ROTCC_FW_VERSION            (1U)
 #define ROTCC_FW_HEADER_SIZE        (8U)
 #define ROTCC_FW_CRC_SIZE           (2U)
-#define ROTCC_FW_MAX_PACKET_SIZE    (64U)
+#define ROTCC_FW_MAX_PACKET_SIZE    (INTF_CC_EP_SIZE)
 #define ROTCC_FW_MAX_PAYLOAD_SIZE   (ROTCC_FW_MAX_PACKET_SIZE - \
                                      ROTCC_FW_HEADER_SIZE - ROTCC_FW_CRC_SIZE)
 

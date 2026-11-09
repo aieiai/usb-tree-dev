@@ -10,7 +10,7 @@
 
 #define TAG "rotcc: "
 #define ROTCC_PACKET_SIZE      (INTF_CC_EP_SIZE)
-#define ROTCC_QUEUE_DEPTH      (32U)
+#define ROTCC_QUEUE_DEPTH      (2U)
 #define ROTCC_QUEUE_MASK       (ROTCC_QUEUE_DEPTH - 1U)
 
 

@@ -211,6 +211,7 @@ def main(argv=None):
         lp.write_localized_cmake(
             lp.PROJECT_DIR, localized_name, board, args.hpm_build_type
         )
+        lp.ensure_ses_source_dedup(localized_dir)
 
         # 到这里所有工具都应来自工程内部，不再访问原 SDK
         if not lp.tools_are_ready(lp.PROJECT_DIR):

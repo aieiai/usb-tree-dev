@@ -12,7 +12,7 @@ set(CONFIG_USB_DEVICE 1)
 set(CONFIG_USB_DEVICE_HID 1)
 set(CONFIG_USB_DEVICE_GAMEPAD 1)
 set(CONFIG_ECLIPSE_THREADX 1)
-set(CONFIG_SEGGER_RTT 1)
+# set(CONFIG_SEGGER_RTT_PRINTF 1)
 
 #set(CONFIG_ECLIPSE_THREADX_TIMER_RESOURCE_MTIMER 1) to use mchtmr as system's tick source
 #set(CONFIG_ECLIPSE_THREADX_TIMER_RESOURCE_MTIMER 1)
@@ -42,6 +42,7 @@ sdk_app_src(src/main.c)
 
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)
+sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
 
 if(TARGET app)
     target_compile_options(app PRIVATE "-Wextra") # "-Wignored-qualifiers"
@@ -51,7 +52,7 @@ sdk_ses_opt_debug_connection(J-Link)
 sdk_ses_opt_debug_jlink_speed(50000)
 
 if (CONFIG_SEGGER_RTT)
-  sdk_ses_opt_lib_io_type(RTT)
+    sdk_ses_opt_lib_io_type(RTT)
 endif()
 
 generate_ide_projects()

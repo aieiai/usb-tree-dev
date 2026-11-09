@@ -962,6 +962,33 @@ def bundle_tools(sdk_env, project_dir, refresh=False):
     return paths
 
 
+def ensure_ses_source_dedup(sdk_dir):
+    """让本地化 SDK 生成 SES 工程时按顺序去除重复源文件。"""
+    generator = (
+        sdk_dir / "scripts" / "ide" / "segger" / "embedded_studio_proj_gen.py"
+    )
+    if not generator.is_file():
+        return
+
+    source = generator.read_text(encoding="utf-8")
+    if "files = list(dict.fromkeys(" in source:
+        return
+
+    original = '    files = config["target"]["sources"].split(",")\r\n'
+    if original not in source:
+        original = '    files = config["target"]["sources"].split(",")\n'
+    replacement = (
+        '    # RTT sources can be contributed by both CONFIG_SEGGER_RTT and the SES\r\n'
+        '    # library I/O setup. Preserve order while keeping each source once.\r\n'
+        '    files = list(dict.fromkeys(\r\n'
+        '        path.strip() for path in config["target"]["sources"].split(",")\r\n'
+        '        if path.strip()))\r\n'
+    )
+    if original not in source:
+        return
+    generator.write_text(source.replace(original, replacement), encoding="utf-8")
+
+
 def write_localized_cmake(project_dir, localized_name, board, build_type):
     """生成 localized_sdk.cmake，全部使用工程内相对路径。"""
     localized_dir = project_dir / localized_name
@@ -1241,6 +1268,8 @@ def localize(
         shutil.move(str(new_sdk), str(localized_dir))
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
+
+    ensure_ses_source_dedup(localized_dir)
 
     # 原样复制 tools/，并把工具链放入 toolchain/<原工具链名>/
     bundle_tools(sdk_env, project_dir, refresh_toolchain)

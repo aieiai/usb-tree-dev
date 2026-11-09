@@ -87,7 +87,11 @@ enum {
 
 #define INTF_CC_NUM                     (0x01) /* Interface number for Upper computer control center */
 #define INTF_CC_EPI                     (0x82) /* Endpoint number and attributes for Upper computer input control center */
-#define INTF_CC_EP_SIZE                 (64)
+#if defined(CONFIG_USB_HS)
+    #define INTF_CC_EP_SIZE             (1024)
+#else
+    #define INTF_CC_EP_SIZE             (64)
+#endif
 #define INTF_CC_EP_INTERVAL             (USBD_INTERVAL_MS(0.125))
 #define INTF_CC_EPO                     (0x02) /* Endpoint number and attributes for Upper computer output control center */
 

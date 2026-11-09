@@ -22,7 +22,7 @@ static void cst_task(ULONG id)
 {
     (void)id;
 
-    uint32_t cnt = 0, tick = 0;
+    uint32_t cnt = 0;
 
     for (;;) {
         
