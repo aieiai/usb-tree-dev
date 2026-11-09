@@ -168,6 +168,17 @@
     color: var(--muted);
     font-size: 12px;
   }
+  .firmware-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #firmwareDuration {
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 12px;
+    white-space: nowrap;
+  }
   .send-row {
     display: flex;
     gap: 7px;
@@ -239,11 +250,11 @@
     <section class="interface">
       <div class="interface-head">
         <strong class="grow">CC 固件升级</strong>
-        <span class="muted">CC FW v1 · 64B packet</span>
+        <span id="ccPacketInfo" class="muted">等待读取设备端点</span>
       </div>
       <div class="hint">
         升级协议只走 CC（OUT 0x02 / IN 0x82），DT 仅用于日志。文件需包含
-        16 字节官方升级头，每个数据包最多携带 54 字节。
+        16 字节官方升级头；传输包大小从设备端点描述符自动读取。
       </div>
       <div class="upgrade-body">
         <div class="upgrade-row">
@@ -253,7 +264,10 @@
         </div>
         <div id="firmwareState" aria-live="polite">请选择升级文件。</div>
         <progress id="firmwareProgress" max="1" value="0"></progress>
-        <div id="firmwareMeta">0 B / 0 B</div>
+        <div class="firmware-meta-row">
+          <div id="firmwareMeta">0 B / 0 B</div>
+          <span id="firmwareDuration">总用时 --</span>
+        </div>
       </div>
     </section>
     <section id="interfaces">
@@ -285,8 +299,8 @@ const CC_FW = Object.freeze({
   VERSION: 1,
   HEADER_SIZE: 8,
   CRC_SIZE: 2,
-  MAX_PACKET_SIZE: 64,
-  MAX_PAYLOAD_SIZE: 54,
+  MIN_PACKET_SIZE: 64,
+  MAX_PACKET_SIZE: 1024,
   START: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -308,7 +322,7 @@ const INTERFACE_HINTS = {
   1: {
     name: 'CC Control Center',
     auto: true,
-    note: '通信与固件升级接口，IN 0x82 / OUT 0x02，64 字节中断端点。'
+    note: '通信与固件升级接口，IN 0x82 / OUT 0x02；包大小按设备描述符自动适配。'
   },
   2: {
     name: 'Lighting',
@@ -336,6 +350,8 @@ const $btnFirmwareCancel = document.getElementById('btnFirmwareCancel');
 const $firmwareState = document.getElementById('firmwareState');
 const $firmwareProgress = document.getElementById('firmwareProgress');
 const $firmwareMeta = document.getElementById('firmwareMeta');
+const $firmwareDuration = document.getElementById('firmwareDuration');
+const $ccPacketInfo = document.getElementById('ccPacketInfo');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 
@@ -347,6 +363,9 @@ let txBytes = 0;
 let firmwareSession = null;
 let firmwareStarting = false;
 let firmwareProgressUpdatedAt = 0;
+let firmwareStartedAt = 0;
+let firmwareDurationTimer = 0;
+let firmwareLastDurationMs = 0;
 
 function nowText() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -417,6 +436,70 @@ function endpoinTag(ep) {
   return `${ep.direction.toUpperCase()} 0x${address.toString(16).padStart(2, '0')}`;
 }
 
+function ccMaxPayloadSize(packetSize) {
+  return packetSize - CC_FW.HEADER_SIZE - CC_FW.CRC_SIZE;
+}
+
+function ccEndpointLimit(ep) {
+  if (!ep || !['interrupt', 'bulk'].includes(ep.type)) {
+    throw new Error(`CC 端点类型不受支持：${ep?.type || '未知'}`);
+  }
+  if (device?.speed === 'full' || device?.speed === 'low') {
+    return 64;
+  }
+  if (device?.speed === 'high') {
+    return ep.type === 'bulk' ? 512 : 1024;
+  }
+  /* Some WebUSB implementations omit USBDevice.speed. In that case the
+   * endpoint descriptor's packetSize is the authoritative capability. */
+  return CC_FW.MAX_PACKET_SIZE;
+}
+
+function validateCcEndpointPair(link, epOut, epIn) {
+  if (!epOut || !epIn) {
+    throw new Error('CC 固件升级需要同时具备 IN 和 OUT 端点');
+  }
+
+  for (const ep of [epIn, epOut]) {
+    if (!Number.isInteger(ep.packetSize) || ep.packetSize <= 0) {
+      throw new Error(`${endpoinTag(ep)} 的 packetSize 无效`);
+    }
+    if (ep.packetSize < CC_FW.MIN_PACKET_SIZE) {
+      throw new Error(
+        `${endpoinTag(ep)} 只有 ${ep.packetSize} 字节，` +
+        `无法容纳 ${CC_FW.MIN_PACKET_SIZE} 字节 CC 帧`
+      );
+    }
+    if ((ep.packetSize & (ep.packetSize - 1)) !== 0) {
+      throw new Error(
+        `${endpoinTag(ep)} 的 packetSize=${ep.packetSize} 不是 2 的幂`
+      );
+    }
+    if (ep.packetSize > CC_FW.MAX_PACKET_SIZE) {
+      throw new Error(
+        `${endpoinTag(ep)} 的 packetSize=${ep.packetSize} 超过协议上限 ` +
+        `${CC_FW.MAX_PACKET_SIZE}`
+      );
+    }
+    const limit = ccEndpointLimit(ep);
+    if (ep.packetSize > limit) {
+      throw new Error(
+        `${endpoinTag(ep)} 的 packetSize=${ep.packetSize} 超过当前 ` +
+        `${device?.speed || '未知'} USB 速度上限 ${limit}`
+      );
+    }
+  }
+
+  const packetSize = Math.min(epIn.packetSize, epOut.packetSize);
+  return {
+    link,
+    epIn,
+    epOut,
+    packetSize,
+    maxPayloadSize: ccMaxPayloadSize(packetSize)
+  };
+}
+
 function makeButton(text, className = '') {
   const button = document.createElement('button');
   button.textContent = text;
@@ -459,9 +542,13 @@ function writeLe32(data, offset, value) {
   data[offset + 3] = (value >>> 24) & 0xff;
 }
 
-function makeCcFwPacket(type, seq, payload = new Uint8Array()) {
-  if (payload.length > CC_FW.MAX_PAYLOAD_SIZE) {
-    throw new Error(`CC 数据包载荷不能超过 ${CC_FW.MAX_PAYLOAD_SIZE} 字节`);
+function makeCcFwPacket(type, seq, payload = new Uint8Array(), packetSize) {
+  const maxPayloadSize = ccMaxPayloadSize(packetSize);
+  if (!Number.isInteger(packetSize) || maxPayloadSize <= 0) {
+    throw new Error(`CC 端点 packetSize 无效：${packetSize}`);
+  }
+  if (payload.length > maxPayloadSize) {
+    throw new Error(`CC 数据包载荷不能超过 ${maxPayloadSize} 字节`);
   }
 
   const packet = new Uint8Array(
@@ -480,9 +567,10 @@ function makeCcFwPacket(type, seq, payload = new Uint8Array()) {
   return packet;
 }
 
-function parseCcFwPacket(data) {
+function parseCcFwPacket(data, packetSize = CC_FW.MAX_PACKET_SIZE) {
   const packet = asUint8Array(data);
   if (packet.length < CC_FW.HEADER_SIZE + CC_FW.CRC_SIZE ||
+      packet.length > packetSize ||
       packet[0] !== CC_FW.MAGIC_0 ||
       packet[1] !== CC_FW.MAGIC_1 ||
       packet[2] !== CC_FW.VERSION) {
@@ -492,7 +580,7 @@ function parseCcFwPacket(data) {
   const payloadLength = readLe16(packet, 6);
   const expectedLength =
     CC_FW.HEADER_SIZE + payloadLength + CC_FW.CRC_SIZE;
-  if (payloadLength > CC_FW.MAX_PAYLOAD_SIZE ||
+  if (payloadLength > ccMaxPayloadSize(packetSize) ||
       expectedLength !== packet.length) {
     return null;
   }
@@ -540,6 +628,72 @@ function formatByteCount(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
 }
 
+function monotonicNow() {
+  return globalThis.performance?.now
+    ? globalThis.performance.now()
+    : Date.now();
+}
+
+function formatDuration(milliseconds) {
+  const totalMs = Math.max(0, Math.round(milliseconds));
+  if (totalMs < 60000) {
+    return `${(totalMs / 1000).toFixed(2)} s`;
+  }
+
+  const totalSeconds = Math.floor(totalMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = Math.floor((totalMs % 1000) / 100);
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:` +
+           `${String(seconds).padStart(2, '0')}.${tenths}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${tenths}`;
+}
+
+function renderFirmwareDuration(milliseconds) {
+  $firmwareDuration.textContent =
+    milliseconds > 0 ? `总用时 ${formatDuration(milliseconds)}` : '总用时 --';
+}
+
+function tickFirmwareDuration() {
+  if (firmwareStartedAt === 0) return;
+  firmwareLastDurationMs = monotonicNow() - firmwareStartedAt;
+  renderFirmwareDuration(firmwareLastDurationMs);
+}
+
+function startFirmwareDuration() {
+  if (firmwareDurationTimer) clearInterval(firmwareDurationTimer);
+  firmwareLastDurationMs = 0;
+  firmwareStartedAt = monotonicNow();
+  $firmwareDuration.textContent = '总用时 0.00 s';
+  firmwareDurationTimer = setInterval(tickFirmwareDuration, 100);
+}
+
+function stopFirmwareDuration() {
+  if (firmwareDurationTimer) {
+    clearInterval(firmwareDurationTimer);
+    firmwareDurationTimer = 0;
+  }
+  if (firmwareStartedAt !== 0) {
+    firmwareLastDurationMs = monotonicNow() - firmwareStartedAt;
+    firmwareStartedAt = 0;
+  }
+  renderFirmwareDuration(firmwareLastDurationMs);
+  return firmwareLastDurationMs;
+}
+
+function resetFirmwareDuration() {
+  if (firmwareDurationTimer) {
+    clearInterval(firmwareDurationTimer);
+    firmwareDurationTimer = 0;
+  }
+  firmwareStartedAt = 0;
+  firmwareLastDurationMs = 0;
+  renderFirmwareDuration(0);
+}
+
 function setFirmwareState(text, className = '') {
   $firmwareState.textContent = text;
   $firmwareState.className = className;
@@ -576,12 +730,18 @@ class CcFwAbortError extends Error {
 }
 
 class CcUpgradeClient {
-  constructor({ bytes, sessionId, link, epIn, epOut, write, log, onProgress }) {
+  constructor({ bytes, sessionId, link, epIn, epOut, packetSize, write, log, onProgress }) {
     this.bytes = bytes;
     this.sessionId = sessionId || makeCcSessionId();
     this.link = link;
     this.epIn = epIn;
     this.epOut = epOut;
+    this.packetSize = packetSize;
+    this.maxPayloadSize = ccMaxPayloadSize(packetSize);
+    if (!Number.isInteger(this.packetSize) ||
+        this.maxPayloadSize < CC_FW.HEADER_SIZE) {
+      throw new Error(`CC 端点包大小无效：${packetSize}`);
+    }
     this.write = write;
     this.log = log;
     this.onProgress = onProgress;
@@ -592,7 +752,7 @@ class CcUpgradeClient {
 
   receive(data) {
     if (this.cancelled) return;
-    const response = parseCcFwPacket(data);
+    const response = parseCcFwPacket(data, this.packetSize);
     if (!response) {
       this.log(`忽略格式或 CRC 无效的 CC 响应：${toHex(data)}`, 'warn');
       return;
@@ -669,7 +829,7 @@ class CcUpgradeClient {
   }
 
   async request(type, seq, payload, label) {
-    const packet = makeCcFwPacket(type, seq, payload);
+    const packet = makeCcFwPacket(type, seq, payload, this.packetSize);
     let lastError = null;
 
     for (let attempt = 1; attempt <= CC_FW_MAX_RETRIES; attempt++) {
@@ -712,7 +872,8 @@ class CcUpgradeClient {
 
     this.log(
       `开始 CC 会话 0x${this.sessionId.toString(16).padStart(8, '0')}，` +
-      `${this.bytes.length} 字节`
+      `${this.bytes.length} 字节；端点 MPS=${this.packetSize} B，` +
+      `DATA 载荷=${this.maxPayloadSize} B`
     );
     await this.request(CC_FW.START, 0, startPayload, 'START');
 
@@ -720,7 +881,7 @@ class CcUpgradeClient {
     let seq = 0;
     while (offset < this.bytes.length) {
       this.checkCancelled();
-      const end = Math.min(offset + CC_FW.MAX_PAYLOAD_SIZE, this.bytes.length);
+      const end = Math.min(offset + this.maxPayloadSize, this.bytes.length);
       await this.request(
         CC_FW.DATA,
         seq,
@@ -753,7 +914,31 @@ function findCcFirmwareTarget() {
   const epIn = link.alt.endpoints.find(
     ep => ep.direction === 'in' && ep.endpointNumber === 2
   );
-  return epOut && epIn ? { link, epOut, epIn } : null;
+  return epOut && epIn ? validateCcEndpointPair(link, epOut, epIn) : null;
+}
+
+function updateCcPacketInfo() {
+  if (!links.length) {
+    $ccPacketInfo.textContent = '等待读取设备端点';
+    return;
+  }
+  try {
+    const target = findCcFirmwareTarget();
+    if (!target) {
+      $ccPacketInfo.textContent = '未找到 CC IN/OUT 端点';
+      return;
+    }
+    const speed = device?.speed === 'high'
+      ? 'HS'
+      : (device?.speed || 'speed=unknown');
+    const pair = target.epIn.packetSize === target.epOut.packetSize
+      ? `MPS ${target.packetSize} B`
+      : `MPS ${target.epIn.packetSize}/${target.epOut.packetSize} B`;
+    $ccPacketInfo.textContent =
+      `CC FW v1 · ${speed} · ${pair} · payload ${target.maxPayloadSize} B`;
+  } catch (error) {
+    $ccPacketInfo.textContent = `CC 端点不受支持：${error.message || error}`;
+  }
 }
 
 function refreshFirmwareControls() {
@@ -769,12 +954,17 @@ async function writeCcFwFrame(target, data, label) {
   if (!device || !device.opened || !target.link.claimed) {
     throw new Error(`Interface ${target.link.number} 不可用`);
   }
-  if (data.length > CC_FW.MAX_PACKET_SIZE) {
-    throw new Error(`CC 包超过 ${CC_FW.MAX_PACKET_SIZE} 字节`);
+  if (data.length > target.packetSize) {
+    throw new Error(`CC 包超过端点 MPS ${target.packetSize} 字节`);
   }
   const result = await device.transferOut(target.epOut.endpointNumber, data);
   if (result.status !== 'ok') {
     throw new Error(`transferOut status=${result.status}`);
+  }
+  if (result.bytesWritten !== data.length) {
+    throw new Error(
+      `transferOut 只提交了 ${result.bytesWritten}/${data.length} 字节`
+    );
   }
   txBytes += data.length;
   $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
@@ -792,7 +982,7 @@ async function sendCcFwAbort(target) {
   if (!target || !device || !device.opened || !target.link.claimed) return;
   await writeCcFwFrame(
     target,
-    makeCcFwPacket(CC_FW.ABORT, 0),
+    makeCcFwPacket(CC_FW.ABORT, 0, new Uint8Array(), target.packetSize),
     'ABORT'
   ).catch(error => {
     appendLine(`[CC FW] 发送取消帧失败：${error.message || error}`, 'warn');
@@ -812,6 +1002,7 @@ async function startFirmwareUpgrade() {
   }
 
   firmwareStarting = true;
+  startFirmwareDuration();
   let current = null;
   let target = null;
   let handlerKey = null;
@@ -823,6 +1014,11 @@ async function startFirmwareUpgrade() {
     if (!target) {
       throw new Error('没有找到 CC Interface 1 的 IN/OUT 端点');
     }
+    appendLine(
+      `[CC FW] 固件端点：IN=${target.epIn.packetSize} B，` +
+      `OUT=${target.epOut.packetSize} B，USB=${device.speed || 'unknown'}，` +
+      `实际 DATA 载荷=${target.maxPayloadSize} B`
+    );
 
     setFirmwareState(`读取文件 ${file.name} ...`);
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -848,6 +1044,7 @@ async function startFirmwareUpgrade() {
       link: target.link,
       epIn: target.epIn,
       epOut: target.epOut,
+      packetSize: target.packetSize,
       write: (data, label) => writeCcFwFrame(target, data, label),
       log: (text, className = '') => appendLine(`[CC FW] ${text}`, className),
       onProgress: updateFirmwareProgress
@@ -872,21 +1069,41 @@ async function startFirmwareUpgrade() {
     setFirmwareState(`正在通过 CC 升级 ${file.name}（${formatByteCount(bytes.length)}）...`);
     await current.run();
     succeeded = true;
-    setFirmwareState(`设备校验完成：${file.name}`);
+    const durationMs = stopFirmwareDuration();
+    setFirmwareState(
+      `设备校验完成：${file.name}，总用时 ${formatDuration(durationMs)}`
+    );
     appendLine(
-      `[CC FW] ${file.name} 升级完成，共 ${bytes.length} 字节`,
+      `[CC FW] ${file.name} 升级完成，共 ${bytes.length} 字节，` +
+      `总用时 ${formatDuration(durationMs)}（${Math.round(durationMs)} ms）`,
       ''
     );
   } catch (error) {
+    const durationMs = stopFirmwareDuration();
     if ((current && current.cancelled) || error instanceof CcFwAbortError) {
-      setFirmwareState('CC 固件传输已取消。', 'warn');
-      appendLine('[CC FW] 传输已取消', 'warn');
+      setFirmwareState(
+        `CC 固件传输已取消，总用时 ${formatDuration(durationMs)}`,
+        'warn'
+      );
+      appendLine(
+        `[CC FW] 传输已取消，总用时 ${formatDuration(durationMs)}` +
+        `（${Math.round(durationMs)} ms）`,
+        'warn'
+      );
     } else {
       const message = error.message || String(error);
-      setFirmwareState(`升级失败：${message}`, 'err');
-      appendLine(`[CC FW 失败] ${message}`, 'err');
+      setFirmwareState(
+        `升级失败：${message}，总用时 ${formatDuration(durationMs)}`,
+        'err'
+      );
+      appendLine(
+        `[CC FW 失败] ${message}，总用时 ${formatDuration(durationMs)}` +
+        `（${Math.round(durationMs)} ms）`,
+        'err'
+      );
     }
   } finally {
+    stopFirmwareDuration();
     if (current && !succeeded) {
       await sendCcFwAbort(target);
     }
@@ -1061,6 +1278,7 @@ function destroyLinks() {
   }
   links = [];
   renderInterfaces();
+  updateCcPacketInfo();
 }
 
 async function connect() {
@@ -1092,6 +1310,7 @@ async function connect() {
         token
       };
     });
+    updateCcPacketInfo();
     renderInterfaces();
 
     $status.innerHTML = `已连接：<b>${device.productName}</b> · ` +
@@ -1103,7 +1322,7 @@ async function connect() {
     appendLine(`设备已打开：${device.manufacturer || ''} ${device.productName || ''}`);
     for (const link of links) {
       const endpoints = link.alt.endpoints
-        .map(ep => endpoinTag(ep))
+        .map(ep => `${endpoinTag(ep)} ${ep.packetSize}B`)
         .join(', ') || '无端点';
       appendLine(`Interface ${link.number}: class=0x${link.interfaceClass.toString(16).padStart(2, '0')}, ${endpoints}`);
     }
@@ -1217,6 +1436,11 @@ async function sendPacket(link, ep, input) {
     if (result.status !== 'ok') {
       throw new Error(`transferOut status=${result.status}`);
     }
+    if (result.bytesWritten !== data.length) {
+      throw new Error(
+        `transferOut 只提交了 ${result.bytesWritten}/${data.length} 字节`
+      );
+    }
     txBytes += data.length;
     $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
     appendLine(`[TX IF${link.number} ${endpoinTag(ep)} ${data.length}B] ` +
@@ -1252,6 +1476,7 @@ async function disconnect() {
 }
 
 $firmwareFile.addEventListener('change', () => {
+  resetFirmwareDuration();
   const file = $firmwareFile.files[0];
   if (!file) {
     setFirmwareState('请选择升级文件。');

@@ -219,6 +219,7 @@ static uint8_t config_descriptor_buf[255] = {0x00
     // CONFIG_DESC_LIGHTING,
     // CONFIG_DESC_DT
 };
+
 static const uint8_t *config_descriptor_callback(uint8_t speed) {
     (void)speed;
     const uint8_t *selected;
@@ -249,8 +250,8 @@ static const uint8_t *config_descriptor_callback(uint8_t speed) {
     buf[2] = (uint8_t)(len & 0xFF);
     buf[3] = (uint8_t)(len >> 8);
 
-    USB_LOG_RAW("[usb] config desc: %u intf, %u bytes, Diagnostic Tracking bulk mps=%u\r\n",
-                buf[4], (unsigned)len, (unsigned)INTF_DT_EP_SIZE);
+    USB_LOG_RAW("[usb] config desc: %u intf, %u bytes, CC mps=%u, DT mps=%u\r\n",
+                buf[4], (unsigned)len, (unsigned)INTF_CC_EP_SIZE, (unsigned)INTF_DT_EP_SIZE);
 
     return buf;
 }

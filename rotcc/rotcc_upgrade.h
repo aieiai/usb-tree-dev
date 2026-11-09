@@ -7,12 +7,13 @@
 /*
  * Firmware transfer protocol carried by the CC interface only.
  *
- * Every CC packet is at most INTF_CC_EP_SIZE (64) bytes:
+ * Every CC packet is at most INTF_CC_EP_SIZE bytes. The host reads the USB
+ * endpoint MPS and uses it as the upper bound of one protocol transfer:
  *   0..1   magic "RC" (0x52, 0x43)
  *   2      protocol version (1)
  *   3      packet type
  *   4..5   sequence, little endian
- *   6..7   payload length, little endian, max 54
+ *   6..7   payload length, little endian, max INTF_CC_EP_SIZE - 10
  *   8..    payload
  *   end-2  CRC16-CCITT, little endian, over header and payload
  *

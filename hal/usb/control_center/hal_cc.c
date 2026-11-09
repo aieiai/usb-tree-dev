@@ -20,6 +20,10 @@ static volatile bool s_tx_busy;
 static uint8_t s_busid;
 static bool s_initialized;
 
+_Static_assert((INTF_CC_EP_SIZE >= 64U) && (INTF_CC_EP_SIZE <= 1024U) &&
+               ((INTF_CC_EP_SIZE & (INTF_CC_EP_SIZE - 1U)) == 0U),
+               "CC endpoint size must be a power of two from 64 to 1024 bytes");
+
 static void hal_cc_init(uint8_t busid);
 static void hal_cc_configured(uint8_t busid);
 
