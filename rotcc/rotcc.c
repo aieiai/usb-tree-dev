@@ -280,6 +280,21 @@ bool rotcc_is_busy(void)
     return hal_cc_is_busy() || (head != tail);
 }
 
+bool rotcc_wait_idle(uint32_t timeout_ms)
+{
+    ULONG start = tx_time_get();
+    ULONG timeout_ticks =
+        (timeout_ms * TX_TIMER_TICKS_PER_SECOND + 999U) / 1000U;
+
+    while (rotcc_is_busy()) {
+        if ((ULONG)(tx_time_get() - start) >= timeout_ticks) {
+            return false;
+        }
+        tx_thread_sleep(1);
+    }
+    return true;
+}
+
 uint32_t rotcc_dropped(void)
 {
     return cc_msg.rx_dropped;

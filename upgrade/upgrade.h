@@ -34,6 +34,7 @@ enum {
     rot_state_upgrade_invalid_image,
     rot_state_upgrade_record_invalid,
     rot_state_upgrade_verify_fail,
+    rot_state_upgrade_boot_layout_mismatch,
 };
 
 
@@ -84,6 +85,23 @@ typedef struct {
 } upgrade_status_t;
 
 
+typedef struct {
+    uint8_t active_slot;
+    uint8_t remap_enabled;
+    uint8_t boot_ota_enabled;
+    uint8_t boot_layout_matches;
+    uint8_t slot_valid[FDB_APP_IMG_NUM];
+    uint16_t active_version;
+    uint32_t firmware_version;
+    uint16_t active_boot_header_length;
+    uint16_t slot_version[FDB_APP_IMG_NUM];
+    uint16_t slot_boot_header_length[FDB_APP_IMG_NUM];
+    uint16_t otp_sec_img_offset;
+    uint16_t otp_max_img_len;
+    uint16_t configured_slot_size_256k;
+} upgrade_runtime_info_t;
+
+
 _Static_assert(FDB_APP_IMG_NUM == 2, "upgrade module requires two application slots");
 _Static_assert(sizeof(upgrade_image_header_t) == 16U, "wire image header must stay 16 bytes");
 _Static_assert(sizeof(upgrade_record_t) == 40U, "upgrade record layout changed unexpectedly");
@@ -95,6 +113,7 @@ rot_state_t upgrade_init(void);
 rot_state_t upgrade_get_status(upgrade_status_t *status);
 rot_state_t upgrade_get_slot_info(uint8_t slot, uint32_t *image_offset, uint32_t *capacity);
 rot_state_t upgrade_get_active_slot(uint8_t *slot);
+rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
 
 /*
  * Start a transactional upgrade. The target image area is erased here, while

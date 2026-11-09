@@ -7,6 +7,8 @@
 #include "board.h"
 #include "hal_flash.h"
 #include "hpm_ppor_drv.h"
+#include "hpm_romapi.h"
+#include "rot_ver.h"
 #include "rot_utils.h"
 
 
@@ -19,6 +21,9 @@
 #define UPGRADE_RECORD_READ_SIZE    (UPGRADE_RECORD_OFFSET + sizeof(upgrade_record_t))
 #define UPGRADE_IO_CHUNK_SIZE       (256U)
 #define SOC_ROM_FLAG_REG            (*(volatile uint32_t *)(0xF40D4000UL + 8U))
+#define OTP_BOOT_WORD_INDEX         (25U)
+#define OTP_SEC_IMG_OFFSET_MASK     (0xFFFFUL)
+#define OTP_MAX_IMG_LEN_SHIFT       (16U)
 
 _Static_assert((UPGRADE_RECORD_OFFSET + sizeof(upgrade_record_t)) <= FDB_APP_IMGINFO_SIZ,
                "upgrade metadata does not fit in the image info page");
@@ -178,6 +183,38 @@ static rot_state_t _read_boot_header(uint32_t offset, uint32_t image_size,
 
     *sw_version = _le16(&s_io_buf[8]);
     *header_length = length;
+    return rot_state_success;
+}
+
+
+static rot_state_t _read_slot_version(uint8_t slot, uint16_t *sw_version,
+                                      uint16_t *header_length, uint8_t *valid)
+{
+    rot_state_t state;
+    uint16_t length;
+
+    *valid = 0U;
+    *sw_version = 0U;
+    *header_length = 0U;
+
+    state = hal_flash_read(_slot_image_offset(slot) + UPGRADE_BOOT_HEADER_OFFSET,
+                           s_io_buf,
+                           UPGRADE_BOOT_HEADER_MIN_LEN);
+    if (state != rot_state_success) {
+        return state;
+    }
+    if (s_io_buf[0] != UPGRADE_BOOT_HEADER_TAG) {
+        return rot_state_success;
+    }
+
+    length = _le16(&s_io_buf[2]);
+    if ((length < UPGRADE_BOOT_HEADER_MIN_LEN) || (length > 0x2000U)) {
+        return rot_state_success;
+    }
+
+    *sw_version = _le16(&s_io_buf[8]);
+    *header_length = length;
+    *valid = 1U;
     return rot_state_success;
 }
 
@@ -371,6 +408,53 @@ rot_state_t upgrade_get_active_slot(uint8_t *slot)
     return rot_state_success;
 }
 
+
+rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
+{
+    rot_state_t state;
+
+    if (info == NULL) {
+        return rot_state_invalid_argument;
+    }
+    if (!s_initialized) {
+        return rot_state_upgrade_not_init;
+    }
+
+    memset(info, 0, sizeof(*info));
+    info->active_slot = s_active_slot;
+    info->remap_enabled = (s_active_slot == 1U) ? 1U : 0U;
+    info->firmware_version = ROT_VER;
+
+    uint32_t otp_boot = rom_otp_read_from_shadow(OTP_BOOT_WORD_INDEX);
+    info->otp_sec_img_offset =
+        (uint16_t)(otp_boot & OTP_SEC_IMG_OFFSET_MASK);
+    info->otp_max_img_len =
+        (uint16_t)(otp_boot >> OTP_MAX_IMG_LEN_SHIFT);
+    info->configured_slot_size_256k =
+        (uint16_t)(FDB_APP_IMG_SIZ / (256U * 1024U));
+    info->boot_ota_enabled =
+        (info->otp_sec_img_offset != 0U) ? 1U : 0U;
+    info->boot_layout_matches =
+        (info->otp_sec_img_offset == info->configured_slot_size_256k)
+        ? 1U : 0U;
+
+    for (uint8_t slot = 0U; slot < FDB_APP_IMG_NUM; slot++) {
+        state = _read_slot_version(slot,
+                                   &info->slot_version[slot],
+                                   &info->slot_boot_header_length[slot],
+                                   &info->slot_valid[slot]);
+        if (state != rot_state_success) {
+            return state;
+        }
+    }
+
+    info->active_version = info->slot_version[info->active_slot];
+    info->active_boot_header_length =
+        info->slot_boot_header_length[info->active_slot];
+    return rot_state_success;
+}
+
+
 rot_state_t upgrade_begin(const upgrade_image_header_t *header)
 {
     rot_state_t state;
@@ -516,9 +600,7 @@ rot_state_t upgrade_finish(void)
     s_checksum = flash_checksum;
     s_state = UPGRADE_STATE_VERIFIED;
     s_last_result = rot_state_success;
-    printf(TAG "APP%u verified, sw_version=%u, checksum=0x%08x, crc=0x%08x\r\n",
-           (unsigned)(s_target_slot + 1U), (unsigned)sw_version,
-           (unsigned)flash_checksum, (unsigned)flash_crc32);
+    printf(TAG "APP%u verified, sw_version=%u, checksum=0x%08x, crc=0x%08x\r\n", (unsigned)(s_target_slot + 1U), (unsigned)sw_version, (unsigned)flash_checksum, (unsigned)flash_crc32);
     return rot_state_success;
 }
 

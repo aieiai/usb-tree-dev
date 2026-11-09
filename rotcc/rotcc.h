@@ -27,6 +27,7 @@ rot_state_t rotcc_init(void);
  */
 rot_state_t rotcc_send(const void *data, uint32_t len);
 bool rotcc_is_busy(void);
+bool rotcc_wait_idle(uint32_t timeout_ms);
 uint32_t rotcc_dropped(void);
 uint32_t rotcc_tx_dropped(void);
 

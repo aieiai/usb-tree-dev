@@ -155,6 +155,19 @@
     flex-wrap: wrap;
   }
   .upgrade-row input[type="file"] { flex: 1; min-width: 230px; }
+  .device-info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-top: 1px solid #222c35;
+    border-bottom: 1px solid #222c35;
+  }
+  #ccDeviceInfo {
+    flex: 1;
+    color: var(--accent);
+    font-size: 12px;
+  }
   #firmwareState { color: var(--accent); }
   #firmwareState.warn { color: #f6ad55; }
   #firmwareState.err { color: #fc8181; }
@@ -256,6 +269,10 @@
         升级协议只走 CC（OUT 0x02 / IN 0x82），DT 仅用于日志。文件需包含
         16 字节官方升级头；传输包大小从设备端点描述符自动读取。
       </div>
+      <div class="device-info-row">
+        <span id="ccDeviceInfo">当前 APP：-- · SW_VERSION：--</span>
+        <button id="btnCcQuery" class="secondary" disabled>查询设备信息</button>
+      </div>
       <div class="upgrade-body">
         <div class="upgrade-row">
           <input id="firmwareFile" type="file" accept=".bin,.img,.fw,.ota">
@@ -305,8 +322,10 @@ const CC_FW = Object.freeze({
   DATA: 0x11,
   END: 0x12,
   ABORT: 0x13,
+  QUERY: 0x20,
   ACK: 0x80,
-  NAK: 0x81
+  NAK: 0x81,
+  INFO: 0x82
 });
 const CC_FW_RESPONSE_TIMEOUT_MS = 15000;
 const CC_FW_MAX_RETRIES = 10;
@@ -352,6 +371,8 @@ const $firmwareProgress = document.getElementById('firmwareProgress');
 const $firmwareMeta = document.getElementById('firmwareMeta');
 const $firmwareDuration = document.getElementById('firmwareDuration');
 const $ccPacketInfo = document.getElementById('ccPacketInfo');
+const $ccDeviceInfo = document.getElementById('ccDeviceInfo');
+const $btnCcQuery = document.getElementById('btnCcQuery');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 
@@ -366,6 +387,8 @@ let firmwareProgressUpdatedAt = 0;
 let firmwareStartedAt = 0;
 let firmwareDurationTimer = 0;
 let firmwareLastDurationMs = 0;
+let ccQuerySeq = 0;
+let ccQueryPromise = null;
 
 function nowText() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -611,7 +634,8 @@ function ccFwStatusText(status) {
     const upgrade = [
       '', '升级初始化失败', '升级未初始化', '升级忙', '升级槽无效',
       '文件头无效', '镜像过大', '数据不完整', '校验失败',
-      '镜像无效', '升级记录无效', '镜像验证失败'
+      '镜像无效', '升级记录无效', '镜像验证失败',
+      'BootROM 双槽布局不匹配'
     ];
     return upgrade[code] || `升级错误 0x${status.toString(16)}`;
   }
@@ -941,6 +965,143 @@ function updateCcPacketInfo() {
   }
 }
 
+function formatSwVersion(version) {
+  return `${version} (0x${version.toString(16).padStart(4, '0')})`;
+}
+
+function applyCcDeviceInfo(info) {
+  const app1 = info.slotValid[0]
+    ? `APP1 ${formatSwVersion(info.slotVersion[0])}`
+    : 'APP1 无效';
+  const app2 = info.slotValid[1]
+    ? `APP2 ${formatSwVersion(info.slotVersion[1])}`
+    : 'APP2 无效';
+  const bootMode = info.bootOtaEnabled
+    ? (info.bootLayoutMatches
+      ? `BootROM 双槽布局匹配 (${info.otpSecImgOffset} x 256 KiB)`
+      : `BootROM 布局不匹配 (OTP ${info.otpSecImgOffset} x 256 KiB / 配置 ${info.configuredSlotSize256k} x 256 KiB)`)
+    : 'BootROM 双槽未启用 (OTP SEC_IMG_OFFSET=0)';
+  $ccDeviceInfo.textContent =
+    `当前 APP${info.activeSlot} · 固件版本 ${info.firmwareVersion}` +
+    ` · SW_VERSION ${formatSwVersion(info.version)}` +
+    ` · ${app1} · ${app2} · ${bootMode}`;
+  appendLine(
+    `[CC FW INFO] 当前 APP${info.activeSlot}，固件版本=${info.firmwareVersion}，` +
+    `SW_VERSION=` +
+    `${formatSwVersion(info.version)}，${app1}，${app2}，${bootMode}，` +
+    `remap=${info.remapEnabled ? 1 : 0}`
+  );
+}
+
+async function queryCcDeviceInfo({ silent = false } = {}) {
+  if (ccQueryPromise) return ccQueryPromise;
+  if (!device || !device.opened) {
+    throw new Error('请先连接设备');
+  }
+  if (isFirmwareActive()) {
+    throw new Error('固件传输期间不能查询设备信息');
+  }
+
+  ccQueryPromise = (async () => {
+    const target = findCcFirmwareTarget();
+    if (!target) throw new Error('没有找到 CC IN/OUT 端点');
+    if (!target.link.claimed) {
+      const claimed = await claimLink(target.link);
+      if (!claimed) throw new Error('CC 接口占用失败');
+    }
+
+    const key = endpointKey(target.epIn);
+    if (target.link.rxHandlers.has(key)) {
+      throw new Error('CC 接收通道正在被其他功能使用');
+    }
+
+    const seq = (++ccQuerySeq) & 0xffff;
+    const packet = makeCcFwPacket(
+      CC_FW.QUERY, seq, new Uint8Array(), target.packetSize
+    );
+
+    const response = await new Promise(async (resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        if (target.link.rxHandlers.get(key) === handler) {
+          target.link.rxHandlers.delete(key);
+        }
+      };
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const handler = data => {
+        const frame = parseCcFwPacket(data, target.packetSize);
+        if (!frame || frame.seq !== seq) return;
+        if (frame.type === CC_FW.INFO) {
+          if (frame.payload.length < 24 || frame.payload[0] < 3) {
+            finish(new Error('设备信息响应格式错误'));
+            return;
+          }
+          const flags = frame.payload[18];
+          finish(null, {
+            activeSlot: frame.payload[1],
+            slotValid: [frame.payload[2] !== 0, frame.payload[3] !== 0],
+            version: readLe16(frame.payload, 4),
+            headerLength: readLe16(frame.payload, 6),
+            slotVersion: [
+              readLe16(frame.payload, 8),
+              readLe16(frame.payload, 10)
+            ],
+            otpSecImgOffset: readLe16(frame.payload, 12),
+            otpMaxImgLen: readLe16(frame.payload, 14),
+            configuredSlotSize256k: readLe16(frame.payload, 16),
+            remapEnabled: (flags & 0x01) !== 0,
+            bootOtaEnabled: (flags & 0x02) !== 0,
+            bootLayoutMatches: (flags & 0x04) !== 0,
+            firmwareVersion: readLe32(frame.payload, 20)
+          });
+          return;
+        }
+        if (frame.type === CC_FW.NAK) {
+          finish(new Error(`设备拒绝查询：${ccFwStatusText(frame.status)}`));
+        }
+      };
+      const timer = setTimeout(
+        () => finish(new Error('设备信息查询超时')),
+        3000
+      );
+
+      target.link.rxHandlers.set(key, handler);
+      if (!target.link.reads.has(key)) {
+        startRead(target.link, target.epIn);
+      }
+      try {
+        await writeCcFwFrame(target, packet, `QUERY 设备信息 seq=${seq}`);
+      } catch (error) {
+        finish(error);
+      }
+    });
+
+    applyCcDeviceInfo(response);
+    return response;
+  })();
+  refreshControls();
+
+  try {
+    return await ccQueryPromise;
+  } catch (error) {
+    $ccDeviceInfo.textContent = `查询失败：${error.message || error}`;
+    if (!silent) {
+      appendLine(`[CC FW INFO 失败] ${error.message || error}`, 'err');
+    }
+    throw error;
+  } finally {
+    ccQueryPromise = null;
+    refreshControls();
+  }
+}
+
 function refreshFirmwareControls() {
   const active = isFirmwareActive();
   $firmwareFile.disabled = active;
@@ -948,6 +1109,9 @@ function refreshFirmwareControls() {
   $btnFirmwareStart.disabled =
     active || !device || !device.opened || !$firmwareFile.files[0];
   $btnFirmwareCancel.disabled = !firmwareSession;
+  $btnCcQuery.disabled =
+    active || !device || !device.opened ||
+    ccQueryPromise !== null || links.length === 0;
 }
 
 async function writeCcFwFrame(target, data, label) {
@@ -1331,6 +1495,7 @@ async function connect() {
       const auto = Boolean(INTERFACE_HINTS[link.number]?.auto);
       if (auto || $chkAll.checked) await claimLink(link);
     }
+    queryCcDeviceInfo({ silent: true }).catch(() => {});
     refreshControls();
   } catch (error) {
     appendLine(`[连接失败] ${error.message || error}`, 'err');
@@ -1490,6 +1655,9 @@ $firmwareFile.addEventListener('change', () => {
 });
 $btnFirmwareStart.addEventListener('click', startFirmwareUpgrade);
 $btnFirmwareCancel.addEventListener('click', cancelFirmwareUpgrade);
+$btnCcQuery.addEventListener('click', () => {
+  queryCcDeviceInfo().catch(() => {});
+});
 btnConnect.addEventListener('click', connect);
 btnDisconnect.addEventListener('click', disconnect);
 document.getElementById('btnClear').addEventListener('click', () => {

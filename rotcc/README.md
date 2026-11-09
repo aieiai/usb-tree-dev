@@ -10,6 +10,36 @@
 - 支持 64/128/512/1024 等 2 的幂端点；DATA 载荷为 `MPS - 10`
 - DT Interface 3 不参与升级协议，只承载日志
 
+## 模块分层
+
+- `rotcc.c`：CC USB 队列、收发事件和 HAL 适配，不处理升级业务。
+- `rotcc_protocol.c`：协议帧解析、ACK/NAK 编码和 CRC 校验。
+- `rotcc_upgrade.c`：只把合法协议帧转换成升级任务命令。
+- `upgrade_task.c`：独立高优先级 `thread_upgrade`，负责会话状态、Flash
+  擦写、镜像校验和最终响应。
+- `upgrade.c`：纯升级领域操作，不依赖 USB 或 ThreadX。
+
+升级命令体最大约 1 KiB，超过 ThreadX `TX_QUEUE` 单消息 16 个 `ULONG`
+的限制。因此命令体由 `TX_BLOCK_POOL` 管理，`TX_QUEUE` 只传递块指针。
+
+升级操作以重启结束：成功、写入失败、校验失败或主机取消时，先排队发送
+最终 ACK/NAK 并等待发送空闲，然后复位设备。因此不需要挂起或恢复其他任务。
+
+## 设备信息查询
+
+上位机发送 `QUERY(0x20)`，设备由升级任务返回 `INFO(0x82)`：
+
+- 当前 BootROM remap 槽位（APP1 / APP2）
+- 编译时固件版本 `ROT_VER`
+- 当前槽 Boot Header 中的 `SW_VERSION`
+- APP1 / APP2 的 Boot Header 有效性和版本
+- OTP word 25 的 `SEC_IMG_OFFSET` 和 `MAX_IMG_LEN`
+- 当前工程配置的 256 KiB 槽数量，以及是否与 OTP 布局匹配
+
+BootROM OTA 的 START 会检查 OTP 布局。双槽未启用或槽地址与
+`SEC_IMG_OFFSET * 256 KiB` 不一致时，设备返回
+`rot_state_upgrade_boot_layout_mismatch`，不会擦写目标槽。
+
 ## 包格式
 
 所有字段使用小端序：
