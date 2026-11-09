@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 <title> USB Debug Tool </title>
 <style>
   :root {
@@ -267,7 +270,7 @@
       </div>
       <div class="hint">
         升级协议只走 CC（OUT 0x02 / IN 0x82），DT 仅用于日志。文件需包含
-        16 字节官方升级头；传输包大小从设备端点描述符自动读取。
+        16 字节官方升级头；降级兼容由设备固件处理，网页原样发送文件。
       </div>
       <div class="device-info-row">
         <span id="ccDeviceInfo">当前 APP：-- · SW_VERSION：--</span>
@@ -331,6 +334,7 @@ const CC_FW_RESPONSE_TIMEOUT_MS = 15000;
 const CC_FW_MAX_RETRIES = 10;
 const UPGRADE_IMAGE_MAGIC = 0xbeaf5aa5;
 const UPGRADE_DEVICE_ID = 0x6750;
+const CC_FW_UI_VERSION = 5;
 
 const INTERFACE_HINTS = {
   0: {
@@ -959,7 +963,8 @@ function updateCcPacketInfo() {
       ? `MPS ${target.packetSize} B`
       : `MPS ${target.epIn.packetSize}/${target.epOut.packetSize} B`;
     $ccPacketInfo.textContent =
-      `CC FW v1 · ${speed} · ${pair} · payload ${target.maxPayloadSize} B`;
+      `CC FW v1 · UI v${CC_FW_UI_VERSION} · ${speed} · ${pair}` +
+      ` · payload ${target.maxPayloadSize} B`;
   } catch (error) {
     $ccPacketInfo.textContent = `CC 端点不受支持：${error.message || error}`;
   }
@@ -970,12 +975,23 @@ function formatSwVersion(version) {
 }
 
 function applyCcDeviceInfo(info) {
-  const app1 = info.slotValid[0]
-    ? `APP1 ${formatSwVersion(info.slotVersion[0])}`
-    : 'APP1 无效';
-  const app2 = info.slotValid[1]
-    ? `APP2 ${formatSwVersion(info.slotVersion[1])}`
-    : 'APP2 无效';
+  const formatSlot = index => {
+    const name = `APP${index + 1}`;
+    const appVersion = info.extended
+      ? info.slotAppVersion[index]
+      : info.slotVersion[index];
+    const notes = [];
+    if (!info.slotValid[index]) notes.push('槽头无效');
+    if (!info.extended) notes.push('应用记录未提供');
+    else if (!info.slotRecordValid[index]) notes.push('应用记录无效');
+    if (info.slotRetired[index]) notes.push('已退役');
+    const status = notes.length ? `（${notes.join('，')}）` : '';
+    const versionLabel = info.extended ? '应用版本' : '版本';
+    return `${name} ${versionLabel} ${appVersion}，` +
+      `SW_VERSION=${formatSwVersion(info.slotVersion[index])}${status}`;
+  };
+  const app1 = formatSlot(0);
+  const app2 = formatSlot(1);
   const bootMode = info.bootOtaEnabled
     ? (info.bootLayoutMatches
       ? `BootROM 双槽布局匹配 (${info.otpSecImgOffset} x 256 KiB)`
@@ -986,7 +1002,8 @@ function applyCcDeviceInfo(info) {
     ` · SW_VERSION ${formatSwVersion(info.version)}` +
     ` · ${app1} · ${app2} · ${bootMode}`;
   appendLine(
-    `[CC FW INFO] 当前 APP${info.activeSlot}，固件版本=${info.firmwareVersion}，` +
+    `[CC FW INFO] 当前 APP${info.activeSlot}，运行固件版本=${info.firmwareVersion}，` +
+    `查询协议=v${info.protocolVersion}，` +
     `SW_VERSION=` +
     `${formatSwVersion(info.version)}，${app1}，${app2}，${bootMode}，` +
     `remap=${info.remapEnabled ? 1 : 0}`
@@ -1043,16 +1060,33 @@ async function queryCcDeviceInfo({ silent = false } = {}) {
             finish(new Error('设备信息响应格式错误'));
             return;
           }
+          const infoVersion = frame.payload[0];
+          const extended = infoVersion >= 4 && frame.payload.length >= 28;
           const flags = frame.payload[18];
+          const slotVersion = [
+            readLe16(frame.payload, 8),
+            readLe16(frame.payload, 10)
+          ];
           finish(null, {
+            extended,
+            protocolVersion: infoVersion,
             activeSlot: frame.payload[1],
             slotValid: [frame.payload[2] !== 0, frame.payload[3] !== 0],
+            slotRetired: extended
+              ? [(flags & 0x08) !== 0, (flags & 0x10) !== 0]
+              : [false, false],
+            slotRecordValid: extended
+              ? [(flags & 0x20) !== 0, (flags & 0x40) !== 0]
+              : [true, true],
             version: readLe16(frame.payload, 4),
             headerLength: readLe16(frame.payload, 6),
-            slotVersion: [
-              readLe16(frame.payload, 8),
-              readLe16(frame.payload, 10)
-            ],
+            slotVersion,
+            slotAppVersion: extended
+              ? [
+                readLe16(frame.payload, 24),
+                readLe16(frame.payload, 26)
+              ]
+              : slotVersion,
             otpSecImgOffset: readLe16(frame.payload, 12),
             otpMaxImgLen: readLe16(frame.payload, 14),
             configuredSlotSize256k: readLe16(frame.payload, 16),

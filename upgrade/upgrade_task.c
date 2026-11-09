@@ -77,7 +77,7 @@ static void _put_le16(uint8_t *data, uint16_t value)
 static void _handle_query(const rot_upgrade_job_t *job)
 {
     upgrade_runtime_info_t info;
-    uint8_t payload[24] = {0};
+    uint8_t payload[28] = {0};
     rot_state_t state;
 
     state = upgrade_get_runtime_info(&info);
@@ -86,7 +86,7 @@ static void _handle_query(const rot_upgrade_job_t *job)
         return;
     }
 
-    payload[0] = 3U;
+    payload[0] = 4U;
     payload[1] = (uint8_t)(info.active_slot + 1U);
     payload[2] = info.slot_valid[0] ? 1U : 0U;
     payload[3] = info.slot_valid[1] ? 1U : 0U;
@@ -99,11 +99,17 @@ static void _handle_query(const rot_upgrade_job_t *job)
     _put_le16(&payload[16], info.configured_slot_size_256k);
     payload[18] = (uint8_t)((info.remap_enabled ? 0x01U : 0U) |
                             (info.boot_ota_enabled ? 0x02U : 0U) |
-                            (info.boot_layout_matches ? 0x04U : 0U));
+                            (info.boot_layout_matches ? 0x04U : 0U) |
+                            (info.slot_retired[0] ? 0x08U : 0U) |
+                            (info.slot_retired[1] ? 0x10U : 0U) |
+                            (info.slot_record_valid[0] ? 0x20U : 0U) |
+                            (info.slot_record_valid[1] ? 0x40U : 0U));
     payload[20] = (uint8_t)info.firmware_version;
     payload[21] = (uint8_t)(info.firmware_version >> 8);
     payload[22] = (uint8_t)(info.firmware_version >> 16);
     payload[23] = (uint8_t)(info.firmware_version >> 24);
+    _put_le16(&payload[24], info.slot_app_version[0]);
+    _put_le16(&payload[26], info.slot_app_version[1]);
 
     state = rotcc_protocol_send_payload(ROTCC_FW_TYPE_INFO, job->seq,
                                         payload, sizeof(payload));

@@ -17,6 +17,7 @@
 #define UPGRADE_BOOT_HEADER_TAG     (0xbfU)
 #define UPGRADE_BOOT_HEADER_MIN_LEN (16U)
 #define UPGRADE_BOOT_HEADER_OFFSET  (FDB_APP1_BOOT_HEAD_ADDR - FDB_APP1_IMG_ADDR)
+#define UPGRADE_BOOT_SW_VERSION_OFFSET (8U)
 #define UPGRADE_RECORD_OFFSET       (sizeof(upgrade_image_header_t))
 #define UPGRADE_RECORD_READ_SIZE    (UPGRADE_RECORD_OFFSET + sizeof(upgrade_record_t))
 #define UPGRADE_IO_CHUNK_SIZE       (256U)
@@ -43,6 +44,7 @@ static uint32_t s_image_crc32;
 static rot_state_t s_last_result;
 static upgrade_image_header_t s_header;
 static uint8_t s_align_buf[4] __attribute__((aligned(4)));
+static uint8_t s_retire_word[4] __attribute__((aligned(4)));
 static uint8_t s_align_count;
 static uint8_t s_io_buf[UPGRADE_IO_CHUNK_SIZE] __attribute__((aligned(4)));
 static uint8_t s_imginfo_page[FDB_PAGE_SIZ] __attribute__((aligned(4)));
@@ -214,7 +216,54 @@ static rot_state_t _read_slot_version(uint8_t slot, uint16_t *sw_version,
 
     *sw_version = _le16(&s_io_buf[8]);
     *header_length = length;
+    /* A zero version retires a slot; it does not invalidate its boot header. */
     *valid = 1U;
+    return rot_state_success;
+}
+
+static rot_state_t _retire_active_slot(uint16_t target_version)
+{
+    uint32_t boot_header_offset =
+        _slot_image_offset(s_active_slot) + UPGRADE_BOOT_HEADER_OFFSET;
+    uint32_t word_offset = boot_header_offset + UPGRADE_BOOT_SW_VERSION_OFFSET;
+    uint16_t current_version;
+    uint16_t header_length;
+    rot_state_t state;
+    bool equal = false;
+
+    state = hal_flash_read(boot_header_offset, s_io_buf, UPGRADE_BOOT_HEADER_MIN_LEN);
+    if (state != rot_state_success) {
+        return state;
+    }
+    if (s_io_buf[0] != UPGRADE_BOOT_HEADER_TAG) {
+        return rot_state_upgrade_invalid_image;
+    }
+    header_length = _le16(&s_io_buf[2]);
+    if ((header_length < UPGRADE_BOOT_HEADER_MIN_LEN) ||
+        (header_length > 0x2000U)) {
+        return rot_state_upgrade_invalid_image;
+    }
+
+    state = hal_flash_read(word_offset, s_retire_word, sizeof(s_retire_word));
+    if (state != rot_state_success) {
+        return state;
+    }
+    current_version = _le16(s_retire_word);
+    if ((current_version == 0U) || (target_version > current_version)) {
+        return rot_state_success;
+    }
+
+    s_retire_word[0] = 0U;
+    s_retire_word[1] = 0U;
+    state = hal_flash_write(word_offset, s_retire_word, sizeof(s_retire_word));
+    if (state == rot_state_success) {
+        state = hal_flash_compare(word_offset, s_retire_word, sizeof(s_retire_word), &equal);
+    }
+    if ((state != rot_state_success) || !equal) {
+        return (state != rot_state_success) ? state : rot_state_upgrade_verify_fail;
+    }
+
+    printf(TAG "retired APP%u: SW_VERSION %u -> 0\r\n", (unsigned)(s_active_slot + 1U), (unsigned)current_version);
     return rot_state_success;
 }
 
@@ -411,6 +460,7 @@ rot_state_t upgrade_get_active_slot(uint8_t *slot)
 
 rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
 {
+    upgrade_record_t record;
     rot_state_t state;
 
     if (info == NULL) {
@@ -446,8 +496,21 @@ rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
         if (state != rot_state_success) {
             return state;
         }
+
+        state = upgrade_read_record(slot, &record);
+        info->slot_record_valid[slot] =
+            (state == rot_state_success) ? 1U : 0U;
+        info->slot_retired[slot] =
+            (info->slot_valid[slot] && (info->slot_version[slot] == 0U))
+            ? 1U : 0U;
+        if (info->slot_record_valid[slot]) {
+            info->slot_app_version[slot] = record.sw_version;
+        } else {
+            info->slot_app_version[slot] = info->slot_version[slot];
+        }
     }
 
+    info->slot_app_version[info->active_slot] = info->firmware_version;
     info->active_version = info->slot_version[info->active_slot];
     info->active_boot_header_length =
         info->slot_boot_header_length[info->active_slot];
@@ -474,6 +537,9 @@ rot_state_t upgrade_begin(const upgrade_image_header_t *header)
         (header->device != UPGRADE_DEVICE_ID) ||
         (header->len == 0U)) {
         return _fail(rot_state_upgrade_invalid_header);
+    }
+    if (header->len < (UPGRADE_BOOT_HEADER_OFFSET + UPGRADE_BOOT_HEADER_MIN_LEN)) {
+        return _fail(rot_state_upgrade_invalid_image);
     }
     if (header->len > FDB_APP_IMG_SIZ) {
         return _fail(rot_state_upgrade_image_too_large);
@@ -551,6 +617,7 @@ rot_state_t upgrade_finish(void)
     uint32_t flash_crc32 = 0U;
     uint16_t sw_version = 0U;
     uint16_t boot_header_length = 0U;
+    upgrade_record_t target_record;
 
     if (!s_initialized) {
         return rot_state_upgrade_not_init;
@@ -567,7 +634,6 @@ rot_state_t upgrade_finish(void)
     if (s_received_size != s_image_size) {
         return rot_state_upgrade_incomplete;
     }
-
     state = _flush_alignment(0xffU);
     if (state != rot_state_success) {
         return _fail(state);
@@ -590,6 +656,9 @@ rot_state_t upgrade_finish(void)
     if (state != rot_state_success) {
         return _fail(state);
     }
+    if (sw_version == 0U) {
+        return _fail(rot_state_upgrade_invalid_image);
+    }
 
     state = _write_record(s_target_slot, s_image_size, flash_checksum, flash_crc32,
                           sw_version, boot_header_length, &s_header);
@@ -597,10 +666,25 @@ rot_state_t upgrade_finish(void)
         return _fail(state);
     }
 
+    /*
+     * The running slot is retired only after the complete target image and
+     * its committed record have been read back and validated as a boot slot.
+     */
+    state = upgrade_validate_slot(s_target_slot, &target_record);
+    if (state != rot_state_success) {
+        return _fail(state);
+    }
+    state = _retire_active_slot(sw_version);
+    if (state != rot_state_success) {
+        return _fail(state);
+    }
+
     s_checksum = flash_checksum;
     s_state = UPGRADE_STATE_VERIFIED;
     s_last_result = rot_state_success;
-    printf(TAG "APP%u verified, sw_version=%u, checksum=0x%08x, crc=0x%08x\r\n", (unsigned)(s_target_slot + 1U), (unsigned)sw_version, (unsigned)flash_checksum, (unsigned)flash_crc32);
+    printf(TAG "APP%u verified, sw_version=%u, checksum=0x%08x, crc=0x%08x\r\n",
+           (unsigned)(s_target_slot + 1U), (unsigned)sw_version, 
+           (unsigned)flash_checksum, (unsigned)flash_crc32);
     return rot_state_success;
 }
 

@@ -91,10 +91,13 @@ typedef struct {
     uint8_t boot_ota_enabled;
     uint8_t boot_layout_matches;
     uint8_t slot_valid[FDB_APP_IMG_NUM];
+    uint8_t slot_record_valid[FDB_APP_IMG_NUM];
+    uint8_t slot_retired[FDB_APP_IMG_NUM];
     uint16_t active_version;
     uint32_t firmware_version;
     uint16_t active_boot_header_length;
     uint16_t slot_version[FDB_APP_IMG_NUM];
+    uint16_t slot_app_version[FDB_APP_IMG_NUM];
     uint16_t slot_boot_header_length[FDB_APP_IMG_NUM];
     uint16_t otp_sec_img_offset;
     uint16_t otp_max_img_len;
@@ -117,7 +120,7 @@ rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
 
 /*
  * Start a transactional upgrade. The target image area is erased here, while
- * the current slot remains untouched.
+ * the current slot remains untouched until the target has been fully verified.
  */
 rot_state_t upgrade_begin(const upgrade_image_header_t *header);
 
