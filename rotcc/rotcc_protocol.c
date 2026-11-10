@@ -41,17 +41,14 @@ static uint16_t _crc16_update(uint16_t crc, const uint8_t *data, uint32_t len)
     for (uint32_t i = 0U; i < len; i++) {
         crc ^= (uint16_t)data[i] << 8;
         for (uint32_t bit = 0U; bit < 8U; bit++) {
-            crc = (crc & 0x8000U)
-                ? (uint16_t)((crc << 1) ^ 0x1021U)
-                : (uint16_t)(crc << 1);
+            crc = (crc & 0x8000U) ? (uint16_t)((crc << 1) ^ 0x1021U) : (uint16_t)(crc << 1);
         }
     }
     return crc;
 }
 
 
-rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len,
-                                 rotcc_protocol_frame_t *frame)
+rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len, rotcc_protocol_frame_t *frame)
 {
     uint16_t payload_len;
     uint16_t expected_crc;
@@ -84,8 +81,7 @@ rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len,
     }
 
     expected_crc = _get_le16(&data[packet_len - ROTCC_FW_CRC_SIZE]);
-    actual_crc = _crc16_update(0U, data,
-                               ROTCC_FW_HEADER_SIZE + payload_len);
+    actual_crc = _crc16_update(0U, data, ROTCC_FW_HEADER_SIZE + payload_len);
     if (expected_crc != actual_crc) {
         return rot_state_invalid_argument;
     }
@@ -96,9 +92,7 @@ rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len,
 }
 
 
-rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq,
-                                        const uint8_t *payload,
-                                        uint16_t payload_len)
+rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq, const uint8_t *payload, uint16_t payload_len)
 {
     uint8_t packet[ROTCC_FW_MAX_PACKET_SIZE];
     uint16_t packet_len;
@@ -122,15 +116,13 @@ rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq,
         }
     }
 
-    crc = _crc16_update(0U, packet,
-                        ROTCC_FW_HEADER_SIZE + payload_len);
+    crc = _crc16_update(0U, packet, ROTCC_FW_HEADER_SIZE + payload_len);
     _put_le16(&packet[packet_len - ROTCC_FW_CRC_SIZE], crc);
     return rotcc_send(packet, packet_len);
 }
 
 
-rot_state_t rotcc_protocol_send_status(uint8_t type, uint16_t seq,
-                                       rot_state_t status)
+rot_state_t rotcc_protocol_send_status(uint8_t type, uint16_t seq, rot_state_t status)
 {
     uint8_t payload[sizeof(uint32_t)];
 

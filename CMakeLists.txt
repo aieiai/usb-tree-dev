@@ -12,10 +12,14 @@ set(CONFIG_USB_DEVICE 1)
 set(CONFIG_USB_DEVICE_HID 1)
 set(CONFIG_USB_DEVICE_GAMEPAD 1)
 set(CONFIG_ECLIPSE_THREADX 1)
-# set(CONFIG_SEGGER_RTT_PRINTF 1)
-
 #set(CONFIG_ECLIPSE_THREADX_TIMER_RESOURCE_MTIMER 1) to use mchtmr as system's tick source
 #set(CONFIG_ECLIPSE_THREADX_TIMER_RESOURCE_MTIMER 1)
+set(CONFIG_SEGGER_RTT 1)
+# set(CONFIG_SEGGER_RTT_PRINTF 1)
+
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/git.cmake)
+
 # 由本地化脚本注入：APP_NAME 必须在 find_package 之前定义
 set(APP_NAME ray)
 # 引入工程内本地化 SDK、编译工具链和构建工具路径
@@ -24,6 +28,11 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)
 else()
     message(FATAL_ERROR "未找到 localized_sdk.cmake，请先运行 python script/setup.py 补齐工程环境")
 endif()
+
+# get git message
+get_git_branch(GIT_BRANCH)
+get_git_hash(GIT_HASH SHORT8)
+get_git_author(GIT_AUTHOR)
 
 
 find_package(hpm-sdk REQUIRED HINTS $ENV{HPM_SDK_BASE})
@@ -43,6 +52,12 @@ sdk_app_src(src/main.c)
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)
 sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
+
+# Automatic injection
+if(GIT_HASH)
+    sdk_compile_definitions(-DROT_GIT_HASH=0x${GIT_HASH})
+    sdk_compile_definitions("-DROT_GIT_HASH_STR=\"${GIT_HASH}\"")
+endif()
 
 if(TARGET app)
     target_compile_options(app PRIVATE "-Wextra") # "-Wignored-qualifiers"

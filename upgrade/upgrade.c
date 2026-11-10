@@ -23,8 +23,11 @@
 #define UPGRADE_IO_CHUNK_SIZE       (256U)
 #define SOC_ROM_FLAG_REG            (*(volatile uint32_t *)(0xF40D4000UL + 8U))
 #define OTP_BOOT_WORD_INDEX         (25U)
+#define OTP_SECURITY_WORD_INDEX     (24U)
 #define OTP_SEC_IMG_OFFSET_MASK     (0xFFFFUL)
 #define OTP_MAX_IMG_LEN_SHIFT       (16U)
+#define OTP_EXIP_ENABLE_SHIFT       (12U)
+#define OTP_EXIP_ENABLE_MASK        (1UL << OTP_EXIP_ENABLE_SHIFT)
 
 _Static_assert((UPGRADE_RECORD_OFFSET + sizeof(upgrade_record_t)) <= FDB_APP_IMGINFO_SIZ,
                "upgrade metadata does not fit in the image info page");
@@ -34,6 +37,7 @@ static bool s_initialized;
 static upgrade_state_t s_state;
 static uint8_t s_active_slot;
 static uint8_t s_target_slot;
+static bool s_exip_required;
 static uint32_t s_image_offset;
 static uint32_t s_image_size;
 static uint32_t s_received_size;
@@ -47,7 +51,7 @@ static uint8_t s_align_buf[4] __attribute__((aligned(4)));
 static uint8_t s_retire_word[4] __attribute__((aligned(4)));
 static uint8_t s_align_count;
 static uint8_t s_io_buf[UPGRADE_IO_CHUNK_SIZE] __attribute__((aligned(4)));
-static uint8_t s_imginfo_page[FDB_PAGE_SIZ] __attribute__((aligned(4)));
+static uint8_t s_imginfo_page[FDB_SECTOR_SIZ] __attribute__((aligned(4)));
 
 
 static uint16_t _le16(const uint8_t *data)
@@ -95,6 +99,19 @@ static uint32_t _slot_image_offset(uint8_t slot)
 static uint32_t _slot_imginfo_offset(uint8_t slot)
 {
     return ((slot == 0U) ? FDB_APP1_IMGINFO_ADDR : FDB_APP2_IMGINFO_ADDR) - FDB_BASE_ADDR;
+}
+
+static bool _image_requires_exip(const uint8_t *data, uint32_t len)
+{
+    if (!s_exip_required || (len < 16U)) {
+        return false;
+    }
+    for (uint32_t i = 0U; i < 16U; i++) {
+        if (data[i] != 0xffU) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static rot_state_t _fail(rot_state_t state)
@@ -384,9 +401,9 @@ rot_state_t upgrade_init(void)
     if (state != rot_state_success) {
         return state;
     }
-    if (hal_flash_get_sector_size() != FDB_PAGE_SIZ) {
+    if (hal_flash_get_sector_size() != FDB_SECTOR_SIZ) {
         printf(TAG "sector size %u does not match FDB map page size %u\r\n",
-               (unsigned)hal_flash_get_sector_size(), (unsigned)FDB_PAGE_SIZ);
+               (unsigned)hal_flash_get_sector_size(), (unsigned)FDB_SECTOR_SIZ);
         return rot_state_upgrade_init_fail;
     }
 
@@ -400,12 +417,13 @@ rot_state_t upgrade_init(void)
 
     s_active_slot = active_slot;
     s_target_slot = (uint8_t)(active_slot ^ 1U);
+    s_exip_required = (rom_otp_read_from_shadow(OTP_SECURITY_WORD_INDEX) & OTP_EXIP_ENABLE_MASK) != 0U;
     s_state = UPGRADE_STATE_IDLE;
     s_last_result = rot_state_success;
     s_initialized = true;
 
-    printf(TAG "active APP%u, next target APP%u\r\n",
-           (unsigned)(s_active_slot + 1U), (unsigned)(s_target_slot + 1U));
+    printf(TAG "active APP%u, next target APP%u, exip=%u\r\n",
+           (unsigned)(s_active_slot + 1U), (unsigned)(s_target_slot + 1U), s_exip_required ? 1U : 0U);
     return rot_state_success;
 }
 
@@ -476,6 +494,7 @@ rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
     info->firmware_version = ROT_VER;
 
     uint32_t otp_boot = rom_otp_read_from_shadow(OTP_BOOT_WORD_INDEX);
+    uint32_t otp_security = rom_otp_read_from_shadow(OTP_SECURITY_WORD_INDEX);
     info->otp_sec_img_offset =
         (uint16_t)(otp_boot & OTP_SEC_IMG_OFFSET_MASK);
     info->otp_max_img_len =
@@ -487,6 +506,7 @@ rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
     info->boot_layout_matches =
         (info->otp_sec_img_offset == info->configured_slot_size_256k)
         ? 1U : 0U;
+    info->otp_exip_enabled = ((otp_security & OTP_EXIP_ENABLE_MASK) != 0U) ? 1U : 0U;
 
     for (uint8_t slot = 0U; slot < FDB_APP_IMG_NUM; slot++) {
         state = _read_slot_version(slot,
@@ -546,7 +566,7 @@ rot_state_t upgrade_begin(const upgrade_image_header_t *header)
     }
 
     target_slot = (uint8_t)(s_active_slot ^ 1U);
-    erase_size = ROT_ALIGN_UP(header->len, FDB_PAGE_SIZ);
+    erase_size = ROT_ALIGN_UP(header->len, FDB_SECTOR_SIZ);
     if (erase_size > FDB_APP_IMG_SIZ) {
         erase_size = FDB_APP_IMG_SIZ;
     }
@@ -723,6 +743,11 @@ rot_state_t upgrade_feed(const void *data, uint32_t len, bool *image_complete)
         header.device = _le32(&cursor[4]);
         header.len = _le32(&cursor[8]);
         header.checksum = _le32(&cursor[12]);
+
+        if (_image_requires_exip(cursor + sizeof(header), len - sizeof(header))) {
+            printf(TAG "EXIP boot is fused; plain OTA image rejected\r\n");
+            return _fail(rot_state_upgrade_exip_image_required);
+        }
 
         state = upgrade_begin(&header);
         if (state != rot_state_success) {

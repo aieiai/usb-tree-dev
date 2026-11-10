@@ -5,6 +5,9 @@
 #include "rot_state.h"
 
 
+#define FDB_SOBI_MAGIC  (0x534F4249U) /* "SOBI" */
+#define FDB_SOBI_VER    (2U)
+
 enum {
     rot_state_fdb_init_fail = ROT_STATE_MAKE(rot_state_group_fdb, 1),
     rot_state_fdb_not_init,
@@ -47,6 +50,21 @@ typedef struct {
         uint8_t cc_popup : 1;
     } en;
 
+    
+    // product information
+    struct __attribute__((packed)) {
+        uint16_t vid;    // Vendor ID
+        uint16_t pid;    // Product ID
+        uint64_t fv;     // Firmware Version
+        uint64_t hv;     // Hardware Version
+        uint8_t  cd[16]; // Compile Date
+        uint8_t  mn[16]; // Manufacturer Name
+        uint8_t  pn[16]; // Production Name
+        uint8_t  sn[16]; // Serial Number
+        uint8_t  rsv[14];
+        uint8_t test_cnt;
+        uint8_t crc8;
+    } pi;
 
 } __attribute__((aligned(4))) sobi_t;
 
@@ -56,6 +74,8 @@ extern sobi_t g_sobi;
 rot_state_t fdb_init(void);
 rot_state_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size);
 rot_state_t fdb_update(fdb_item_ty type, fdb_save_ty save_type);
+
+rot_state_t fdb_sobi_init(void);
 
 
 #endif

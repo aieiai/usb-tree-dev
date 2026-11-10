@@ -35,6 +35,7 @@ enum {
     rot_state_upgrade_record_invalid,
     rot_state_upgrade_verify_fail,
     rot_state_upgrade_boot_layout_mismatch,
+    rot_state_upgrade_exip_image_required,
 };
 
 
@@ -90,6 +91,7 @@ typedef struct {
     uint8_t remap_enabled;
     uint8_t boot_ota_enabled;
     uint8_t boot_layout_matches;
+    uint8_t otp_exip_enabled;
     uint8_t slot_valid[FDB_APP_IMG_NUM];
     uint8_t slot_record_valid[FDB_APP_IMG_NUM];
     uint8_t slot_retired[FDB_APP_IMG_NUM];

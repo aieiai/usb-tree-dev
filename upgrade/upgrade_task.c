@@ -14,6 +14,7 @@
 
 
 #define TAG "upgrade_task: "
+#define UPGRADE_TASK_QUEUE_DEPTH (2U)
 #define UPGRADE_START_PAYLOAD_SIZE (8U)
 #define UPGRADE_REBOOT_FLUSH_TIMEOUT_MS (2000U)
 #define UPGRADE_JOB_BLOCK_SIZE \
@@ -103,7 +104,8 @@ static void _handle_query(const rot_upgrade_job_t *job)
                             (info.slot_retired[0] ? 0x08U : 0U) |
                             (info.slot_retired[1] ? 0x10U : 0U) |
                             (info.slot_record_valid[0] ? 0x20U : 0U) |
-                            (info.slot_record_valid[1] ? 0x40U : 0U));
+                            (info.slot_record_valid[1] ? 0x40U : 0U) |
+                            (info.otp_exip_enabled ? 0x80U : 0U));
     payload[20] = (uint8_t)info.firmware_version;
     payload[21] = (uint8_t)(info.firmware_version >> 8);
     payload[22] = (uint8_t)(info.firmware_version >> 16);
@@ -249,7 +251,7 @@ static void _handle_data(const rot_upgrade_job_t *job)
 
         hal_dt_printf(TAG "data seq=%u failed: 0x%08x\r\n",
                       (unsigned)job->seq, (unsigned)state);
-        if (fatal) {
+        if (fatal && (state != rot_state_upgrade_exip_image_required)) {
             _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, state,
                                    "image write failed");
             return;
@@ -358,11 +360,7 @@ rot_state_t upgrade_task_init(void)
         return rot_state_success;
     }
 
-    ret = tx_queue_create(&s_upgrade_queue,
-                          "upgrade_queue",
-                          1U,
-                          s_upgrade_queue_storage,
-                          sizeof(s_upgrade_queue_storage));
+    ret = tx_queue_create(&s_upgrade_queue, "upgrade_queue", 1U, s_upgrade_queue_storage, sizeof(s_upgrade_queue_storage));
     if (ret != TX_SUCCESS) {
         printf(TAG "queue create failed, ret=%u\r\n", (unsigned)ret);
         s_init_error = ret;
@@ -370,11 +368,7 @@ rot_state_t upgrade_task_init(void)
         return rot_state_upgrade_init_fail;
     }
 
-    ret = tx_block_pool_create(&s_upgrade_job_pool,
-                               "upgrade_jobs",
-                               UPGRADE_JOB_BLOCK_SIZE,
-                               s_upgrade_job_pool_storage,
-                               sizeof(s_upgrade_job_pool_storage));
+    ret = tx_block_pool_create(&s_upgrade_job_pool, "upgrade_jobs", UPGRADE_JOB_BLOCK_SIZE, s_upgrade_job_pool_storage, sizeof(s_upgrade_job_pool_storage));
     if (ret != TX_SUCCESS) {
         (void)tx_queue_delete(&s_upgrade_queue);
         printf(TAG "job pool create failed, ret=%u\r\n", (unsigned)ret);

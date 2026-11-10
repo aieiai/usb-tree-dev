@@ -31,9 +31,7 @@ static rot_state_t _submit(rot_upgrade_job_t *job, uint16_t seq)
     rot_state_t state = upgrade_task_submit(job);
 
     if (state != rot_state_success) {
-        hal_dt_printf(TAG "queue command failed: 0x%08x, init_error=%u\r\n",
-                      (unsigned)state,
-                      (unsigned)upgrade_task_get_init_error());
+        hal_dt_printf(TAG "queue command failed: 0x%08x, init_error=%u\r\n", (unsigned)state, (unsigned)upgrade_task_get_init_error());
         (void)_nak(seq, state);
     }
     return state;

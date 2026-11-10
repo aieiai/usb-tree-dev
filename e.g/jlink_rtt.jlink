@@ -1,0 +1,6 @@
+si JTAG
+speed 4000
+device HPM5361xCBx
+JTAGConf -1, -1
+connect
+exec SetRTTSearchRanges 0x00080000 0x00020000

@@ -4,6 +4,7 @@
 
 
 #include "fdb.h"
+#include "rot_ver.h"
 
 #include "tx_api.h"
 #include "tx_config.h"
@@ -18,9 +19,26 @@
 static TX_THREAD thread_cst;
 static uint8_t thread_cst_stack[CST_TASK_STACK] __attribute__((aligned(8U)));
 
+static void cst_sobi_log(const char *tag)
+{
+    uint64_t fv = g_sobi.pi.fv;
+
+    hal_dt_printf("%s: name=%s, vid=0x%04x, pid=0x%04x, cnt=%u, fw=v%u.%u.%u-%s+%08x\r\n",
+                  tag, (const char *)g_sobi.name, (unsigned)g_sobi.pi.vid, (unsigned)g_sobi.pi.pid,
+                  (unsigned)g_sobi.pi.test_cnt,
+                  ROT_VER_GET_MAJOR(fv), ROT_VER_GET_MINOR(fv), ROT_VER_GET_PATCH(fv),
+                  rot_ver_stage_str(ROT_VER_GET_STAGE(fv)), (unsigned)ROT_VER_GET_HASH(fv));
+}
+
 static void cst_task(ULONG id)
 {
     (void)id;
+
+    if (fdb_sobi_init() != rot_state_success) {
+        hal_dt_printf("[sobi] init failed\r\n");
+    } else {
+        cst_sobi_log("[sobi] load");
+    }
 
     uint32_t cnt = 0;
 
@@ -51,20 +69,27 @@ static void cst_task(ULONG id)
                 // fdb_data.bif.gp_mode++;
                 // fdb_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
                 
+                g_sobi.pi.test_cnt++;
                 if (rot_state_success == fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW)) {
-                    tx_thread_sleep(100);
-                    disable_global_irq(CSR_MSTATUS_MIE_MASK);
-                    (*(volatile uint32_t *)(0xF40D4000UL + 8U)) = 0; // warning: this is rom reset flag,
-                    ppor_sw_reset(HPM_PPOR, 1000);
-                    while (1)
-                    {
-                    }
+                    cst_sobi_log("[sobi] saved");
+                    // tx_thread_sleep(100);
+                    // disable_global_irq(CSR_MSTATUS_MIE_MASK);
+                    // (*(volatile uint32_t *)(0xF40D4000UL + 8U)) = 0; // warning: this is rom reset flag,
+                    // ppor_sw_reset(HPM_PPOR, 1000);
+                    // while (1)
+                    // {
+                    // }
+                }
+                else {
+                    hal_dt_printf("[sobi] save failed\r\n");
                 }
 
                 hal_dt_printf("btn down (level=%u, gp_mode=%u)\r\n", (unsigned)btn_st, (unsigned)g_gamepad_mode);
             } 
             else {
                 hal_dt_printf("btn up (level=%u)\r\n", (unsigned)btn_st);
+                cst_sobi_log("[sobi] up");
+                
             }
         }
 

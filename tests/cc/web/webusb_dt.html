@@ -1006,7 +1006,7 @@ function applyCcDeviceInfo(info) {
     `查询协议=v${info.protocolVersion}，` +
     `SW_VERSION=` +
     `${formatSwVersion(info.version)}，${app1}，${app2}，${bootMode}，` +
-    `remap=${info.remapEnabled ? 1 : 0}`
+    `remap=${info.remapEnabled ? 1 : 0} exip=${info.exipEnabled ? 1 : 0}`
   );
 }
 
@@ -1093,6 +1093,7 @@ async function queryCcDeviceInfo({ silent = false } = {}) {
             remapEnabled: (flags & 0x01) !== 0,
             bootOtaEnabled: (flags & 0x02) !== 0,
             bootLayoutMatches: (flags & 0x04) !== 0,
+            exipEnabled: (flags & 0x80) !== 0,
             firmwareVersion: readLe32(frame.payload, 20)
           });
           return;

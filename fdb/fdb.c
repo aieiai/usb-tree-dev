@@ -7,6 +7,7 @@
 
 #include "fdb_map.h"
 #include "hal_flash.h"
+#include "rot_ver.h"
 
 #include "tx_api.h"
 #include "tx_config.h"
@@ -173,7 +174,7 @@ static rot_state_t _item_write(fdb_item_ty type)
         return rot_state_invalid_argument;
     }
 
-    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FDB_PAGE_SIZ);
+    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FDB_SECTOR_SIZ);
     result = hal_flash_compare(msg->offset, item->buf, item->buf_size, &equal);
     if (result != rot_state_success) {
         return result;
@@ -393,3 +394,57 @@ rot_state_t fdb_init(void)
     }
     return rot_state_success;
 }
+
+static void _sobi_set_str(uint8_t *dst, uint32_t size, const char *src)
+{
+    uint32_t i = 0U;
+
+    while (((i + 1U) < size) && (src[i] != '\0')) {
+        dst[i] = (uint8_t)src[i];
+        i++;
+    }
+    dst[i] = 0U;
+}
+
+static void _sobi_load_defaults(void)
+{
+    memset(&g_sobi, 0, sizeof(g_sobi));
+
+    g_sobi.magic   = FDB_SOBI_MAGIC;
+    g_sobi.version = FDB_SOBI_VER;
+    _sobi_set_str(g_sobi.name, sizeof(g_sobi.name), "Trace40");
+
+    g_sobi.gp_mode = 0U;
+    g_sobi.sys_mode = 0U;
+    g_sobi.en.cc_popup = 0U;
+
+    g_sobi.pi.vid = 0x7989U;
+    g_sobi.pi.pid = 0x0001U;
+    g_sobi.pi.fv  = (uint64_t)FW_VER;
+    g_sobi.pi.hv  = ROT_VER_MAKE(0U, 1U, 0U, ROT_VER_STAGE_RELEASE, 0U);
+    _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), __DATE__);
+    _sobi_set_str(g_sobi.pi.mn, sizeof(g_sobi.pi.mn), "Ray");
+    _sobi_set_str(g_sobi.pi.pn, sizeof(g_sobi.pi.pn), "Trace40");
+    _sobi_set_str(g_sobi.pi.sn, sizeof(g_sobi.pi.sn), "SN000000000001");
+    g_sobi.pi.test_cnt = 0U;
+}
+
+rot_state_t fdb_sobi_init(void)
+{
+    rot_state_t result = fdb_register(FDB_ITEM_TY_SOBI, &g_sobi, (uint32_t)sizeof(g_sobi));
+    if (result != rot_state_success) {
+        printf(TAG "sobi register failed: 0x%08x\r\n", (unsigned)result);
+        return result;
+    }
+
+    if ((g_sobi.magic != FDB_SOBI_MAGIC) || (g_sobi.version != FDB_SOBI_VER)) {
+        printf(TAG "sobi blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_sobi.magic, (unsigned)g_sobi.version);
+        _sobi_load_defaults();
+        result = fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW);
+        if (result != rot_state_success) {
+            printf(TAG "sobi default save failed: 0x%08x\r\n", (unsigned)result);
+        }
+    }
+    return result;
+}
+
