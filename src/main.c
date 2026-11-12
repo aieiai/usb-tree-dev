@@ -39,25 +39,25 @@ extern void gamepad_test(uint8_t busid);
 void tx_application_define(void *first_unused_memory)
 {
     (void)first_unused_memory;
-    rot_state_t state;
+    rotsta_t state;
 
     state = fdb_init();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         printf(TAG "fdb init failed: 0x%08x\r\n", (unsigned)state);
     }
 
     state = upgrade_init();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         printf(TAG "upgrade init failed: 0x%08x\r\n", (unsigned)state);
     }
 
     state = rotcc_init();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
     }
 
     state = upgrade_task_init();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         printf(TAG "upgrade task init failed: 0x%08x\r\n", (unsigned)state);
     }
 

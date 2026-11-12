@@ -3,19 +3,19 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "rot_state.h"
+#include "rotsta.h"
 
 
 enum {
-    rot_state_hal_cc_fail = ROT_STATE_MAKE(rot_state_group_hal_cc, 1),
-    rot_state_hal_cc_arg,
-    rot_state_hal_cc_start,
-    rot_state_hal_cc_busy,
-    rot_state_hal_cc_not_ready,
+    rotsta_hal_cc_fail = ROTSTA_MAKE(rotsta_group_hal_cc, 1),
+    rotsta_hal_cc_arg,
+    rotsta_hal_cc_start,
+    rotsta_hal_cc_busy,
+    rotsta_hal_cc_not_ready,
 };
 
 typedef void (*hal_cc_rx_callback_t)(const uint8_t *data, uint16_t len, void *ctx);
-typedef void (*hal_cc_tx_complete_callback_t)(rot_state_t state, uint16_t len, void *ctx);
+typedef void (*hal_cc_tx_complete_callback_t)(rotsta_t state, uint16_t len, void *ctx);
 typedef void (*hal_cc_configured_callback_t)(void *ctx);
 
 typedef struct {

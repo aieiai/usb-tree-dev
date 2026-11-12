@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "fdb_map.h"
-#include "rot_state.h"
+#include "rotsta.h"
 
 
 /* Wire format used by the official HPMicro OTA example. */
@@ -23,19 +23,19 @@
 
 
 enum {
-    rot_state_upgrade_init_fail = ROT_STATE_MAKE(rot_state_group_upgrade, 1),
-    rot_state_upgrade_not_init,
-    rot_state_upgrade_busy,
-    rot_state_upgrade_invalid_slot,
-    rot_state_upgrade_invalid_header,
-    rot_state_upgrade_image_too_large,
-    rot_state_upgrade_incomplete,
-    rot_state_upgrade_checksum_mismatch,
-    rot_state_upgrade_invalid_image,
-    rot_state_upgrade_record_invalid,
-    rot_state_upgrade_verify_fail,
-    rot_state_upgrade_boot_layout_mismatch,
-    rot_state_upgrade_exip_image_required,
+    rotsta_upgrade_init_fail = ROTSTA_MAKE(rotsta_group_upgrade, 1),
+    rotsta_upgrade_not_init,
+    rotsta_upgrade_busy,
+    rotsta_upgrade_invalid_slot,
+    rotsta_upgrade_invalid_header,
+    rotsta_upgrade_image_too_large,
+    rotsta_upgrade_incomplete,
+    rotsta_upgrade_checksum_mismatch,
+    rotsta_upgrade_invalid_image,
+    rotsta_upgrade_record_invalid,
+    rotsta_upgrade_verify_fail,
+    rotsta_upgrade_boot_layout_mismatch,
+    rotsta_upgrade_exip_image_required,
 };
 
 
@@ -82,7 +82,7 @@ typedef struct {
     uint32_t received_size;
     uint32_t expected_checksum;
     uint32_t checksum;
-    rot_state_t last_result;
+    rotsta_t last_result;
 } upgrade_status_t;
 
 
@@ -113,44 +113,44 @@ _Static_assert(sizeof(upgrade_record_t) == 40U, "upgrade record layout changed u
 
 
 /* Initializes the shared flash HAL and detects the currently booted slot. */
-rot_state_t upgrade_init(void);
+rotsta_t upgrade_init(void);
 
-rot_state_t upgrade_get_status(upgrade_status_t *status);
-rot_state_t upgrade_get_slot_info(uint8_t slot, uint32_t *image_offset, uint32_t *capacity);
-rot_state_t upgrade_get_active_slot(uint8_t *slot);
-rot_state_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
+rotsta_t upgrade_get_status(upgrade_status_t *status);
+rotsta_t upgrade_get_slot_info(uint8_t slot, uint32_t *image_offset, uint32_t *capacity);
+rotsta_t upgrade_get_active_slot(uint8_t *slot);
+rotsta_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
 
 /*
  * Start a transactional upgrade. The target image area is erased here, while
  * the current slot remains untouched until the target has been fully verified.
  */
-rot_state_t upgrade_begin(const upgrade_image_header_t *header);
+rotsta_t upgrade_begin(const upgrade_image_header_t *header);
 
 /* Strict write interface: len may be unaligned, but must not exceed the image. */
-rot_state_t upgrade_write(const void *data, uint32_t len);
+rotsta_t upgrade_write(const void *data, uint32_t len);
 
 /*
  * Finish the image, verify its byte-sum and boot header, then publish a CRC
  * protected record in the target slot's verify page.
  */
-rot_state_t upgrade_finish(void);
+rotsta_t upgrade_finish(void);
 
 /*
  * Compatibility stream interface for the official packet format:
  * the first call must contain the complete 16-byte image header. Later
  * XMODEM padding after the declared image length is ignored.
  */
-rot_state_t upgrade_feed(const void *data, uint32_t len, bool *image_complete);
-rot_state_t upgrade_auto_write(const void *data, uint32_t len, bool *image_complete);
+rotsta_t upgrade_feed(const void *data, uint32_t len, bool *image_complete);
+rotsta_t upgrade_auto_write(const void *data, uint32_t len, bool *image_complete);
 
 /* Abort the current receive session. The inactive slot can be retried safely. */
-rot_state_t upgrade_abort(void);
+rotsta_t upgrade_abort(void);
 
 /* Read and validate the persistent record for one slot. */
-rot_state_t upgrade_read_record(uint8_t slot, upgrade_record_t *record);
+rotsta_t upgrade_read_record(uint8_t slot, upgrade_record_t *record);
 
 /* Validate both the record and the complete stored image checksum. */
-rot_state_t upgrade_validate_slot(uint8_t slot, upgrade_record_t *record);
+rotsta_t upgrade_validate_slot(uint8_t slot, upgrade_record_t *record);
 
 /* Reset after a successful upgrade. The bootloader should consume the record. */
 void upgrade_reboot(void);

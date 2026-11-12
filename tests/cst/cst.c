@@ -4,7 +4,7 @@
 
 
 #include "fdb.h"
-#include "rot_ver.h"
+#include "rotver.h"
 
 #include "tx_api.h"
 #include "tx_config.h"
@@ -26,15 +26,15 @@ static void cst_sobi_log(const char *tag)
     hal_dt_printf("%s: name=%s, vid=0x%04x, pid=0x%04x, cnt=%u, fw=v%u.%u.%u-%s+%08x\r\n",
                   tag, (const char *)g_sobi.name, (unsigned)g_sobi.pi.vid, (unsigned)g_sobi.pi.pid,
                   (unsigned)g_sobi.pi.test_cnt,
-                  ROT_VER_GET_MAJOR(fv), ROT_VER_GET_MINOR(fv), ROT_VER_GET_PATCH(fv),
-                  rot_ver_stage_str(ROT_VER_GET_STAGE(fv)), (unsigned)ROT_VER_GET_HASH(fv));
+                  ROTVER_GET_MAJOR(fv), ROTVER_GET_MINOR(fv), ROTVER_GET_PATCH(fv),
+                  rotver_stage_str(ROTVER_GET_STAGE(fv)), (unsigned)ROTVER_GET_HASH(fv));
 }
 
 static void cst_task(ULONG id)
 {
     (void)id;
 
-    if (fdb_sobi_init() != rot_state_success) {
+    if (fdb_sobi_init() != rotsta_success) {
         hal_dt_printf("[sobi] init failed\r\n");
     } else {
         cst_sobi_log("[sobi] load");
@@ -70,7 +70,7 @@ static void cst_task(ULONG id)
                 // fdb_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
                 
                 g_sobi.pi.test_cnt++;
-                if (rot_state_success == fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW)) {
+                if (rotsta_success == fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW)) {
                     cst_sobi_log("[sobi] saved");
                     // tx_thread_sleep(100);
                     // disable_global_irq(CSR_MSTATUS_MIE_MASK);
@@ -98,14 +98,14 @@ static void cst_task(ULONG id)
 }
 
 
-rot_state_t cst_init(void)
+rotsta_t cst_init(void)
 {
-    rot_state_t ret = tx_thread_create(&thread_cst, "thread_cst", cst_task, 0U, thread_cst_stack, sizeof(thread_cst_stack), CST_TASK_PRIORITY, CST_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+    rotsta_t ret = tx_thread_create(&thread_cst, "thread_cst", cst_task, 0U, thread_cst_stack, sizeof(thread_cst_stack), CST_TASK_PRIORITY, CST_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
     if (ret != TX_SUCCESS) {
         printf(TAG "thread create failed, ret=%u\r\n", ret);
-        return rot_state_fail;
+        return rotsta_fail;
     }
-    return rot_state_success;
+    return rotsta_success;
 }
 
 

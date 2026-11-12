@@ -30,7 +30,7 @@
 上位机发送 `QUERY(0x20)`，设备由升级任务返回 `INFO(0x82)`：
 
 - 当前 BootROM remap 槽位（APP1 / APP2）
-- 编译时固件版本 `ROT_VER`
+- 编译时固件版本 `ROTVER`
 - 当前槽 Boot Header 中的 `SW_VERSION`
 - APP1 / APP2 是否存在、应用记录版本、Boot 选择版本及是否已退役
 - OTP word 25 的 `SEC_IMG_OFFSET` 和 `MAX_IMG_LEN`
@@ -42,16 +42,16 @@
 
 BootROM OTA 的 START 会检查 OTP 布局。双槽未启用或槽地址与
 `SEC_IMG_OFFSET * 256 KiB` 不一致时，设备返回
-`rot_state_upgrade_boot_layout_mismatch`，不会擦写目标槽。
+`rotsta_upgrade_boot_layout_mismatch`，不会擦写目标槽。
 
 ### 降级规则
 
-BootROM 只比较 Boot Header 的 `SW_VERSION`，不比较应用编译版本 `ROT_VER`。
+BootROM 只比较 Boot Header 的 `SW_VERSION`，不比较应用编译版本 `ROTVER`。
 该规则由设备固件执行，上位机始终发送未经修改的官方升级文件。设备在
 正常升级到更高 Boot 版本时保留现有回退槽。仅当目标 Boot 版本小于或
 等于当前槽时，目标镜像校验完成后才把当前运行槽 Boot Header 的
 `SW_VERSION` 编程为 `0`；重启后 BootROM 会选择保留真实版本号的目标
-镜像。目标镜像的 `SW_VERSION`、应用 `ROT_VER` 和 FOTA checksum 都不修改。
+镜像。目标镜像的 `SW_VERSION`、应用 `ROTVER` 和 FOTA checksum 都不修改。
 
 退役顺序是硬约束：完整镜像回读校验 → 提交目标槽记录 → 重新读取记录并
 执行整槽验证 → 当前槽 `SW_VERSION=0` → 发送最终响应并复位。任一步失败
@@ -83,8 +83,8 @@ BootROM 只比较 Boot Header 的 `SW_VERSION`，不比较应用编译版本 `RO
 | `0x11` | DATA | 文件数据，序号从 0 开始 |
 | `0x12` | END | 请求设备校验并提交镜像 |
 | `0x13` | ABORT | 取消当前传输 |
-| `0x80` | ACK | 载荷为 32 位 `rot_state_t` |
-| `0x81` | NAK | 载荷为 32 位 `rot_state_t` |
+| `0x80` | ACK | 载荷为 32 位 `rotsta_t` |
+| `0x81` | NAK | 载荷为 32 位 `rotsta_t` |
 
 ## 流程
 

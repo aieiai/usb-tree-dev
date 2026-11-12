@@ -56,8 +56,8 @@ sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
 
 # Automatic injection
 if(GIT_HASH)
-    sdk_compile_definitions(-DROT_GIT_HASH=0x${GIT_HASH})
-    sdk_compile_definitions("-DROT_GIT_HASH_STR=\"${GIT_HASH}\"")
+    sdk_compile_definitions(-DROTVER_GIT_HASH=0x${GIT_HASH})
+    sdk_compile_definitions("-DROTVER_GIT_HASH_STR=\"${GIT_HASH}\"")
 endif()
 
 if(TARGET app)

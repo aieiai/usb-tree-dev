@@ -1,6 +1,6 @@
 #include "hal_flash.h"
 #include "fdb_map.h"
-#include "rot_utils.h"
+#include "rotutil.h"
 
 #include "board.h"
 #include "hpm_romapi.h"
@@ -82,19 +82,19 @@ static bool _flash_in_range(uint32_t offset_addr, uint32_t buf_size)
     return (offset_addr < hal_fm.total_siz) && (buf_size <= (hal_fm.total_siz - offset_addr));
 }
 
-static rot_state_t _flash_check_range(uint32_t offset_addr, uint32_t buf_size)
+static rotsta_t _flash_check_range(uint32_t offset_addr, uint32_t buf_size)
 {
     if (!hal_fm.ready) {
-        return rot_state_flash_not_init;
+        return rotsta_flash_not_init;
     }
     if (buf_size == 0U) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (!_flash_in_range(offset_addr, buf_size)) {
-        return rot_state_flash_out_of_range;
+        return rotsta_flash_out_of_range;
     }
 
-    return rot_state_success;
+    return rotsta_success;
 }
 
 __attribute__ ((unused))
@@ -106,7 +106,7 @@ static const void *_flash_get_mapped(uint32_t offset_addr)
     return (const void *)(uintptr_t)(FDB_BASE_ADDR + offset_addr);
 }
 
-static rot_state_t _flash_program_page(uint32_t offset_addr, const void *buf, uint32_t buf_size)
+static rotsta_t _flash_program_page(uint32_t offset_addr, const void *buf, uint32_t buf_size)
 {
     uint32_t ctx, page_offset = offset_addr % hal_fm.page_siz;
 
@@ -114,7 +114,7 @@ static rot_state_t _flash_program_page(uint32_t offset_addr, const void *buf, ui
         (buf_size > hal_fm.page_siz) ||
         (buf_size > sizeof(_write_buffer)) ||
         (buf_size > (hal_fm.page_siz - page_offset))) {
-        return rot_state_flash_unaligned;
+        return rotsta_flash_unaligned;
     }
 
     ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
@@ -127,10 +127,10 @@ static rot_state_t _flash_program_page(uint32_t offset_addr, const void *buf, ui
 
     if (st != status_success) {
         printf(TAG "program failed at 0x%08x, size %u, st = %d\r\n", (unsigned)offset_addr, (unsigned)buf_size, (int)st);
-        return rot_state_flash_program_fail;
+        return rotsta_flash_program_fail;
     }
 
-    return rot_state_success;
+    return rotsta_success;
 }
 
 static hpm_stat_t _flash_erase_region(uint32_t offset_addr, uint32_t buf_size)
@@ -170,17 +170,17 @@ static hpm_stat_t _flash_erase_region(uint32_t offset_addr, uint32_t buf_size)
     return st;
 }
 
-rot_state_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_size)
+rotsta_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_size)
 {
-    rot_state_t pre = _flash_check_range(offset_addr, buf_size);
-    if (pre != rot_state_success) {
+    rotsta_t pre = _flash_check_range(offset_addr, buf_size);
+    if (pre != rotsta_success) {
         return pre;
     }
     if (buf == NULL) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     uint32_t ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
@@ -189,23 +189,23 @@ rot_state_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_siz
     restore_global_irq(ctx);
 
     (void)_mutex_put();
-    return rot_state_success;
+    return rotsta_success;
 }
 
-rot_state_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
+rotsta_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
 {
-    rot_state_t pre = _flash_check_range(offset_addr, buf_size);
-    if (pre != rot_state_success) {
+    rotsta_t pre = _flash_check_range(offset_addr, buf_size);
+    if (pre != rotsta_success) {
         return pre;
     }
     if (buf == NULL) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U) || (((uintptr_t)buf & 3U) != 0U)) {
-        return rot_state_flash_unaligned;
+        return rotsta_flash_unaligned;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     _flash_invalidate_dcache(offset_addr, buf_size);
@@ -221,26 +221,26 @@ rot_state_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
         printf(TAG "read failed at 0x%08x, size %u, st = %d\r\n",
                (unsigned)offset_addr, (unsigned)buf_size, (int)st);
         (void)_mutex_put();
-        return rot_state_flash_read_fail;
+        return rotsta_flash_read_fail;
     }
     (void)_mutex_put();
-    return rot_state_success;
+    return rotsta_success;
 }
 
-rot_state_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t buf_size, bool *equal)
+rotsta_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t buf_size, bool *equal)
 {
-    rot_state_t pre = _flash_check_range(offset_addr, buf_size);
-    if (pre != rot_state_success) {
+    rotsta_t pre = _flash_check_range(offset_addr, buf_size);
+    if (pre != rotsta_success) {
         return pre;
     }
     if ((buf == NULL) || (equal == NULL)) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U)) {
-        return rot_state_flash_unaligned;
+        return rotsta_flash_unaligned;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     const uint8_t *src = (const uint8_t *)buf;
@@ -281,33 +281,33 @@ rot_state_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t bu
 
     if (st != status_success) {
         (void)_mutex_put();
-        return rot_state_flash_read_fail;
+        return rotsta_flash_read_fail;
     }
     *equal = is_equal && (left == 0U);
     (void)_mutex_put();
-    return rot_state_success;
+    return rotsta_success;
 }
 
-rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_size)
+rotsta_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_size)
 {
-    rot_state_t pre = _flash_check_range(offset_addr, buf_size);
-    if (pre != rot_state_success) {
+    rotsta_t pre = _flash_check_range(offset_addr, buf_size);
+    if (pre != rotsta_success) {
         return pre;
     }
     if (buf == NULL) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (((offset_addr & 3U) != 0U) || ((buf_size & 3U) != 0U)) {
-        return rot_state_flash_unaligned;
+        return rotsta_flash_unaligned;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     const uint8_t *src = (const uint8_t *)buf;
     uint32_t left = buf_size;
     uint32_t off = offset_addr;
-    rot_state_t ret = rot_state_success;
+    rotsta_t ret = rotsta_success;
 
     // Split one logical write into explicit page-sized ROM program calls.
     while (left > 0U) {
@@ -316,7 +316,7 @@ rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_
         uint32_t page_write_size = (left < bytes_to_page_end) ? left : bytes_to_page_end;
 
         ret = _flash_program_page(off, src, page_write_size);
-        if (ret != rot_state_success) {
+        if (ret != rotsta_success) {
             break;
         }
 
@@ -330,18 +330,18 @@ rot_state_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_
     return ret;
 }
 
-rot_state_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size)
+rotsta_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size)
 {
     hpm_stat_t st;
-    rot_state_t pre = _flash_check_range(offset_addr, buf_size);
-    if (pre != rot_state_success) {
+    rotsta_t pre = _flash_check_range(offset_addr, buf_size);
+    if (pre != rotsta_success) {
         return pre;
     }
     if ((offset_addr % hal_fm.sector_siz) != 0U || (buf_size % hal_fm.sector_siz) != 0U) {
-        return rot_state_flash_unaligned;
+        return rotsta_flash_unaligned;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     uint32_t ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
@@ -355,9 +355,9 @@ rot_state_t hal_flash_erase(uint32_t offset_addr, uint32_t buf_size)
     (void)_mutex_put();
 
     if (st != status_success) {
-        return rot_state_flash_erase_fail;
+        return rotsta_flash_erase_fail;
     }
-    return rot_state_success;
+    return rotsta_success;
 }
 
 uint32_t hal_flash_get_size(void)
@@ -380,27 +380,27 @@ uint32_t hal_flash_get_block_size(void)
     return hal_fm.ready ? hal_fm.block_siz : 0U;
 }
 
-rot_state_t hal_flash_get_active_app_slot(uint8_t *slot)
+rotsta_t hal_flash_get_active_app_slot(uint8_t *slot)
 {
     if (slot == NULL) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (!hal_fm.ready) {
-        return rot_state_flash_not_init;
+        return rotsta_flash_not_init;
     }
     if (!_mutex_get()) {
-        return rot_state_flash_busy;
+        return rotsta_flash_busy;
     }
 
     *slot = rom_xpi_nor_is_remap_enabled(hal_fm.base) ? 1U : 0U;
     (void)_mutex_put();
-    return rot_state_success;
+    return rotsta_success;
 }
 
-rot_state_t hal_flash_init(void)
+rotsta_t hal_flash_init(void)
 {
     if (hal_fm.ready) {
-        return rot_state_success;
+        return rotsta_success;
     }
     hpm_stat_t st = status_success;
     xpi_nor_config_option_t option;
@@ -421,7 +421,7 @@ rot_state_t hal_flash_init(void)
 
     if (st != status_success) {
         printf(TAG "xpi nor auto config failed, st = %d\r\n", st);
-        return rot_state_fail;
+        return rotsta_fail;
     }
     st = rom_xpi_nor_get_property(hal_fm.base, &hal_fm.nor_cfg, xpi_nor_property_total_size, &hal_fm.total_siz);
     if (st != status_success) {
@@ -452,7 +452,7 @@ rot_state_t hal_flash_init(void)
         (hal_fm.total_siz < (FDB_DATA_END_ADDR - FDB_BASE_ADDR)) ||
         (hal_fm.total_siz > (UINT32_MAX - BOARD_FLASH_BASE_ADDRESS))) {
         printf(TAG "size mismatch\r\n");
-        return rot_state_fail;
+        return rotsta_fail;
     }
 
     if (hal_fm.total_siz != FDB_TOTAL_SIZ) {
@@ -462,5 +462,5 @@ rot_state_t hal_flash_init(void)
 
     printf(TAG "chip %u KB, block %u KB, sector %u KB, page %u B\r\n", hal_fm.total_siz / 1024u, hal_fm.block_siz / 1024u, hal_fm.sector_siz / 1024u, hal_fm.page_siz);
     hal_fm.ready = true;
-    return rot_state_success;
+    return rotsta_success;
 }

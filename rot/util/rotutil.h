@@ -1,5 +1,5 @@
-#ifndef ROT_UTILS_H
-#define ROT_UTILS_H
+#ifndef ROTUTIL_H
+#define ROTUTIL_H
 
 
 #define ROT_DIV_CEIL(size, align)               (((size) + (align) - 1) / (align))

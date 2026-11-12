@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "rot_state.h"
+#include "rotsta.h"
 #include "rotcc_protocol.h"
 
 
@@ -30,10 +30,10 @@ typedef struct {
 
 
 /* Creates the queue and the dedicated upgrade worker thread. */
-rot_state_t upgrade_task_init(void);
+rotsta_t upgrade_task_init(void);
 
 /* Copies one validated command into the worker queue without blocking. */
-rot_state_t upgrade_task_submit(const rot_upgrade_job_t *job);
+rotsta_t upgrade_task_submit(const rot_upgrade_job_t *job);
 
 bool upgrade_task_is_running(void);
 uint32_t upgrade_task_get_init_error(void);

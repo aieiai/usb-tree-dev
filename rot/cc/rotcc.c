@@ -2,6 +2,7 @@
 
 #include "rotcc.h"
 #include "rotcc_upgrade.h"
+#include "rotrb.h"
 #include "hal_usb.h"
 
 #include "tx_api.h"
@@ -40,7 +41,7 @@ typedef struct {
 
     volatile uint32_t rx_dropped;
     volatile uint32_t tx_dropped;
-    volatile rot_state_t tx_result;
+    volatile rotsta_t tx_result;
     volatile uint16_t tx_len;
     bool initialized;
 } rotcc_msg_t;
@@ -81,7 +82,7 @@ static void rotcc_rx_callback(const uint8_t *data, uint16_t len, void *ctx)
     (void)tx_event_flags_set(&cc_events, ROTCC_EVT_RX, TX_OR);
 }
 
-static void rot_cc_tx_complete_callback(rot_state_t state, uint16_t len, void *ctx)
+static void rot_cc_tx_complete_callback(rotsta_t state, uint16_t len, void *ctx)
 {
     (void)ctx;
 
@@ -104,7 +105,7 @@ __attribute__((weak)) void rot_cc_on_rx_packet(const uint8_t *data, uint16_t len
     (void)len;
     (void)ctx;
 }
-__attribute__((weak)) void rot_cc_on_tx_complete(rot_state_t state, uint16_t len, void *ctx)
+__attribute__((weak)) void rot_cc_on_tx_complete(rotsta_t state, uint16_t len, void *ctx)
 {
     (void)state;
     (void)len;
@@ -115,7 +116,7 @@ static void rotcc_start_next_tx(void)
 {
     for (;;) {
         rotcc_packet_t *packet;
-        rot_state_t state;
+        rotsta_t state;
         uint32_t head;
         uint32_t tail;
         uint16_t len;
@@ -132,14 +133,14 @@ static void rotcc_start_next_tx(void)
 
         packet = &cc_msg.packet_buf[ROTCC_DIR_TX][head & ROTCC_QUEUE_MASK];
         len = packet->len;
-        state = (rot_state_t)hal_cc_send(packet->data, len);
-        if ((state == rot_state_hal_cc_busy) || (state == rot_state_hal_cc_not_ready)) {
+        state = (rotsta_t)hal_cc_send(packet->data, len);
+        if ((state == rotsta_hal_cc_busy) || (state == rotsta_hal_cc_not_ready)) {
             return;
         }
 
         head++;
         __atomic_store_n(&cc_msg.head[ROTCC_DIR_TX], head, __ATOMIC_RELEASE);
-        if (state == rot_state_success) {
+        if (state == rotsta_success) {
             return;
         }
 
@@ -186,7 +187,7 @@ static void rotcc_task(ULONG id)
 
         if (tx_event_flags_get(&cc_events, (ROTCC_EVT_RX | ROTCC_EVT_TX_SUBMIT | ROTCC_EVT_TX_DONE | ROTCC_EVT_LINK_READY), TX_OR_CLEAR, &events, TX_WAIT_FOREVER) == TX_SUCCESS) {
             if ((events & ROTCC_EVT_TX_DONE) != 0U) {
-                rot_state_t tx_state = cc_msg.tx_result;
+                rotsta_t tx_state = cc_msg.tx_result;
                 uint16_t tx_len = cc_msg.tx_len;
 
                 rot_cc_on_tx_complete(tx_state, tx_len, NULL);
@@ -198,7 +199,7 @@ static void rotcc_task(ULONG id)
     }
 }
 
-rot_state_t rotcc_init(void)
+rotsta_t rotcc_init(void)
 {
     static const hal_cc_callbacks_t callbacks = {
         .rx = rotcc_rx_callback,
@@ -209,7 +210,7 @@ rot_state_t rotcc_init(void)
     UINT ret;
 
     if (cc_msg.initialized) {
-        return rot_state_success;
+        return rotsta_success;
     }
 
     memset(cc_msg.head, 0, sizeof(cc_msg.head));
@@ -217,48 +218,48 @@ rot_state_t rotcc_init(void)
 
     if (tx_event_flags_create(&cc_events, "rot_cc_events") != TX_SUCCESS) {
         printf(TAG "event flags create failed\r\n");
-        return rot_state_fail;
+        return rotsta_fail;
     }
     if (tx_mutex_create(&tx_enqueue_mutex, "rotcc_tx_lock", TX_INHERIT) != TX_SUCCESS) {
         printf(TAG "tx mutex create failed\r\n");
-        return rot_state_fail;
+        return rotsta_fail;
     }
-    if (hal_cc_register_callbacks(&callbacks) != rot_state_success) {
+    if (hal_cc_register_callbacks(&callbacks) != rotsta_success) {
         printf(TAG "callback registration failed\r\n");
-        return rot_state_fail;
+        return rotsta_fail;
     }
 
     ret = tx_thread_create(&thread_rotcc, "thread_rot_cc", rotcc_task, 0U, thread_rotcc_stack, sizeof(thread_rotcc_stack), ROTCC_TASK_PRIORITY, ROTCC_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
     if (ret != TX_SUCCESS) {
         (void)hal_cc_register_callbacks(NULL);
         printf(TAG "thread create failed, ret=%u\r\n", (unsigned)ret);
-        return rot_state_fail;
+        return rotsta_fail;
     }
     cc_msg.initialized = true;
-    return rot_state_success;
+    return rotsta_success;
 }
 
-rot_state_t rotcc_send(const void *data, uint32_t len)
+rotsta_t rotcc_send(const void *data, uint32_t len)
 {
     rotcc_packet_t *packet;
     uint32_t head;
     uint32_t tail;
 
     if (!cc_msg.initialized) {
-        return rot_state_rotcc_not_init;
+        return rotsta_rotcc_not_init;
     }
     if ((data == NULL) || (len == 0U) || (len > ROTCC_PACKET_SIZE)) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if (tx_mutex_get(&tx_enqueue_mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
-        return rot_state_rotcc_tx_lock_fail;
+        return rotsta_rotcc_tx_lock_fail;
     }
 
     tail = __atomic_load_n(&cc_msg.tail[ROTCC_DIR_TX], __ATOMIC_RELAXED);
     head = __atomic_load_n(&cc_msg.head[ROTCC_DIR_TX], __ATOMIC_ACQUIRE);
     if ((uint32_t)(tail - head) >= ROTCC_QUEUE_DEPTH) {
         (void)tx_mutex_put(&tx_enqueue_mutex);
-        return rot_state_rotcc_tx_full;
+        return rotsta_rotcc_tx_full;
     }
 
     packet = &cc_msg.packet_buf[ROTCC_DIR_TX][tail & ROTCC_QUEUE_MASK];
@@ -268,7 +269,7 @@ rot_state_t rotcc_send(const void *data, uint32_t len)
 
     (void)tx_mutex_put(&tx_enqueue_mutex);
     (void)tx_event_flags_set(&cc_events, ROTCC_EVT_TX_SUBMIT, TX_OR);
-    return rot_state_success;
+    return rotsta_success;
 }
 
 bool rotcc_is_busy(void)
@@ -303,4 +304,3 @@ uint32_t rotcc_tx_dropped(void)
 {
     return cc_msg.tx_dropped;
 }
-

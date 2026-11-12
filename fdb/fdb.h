@@ -2,20 +2,20 @@
 #define FDB_H
 
 #include <stdint.h>
-#include "rot_state.h"
+#include "rotsta.h"
 
 
 #define FDB_SOBI_MAGIC  (0x534F4249U) /* "SOBI" */
 #define FDB_SOBI_VER    (2U)
 
 enum {
-    rot_state_fdb_init_fail = ROT_STATE_MAKE(rot_state_group_fdb, 1),
-    rot_state_fdb_not_init,
-    rot_state_fdb_invalid_type,
-    rot_state_fdb_not_registered,
-    rot_state_fdb_invalid_save_type,
-    rot_state_fdb_save_fail,
-    rot_state_fdb_lock_fail,
+    rotsta_fdb_init_fail = ROTSTA_MAKE(rotsta_group_fdb, 1),
+    rotsta_fdb_not_init,
+    rotsta_fdb_invalid_type,
+    rotsta_fdb_not_registered,
+    rotsta_fdb_invalid_save_type,
+    rotsta_fdb_save_fail,
+    rotsta_fdb_lock_fail,
 };
 
 typedef enum {
@@ -71,11 +71,11 @@ typedef struct {
 extern sobi_t g_sobi;
 
 
-rot_state_t fdb_init(void);
-rot_state_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size);
-rot_state_t fdb_update(fdb_item_ty type, fdb_save_ty save_type);
+rotsta_t fdb_init(void);
+rotsta_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size);
+rotsta_t fdb_update(fdb_item_ty type, fdb_save_ty save_type);
 
-rot_state_t fdb_sobi_init(void);
+rotsta_t fdb_sobi_init(void);
 
 
 #endif

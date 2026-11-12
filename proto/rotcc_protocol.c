@@ -48,7 +48,7 @@ static uint16_t _crc16_update(uint16_t crc, const uint8_t *data, uint32_t len)
 }
 
 
-rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len, rotcc_protocol_frame_t *frame)
+rotsta_t rotcc_protocol_parse(const uint8_t *data, uint16_t len, rotcc_protocol_frame_t *frame)
 {
     uint16_t payload_len;
     uint16_t expected_crc;
@@ -56,15 +56,15 @@ rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len, rotcc_protoc
     uint32_t packet_len;
 
     if ((data == NULL) || (frame == NULL)) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
     if ((len < 2U) ||
         (data[0] != ROTCC_FW_MAGIC_0) ||
         (data[1] != ROTCC_FW_MAGIC_1)) {
-        return rot_state_not_found;
+        return rotsta_not_found;
     }
     if (len < (ROTCC_FW_HEADER_SIZE + ROTCC_FW_CRC_SIZE)) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
 
     frame->type = data[3];
@@ -72,27 +72,27 @@ rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len, rotcc_protoc
     payload_len = _get_le16(&data[6]);
     if ((data[2] != ROTCC_FW_VERSION) ||
         (payload_len > ROTCC_FW_MAX_PAYLOAD_SIZE)) {
-        return rot_state_not_supported;
+        return rotsta_not_supported;
     }
 
     packet_len = ROTCC_FW_HEADER_SIZE + payload_len + ROTCC_FW_CRC_SIZE;
     if (packet_len != len) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
 
     expected_crc = _get_le16(&data[packet_len - ROTCC_FW_CRC_SIZE]);
     actual_crc = _crc16_update(0U, data, ROTCC_FW_HEADER_SIZE + payload_len);
     if (expected_crc != actual_crc) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
 
     frame->payload_len = payload_len;
     frame->payload = &data[ROTCC_FW_HEADER_SIZE];
-    return rot_state_success;
+    return rotsta_success;
 }
 
 
-rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq, const uint8_t *payload, uint16_t payload_len)
+rotsta_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq, const uint8_t *payload, uint16_t payload_len)
 {
     uint8_t packet[ROTCC_FW_MAX_PACKET_SIZE];
     uint16_t packet_len;
@@ -100,7 +100,7 @@ rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq, const uint8_
 
     if ((payload_len > ROTCC_FW_MAX_PAYLOAD_SIZE) ||
         ((payload == NULL) && (payload_len != 0U))) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
 
     packet_len = ROTCC_FW_HEADER_SIZE + payload_len + ROTCC_FW_CRC_SIZE;
@@ -122,7 +122,7 @@ rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq, const uint8_
 }
 
 
-rot_state_t rotcc_protocol_send_status(uint8_t type, uint16_t seq, rot_state_t status)
+rotsta_t rotcc_protocol_send_status(uint8_t type, uint16_t seq, rotsta_t status)
 {
     uint8_t payload[sizeof(uint32_t)];
 

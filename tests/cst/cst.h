@@ -3,10 +3,10 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "rot_state.h"
+#include "rotsta.h"
 
 
 
-rot_state_t cst_init(void);
+rotsta_t cst_init(void);
 
 #endif

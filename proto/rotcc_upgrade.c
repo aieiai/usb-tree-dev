@@ -11,7 +11,7 @@
 #define ROTCC_FW_START_PAYLOAD_SIZE (8U)
 
 
-static rot_state_t _nak(uint16_t seq, rot_state_t state)
+static rotsta_t _nak(uint16_t seq, rotsta_t state)
 {
     return rotcc_protocol_send_status(ROTCC_FW_TYPE_NAK, seq, state);
 }
@@ -26,11 +26,11 @@ static void _init_job(rot_upgrade_job_t *job, rot_upgrade_command_t command,
 }
 
 
-static rot_state_t _submit(rot_upgrade_job_t *job, uint16_t seq)
+static rotsta_t _submit(rot_upgrade_job_t *job, uint16_t seq)
 {
-    rot_state_t state = upgrade_task_submit(job);
+    rotsta_t state = upgrade_task_submit(job);
 
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         hal_dt_printf(TAG "queue command failed: 0x%08x, init_error=%u\r\n", (unsigned)state, (unsigned)upgrade_task_get_init_error());
         (void)_nak(seq, state);
     }
@@ -43,7 +43,7 @@ static void _handle_start(const rotcc_protocol_frame_t *frame)
     rot_upgrade_job_t job;
 
     if (frame->payload_len != ROTCC_FW_START_PAYLOAD_SIZE) {
-        (void)_nak(frame->seq, rot_state_invalid_argument);
+        (void)_nak(frame->seq, rotsta_invalid_argument);
         return;
     }
 
@@ -61,7 +61,7 @@ static void _handle_data(const rotcc_protocol_frame_t *frame)
     rot_upgrade_job_t job;
 
     if (frame->payload_len == 0U) {
-        (void)_nak(frame->seq, rot_state_invalid_argument);
+        (void)_nak(frame->seq, rotsta_invalid_argument);
         return;
     }
 
@@ -78,7 +78,7 @@ static void _handle_simple(const rotcc_protocol_frame_t *frame,
     rot_upgrade_job_t job;
 
     if (frame->payload_len != 0U) {
-        (void)_nak(frame->seq, rot_state_invalid_argument);
+        (void)_nak(frame->seq, rotsta_invalid_argument);
         return;
     }
 
@@ -90,13 +90,13 @@ static void _handle_simple(const rotcc_protocol_frame_t *frame,
  void rotcc_upgrade_on_rx(const uint8_t *data, uint16_t len)
 {
     rotcc_protocol_frame_t frame;
-    rot_state_t state;
+    rotsta_t state;
 
     state = rotcc_protocol_parse(data, len, &frame);
-    if (state == rot_state_not_found) {
+    if (state == rotsta_not_found) {
         return;
     }
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         uint16_t seq = ((data != NULL) && (len >= 6U))
             ? (uint16_t)((uint16_t)data[4] | ((uint16_t)data[5] << 8))
             : 0U;
@@ -121,7 +121,7 @@ static void _handle_simple(const rotcc_protocol_frame_t *frame,
         _handle_simple(&frame, ROT_UPGRADE_CMD_QUERY);
         break;
     default:
-        (void)_nak(frame.seq, rot_state_not_supported);
+        (void)_nak(frame.seq, rotsta_not_supported);
         break;
     }
 }

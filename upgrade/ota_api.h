@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "rot_state.h"
+#include "rotsta.h"
 #include "upgrade.h"
 
 
@@ -16,7 +16,7 @@ void ota_board_flash_init(void);
 bool ota_board_auto_write(const void *src, uint32_t len);
 void ota_board_complete_reset(void);
 uint8_t ota_check_current_otaindex(void);
-rot_state_t ota_board_last_state(void);
+rotsta_t ota_board_last_state(void);
 
 
 #endif

@@ -14,7 +14,6 @@ extern const usb_descriptor_t g_desc_rpt_cc;
 
 static struct usbd_interface s_intf;
 static uint8_t s_rx_buf[INTF_CC_EP_SIZE] __attribute__((aligned(4)));
-static uint8_t s_tx_buf[INTF_CC_EP_SIZE] __attribute__((aligned(4)));
 static hal_cc_callbacks_t ctx_cb;
 static volatile bool s_tx_busy;
 static uint8_t s_busid;
@@ -43,7 +42,7 @@ static void ep_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
     s_tx_busy = false;
     if (ctx_cb.tx_complete != NULL) {
-        ctx_cb.tx_complete(rot_state_success, (uint16_t)nbytes, ctx_cb.ctx);
+        ctx_cb.tx_complete(rotsta_success, (uint16_t)nbytes, ctx_cb.ctx);
     }
 }
 
@@ -94,7 +93,7 @@ int hal_cc_register_callbacks(const hal_cc_callbacks_t *cb)
         ctx_cb = *cb;
     }
     restore_global_irq(irq_state);
-    return rot_state_success;
+    return rotsta_success;
 }
 
 int hal_cc_send(const void *data, uint32_t len)
@@ -102,26 +101,25 @@ int hal_cc_send(const void *data, uint32_t len)
     uint32_t irq_state;
 
     if ((data == NULL) || (len == 0U) || (len > INTF_CC_EP_SIZE)) {
-        return rot_state_hal_cc_arg;
+        return rotsta_hal_cc_arg;
     }
     if (!s_initialized || !usb_device_is_configured(s_busid)) {
-        return rot_state_hal_cc_not_ready;
+        return rotsta_hal_cc_not_ready;
     }
 
     irq_state = disable_global_irq(CSR_MSTATUS_MIE_MASK);
     if (s_tx_busy) {
         restore_global_irq(irq_state);
-        return rot_state_hal_cc_busy;
+        return rotsta_hal_cc_busy;
     }
     s_tx_busy = true;
     restore_global_irq(irq_state);
 
-    memcpy(s_tx_buf, data, len);
-    if (usbd_ep_start_write(s_busid, INTF_CC_EPI, s_tx_buf, len) < 0) {
+    if (usbd_ep_start_write(s_busid, INTF_CC_EPI, data, len) < 0) {
         s_tx_busy = false;
-        return rot_state_hal_cc_start;
+        return rotsta_hal_cc_start;
     }
-    return rot_state_success;
+    return rotsta_success;
 }
 
 bool hal_cc_is_busy(void)

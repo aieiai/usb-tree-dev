@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "rot_state.h"
+#include "rotsta.h"
 #ifndef INTF_CC_EP_SIZE
 #include "../hal/usb/descriptor/hid_descriptor.h"
 #endif
@@ -47,14 +47,14 @@ typedef struct {
 /*
  * Parses and validates one protocol frame. The payload points into the input
  * buffer and remains valid only during the call.
- * rot_state_not_found means "not a CC protocol frame, ignore it".
+ * rotsta_not_found means "not a CC protocol frame, ignore it".
  */
-rot_state_t rotcc_protocol_parse(const uint8_t *data, uint16_t len,
+rotsta_t rotcc_protocol_parse(const uint8_t *data, uint16_t len,
                                  rotcc_protocol_frame_t *frame);
 
-rot_state_t rotcc_protocol_send_status(uint8_t type, uint16_t seq,
-                                       rot_state_t status);
-rot_state_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq,
+rotsta_t rotcc_protocol_send_status(uint8_t type, uint16_t seq,
+                                       rotsta_t status);
+rotsta_t rotcc_protocol_send_payload(uint8_t type, uint16_t seq,
                                         const uint8_t *payload,
                                         uint16_t payload_len);
 

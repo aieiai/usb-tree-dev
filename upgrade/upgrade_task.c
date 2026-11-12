@@ -46,7 +46,7 @@ static uint8_t s_upgrade_thread_stack[UPGRADE_TASK_STACK]
     __attribute__((aligned(8U)));
 
 static bool s_initialized;
-static rot_state_t s_init_result = rot_state_upgrade_not_init;
+static rotsta_t s_init_result = rotsta_upgrade_not_init;
 static UINT s_init_error;
 static worker_state_t s_worker_state;
 static uint32_t s_session_id;
@@ -55,14 +55,14 @@ static uint32_t s_received_size;
 static uint16_t s_next_data_seq;
 
 
-static rot_state_t _send_ack(uint16_t seq)
+static rotsta_t _send_ack(uint16_t seq)
 {
     return rotcc_protocol_send_status(ROTCC_FW_TYPE_ACK, seq,
-                                      rot_state_success);
+                                      rotsta_success);
 }
 
 
-static rot_state_t _send_nak(uint16_t seq, rot_state_t state)
+static rotsta_t _send_nak(uint16_t seq, rotsta_t state)
 {
     return rotcc_protocol_send_status(ROTCC_FW_TYPE_NAK, seq, state);
 }
@@ -79,10 +79,10 @@ static void _handle_query(const rot_upgrade_job_t *job)
 {
     upgrade_runtime_info_t info;
     uint8_t payload[28] = {0};
-    rot_state_t state;
+    rotsta_t state;
 
     state = upgrade_get_runtime_info(&info);
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         (void)_send_nak(job->seq, state);
         return;
     }
@@ -115,14 +115,14 @@ static void _handle_query(const rot_upgrade_job_t *job)
 
     state = rotcc_protocol_send_payload(ROTCC_FW_TYPE_INFO, job->seq,
                                         payload, sizeof(payload));
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         hal_dt_printf(TAG "query response send failed: 0x%08x\r\n",
                       (unsigned)state);
     }
 }
 
 
-static void _reboot_after_response(uint8_t response_type, uint16_t seq, rot_state_t result, const char *reason)
+static void _reboot_after_response(uint8_t response_type, uint16_t seq, rotsta_t result, const char *reason)
 {
     hal_dt_printf(TAG "%s, result=0x%08x, rebooting\r\n",
                   reason, (unsigned)result);
@@ -153,21 +153,21 @@ static void _reset_session(bool abort_upgrade)
 static void _handle_start(const rot_upgrade_job_t *job)
 {
     upgrade_runtime_info_t info;
-    rot_state_t state;
+    rotsta_t state;
 
     if (job->payload_len != UPGRADE_START_PAYLOAD_SIZE) {
-        (void)_send_nak(job->seq, rot_state_invalid_argument);
+        (void)_send_nak(job->seq, rotsta_invalid_argument);
         return;
     }
     if ((job->file_size < sizeof(upgrade_image_header_t)) ||
         (job->file_size > (UPGRADE_IMAGE_MAX_SIZE +
                            sizeof(upgrade_image_header_t)))) {
-        (void)_send_nak(job->seq, rot_state_invalid_argument);
+        (void)_send_nak(job->seq, rotsta_invalid_argument);
         return;
     }
 
     state = upgrade_get_runtime_info(&info);
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         (void)_send_nak(job->seq, state);
         return;
     }
@@ -175,7 +175,7 @@ static void _handle_start(const rot_upgrade_job_t *job)
         hal_dt_printf(TAG "boot layout mismatch: otp=%u, configured=%u\r\n",
                       (unsigned)info.otp_sec_img_offset,
                       (unsigned)info.configured_slot_size_256k);
-        (void)_send_nak(job->seq, rot_state_upgrade_boot_layout_mismatch);
+        (void)_send_nak(job->seq, rotsta_upgrade_boot_layout_mismatch);
         return;
     }
 
@@ -192,7 +192,7 @@ static void _handle_start(const rot_upgrade_job_t *job)
     _reset_session(true);
 
     state = upgrade_init();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         hal_dt_printf(TAG "upgrade init failed: 0x%08x\r\n",
                       (unsigned)state);
         _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, state,
@@ -214,10 +214,10 @@ static void _handle_start(const rot_upgrade_job_t *job)
 static void _handle_data(const rot_upgrade_job_t *job)
 {
     bool image_complete = false;
-    rot_state_t state;
+    rotsta_t state;
 
     if (s_worker_state != WORKER_STATE_RECEIVING) {
-        (void)_send_nak(job->seq, rot_state_upgrade_incomplete);
+        (void)_send_nak(job->seq, rotsta_upgrade_incomplete);
         return;
     }
 
@@ -228,30 +228,30 @@ static void _handle_data(const rot_upgrade_job_t *job)
         return;
     }
     if (job->seq != s_next_data_seq) {
-        (void)_send_nak(job->seq, rot_state_upgrade_incomplete);
+        (void)_send_nak(job->seq, rotsta_upgrade_incomplete);
         return;
     }
     if (s_received_size > s_file_size) {
-        (void)_send_nak(job->seq, rot_state_upgrade_incomplete);
+        (void)_send_nak(job->seq, rotsta_upgrade_incomplete);
         return;
     }
     if ((job->payload_len == 0U) ||
         (job->payload_len > ROTCC_FW_MAX_PAYLOAD_SIZE) ||
         (job->payload_len > (s_file_size - s_received_size))) {
-        (void)_send_nak(job->seq, rot_state_invalid_argument);
+        (void)_send_nak(job->seq, rotsta_invalid_argument);
         return;
     }
 
     state = upgrade_feed(job->payload, job->payload_len, &image_complete);
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         upgrade_status_t upgrade_status;
         bool fatal =
-            (upgrade_get_status(&upgrade_status) == rot_state_success) &&
+            (upgrade_get_status(&upgrade_status) == rotsta_success) &&
             (upgrade_status.state == UPGRADE_STATE_FAILED);
 
         hal_dt_printf(TAG "data seq=%u failed: 0x%08x\r\n",
                       (unsigned)job->seq, (unsigned)state);
-        if (fatal && (state != rot_state_upgrade_exip_image_required)) {
+        if (fatal && (state != rotsta_upgrade_exip_image_required)) {
             _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, state,
                                    "image write failed");
             return;
@@ -274,23 +274,23 @@ static void _handle_data(const rot_upgrade_job_t *job)
 
 static void _handle_end(const rot_upgrade_job_t *job)
 {
-    rot_state_t state;
+    rotsta_t state;
 
     if (s_worker_state == WORKER_STATE_VERIFIED) {
         (void)_send_ack(job->seq);
         return;
     }
     if (s_worker_state != WORKER_STATE_RECEIVING) {
-        (void)_send_nak(job->seq, rot_state_upgrade_incomplete);
+        (void)_send_nak(job->seq, rotsta_upgrade_incomplete);
         return;
     }
     if (s_received_size != s_file_size) {
-        _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, rot_state_upgrade_incomplete, "image incomplete at END");
+        _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, rotsta_upgrade_incomplete, "image incomplete at END");
         return;
     }
 
     state = upgrade_finish();
-    if (state != rot_state_success) {
+    if (state != rotsta_success) {
         hal_dt_printf(TAG "finish failed: 0x%08x\r\n", (unsigned)state);
         _reboot_after_response(ROTCC_FW_TYPE_NAK, job->seq, state, "image verification failed");
         return;
@@ -298,7 +298,7 @@ static void _handle_end(const rot_upgrade_job_t *job)
 
     s_worker_state = WORKER_STATE_VERIFIED;
     hal_dt_printf(TAG "verified %u bytes\r\n", (unsigned)s_received_size);
-    _reboot_after_response(ROTCC_FW_TYPE_ACK, job->seq, rot_state_success, "upgrade completed");
+    _reboot_after_response(ROTCC_FW_TYPE_ACK, job->seq, rotsta_success, "upgrade completed");
 }
 
 
@@ -306,7 +306,7 @@ static void _handle_abort(const rot_upgrade_job_t *job)
 {
     _reset_session(true);
     hal_dt_printf(TAG "aborted by host\r\n");
-    _reboot_after_response(ROTCC_FW_TYPE_ACK, job->seq, rot_state_success,
+    _reboot_after_response(ROTCC_FW_TYPE_ACK, job->seq, rotsta_success,
                            "upgrade aborted");
 }
 
@@ -330,7 +330,7 @@ static void _process_job(const rot_upgrade_job_t *job)
         _handle_query(job);
         break;
     default:
-        (void)_send_nak(job->seq, rot_state_not_supported);
+        (void)_send_nak(job->seq, rotsta_not_supported);
         break;
     }
 }
@@ -352,20 +352,20 @@ static void _upgrade_thread_entry(ULONG argument)
 }
 
 
-rot_state_t upgrade_task_init(void)
+rotsta_t upgrade_task_init(void)
 {
     UINT ret;
 
     if (s_initialized) {
-        return rot_state_success;
+        return rotsta_success;
     }
 
     ret = tx_queue_create(&s_upgrade_queue, "upgrade_queue", 1U, s_upgrade_queue_storage, sizeof(s_upgrade_queue_storage));
     if (ret != TX_SUCCESS) {
         printf(TAG "queue create failed, ret=%u\r\n", (unsigned)ret);
         s_init_error = ret;
-        s_init_result = rot_state_upgrade_init_fail;
-        return rot_state_upgrade_init_fail;
+        s_init_result = rotsta_upgrade_init_fail;
+        return rotsta_upgrade_init_fail;
     }
 
     ret = tx_block_pool_create(&s_upgrade_job_pool, "upgrade_jobs", UPGRADE_JOB_BLOCK_SIZE, s_upgrade_job_pool_storage, sizeof(s_upgrade_job_pool_storage));
@@ -373,8 +373,8 @@ rot_state_t upgrade_task_init(void)
         (void)tx_queue_delete(&s_upgrade_queue);
         printf(TAG "job pool create failed, ret=%u\r\n", (unsigned)ret);
         s_init_error = ret;
-        s_init_result = rot_state_upgrade_init_fail;
-        return rot_state_upgrade_init_fail;
+        s_init_result = rotsta_upgrade_init_fail;
+        return rotsta_upgrade_init_fail;
     }
 
     ret = tx_thread_create(&s_upgrade_thread, "thread_upgrade", _upgrade_thread_entry, 0U, s_upgrade_thread_stack, sizeof(s_upgrade_thread_stack), UPGRADE_TASK_PRIORITY, UPGRADE_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
@@ -383,19 +383,19 @@ rot_state_t upgrade_task_init(void)
         (void)tx_queue_delete(&s_upgrade_queue);
         printf(TAG "thread create failed, ret=%u\r\n", (unsigned)ret);
         s_init_error = ret;
-        s_init_result = rot_state_upgrade_init_fail;
-        return rot_state_upgrade_init_fail;
+        s_init_result = rotsta_upgrade_init_fail;
+        return rotsta_upgrade_init_fail;
     }
 
     s_worker_state = WORKER_STATE_IDLE;
     s_initialized = true;
-    s_init_result = rot_state_success;
+    s_init_result = rotsta_success;
     s_init_error = TX_SUCCESS;
-    return rot_state_success;
+    return rotsta_success;
 }
 
 
-rot_state_t upgrade_task_submit(const rot_upgrade_job_t *job)
+rotsta_t upgrade_task_submit(const rot_upgrade_job_t *job)
 {
     rot_upgrade_job_t *block = NULL;
     UINT ret;
@@ -404,12 +404,12 @@ rot_state_t upgrade_task_submit(const rot_upgrade_job_t *job)
         return s_init_result;
     }
     if (job == NULL) {
-        return rot_state_invalid_argument;
+        return rotsta_invalid_argument;
     }
 
     ret = tx_block_allocate(&s_upgrade_job_pool, (VOID **)&block, TX_NO_WAIT);
     if (ret != TX_SUCCESS) {
-        return rot_state_upgrade_busy;
+        return rotsta_upgrade_busy;
     }
 
     memcpy(block, job, sizeof(*job));
@@ -417,9 +417,9 @@ rot_state_t upgrade_task_submit(const rot_upgrade_job_t *job)
     if (ret != TX_SUCCESS) {
         (void)tx_block_release(block);
         return (ret == TX_QUEUE_FULL)
-            ? rot_state_upgrade_busy : rot_state_fail;
+            ? rotsta_upgrade_busy : rotsta_fail;
     }
-    return rot_state_success;
+    return rotsta_success;
 }
 
 
