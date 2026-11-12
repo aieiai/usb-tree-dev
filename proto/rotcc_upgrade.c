@@ -87,7 +87,7 @@ static void _handle_simple(const rotcc_protocol_frame_t *frame,
 }
 
 
-void rotcc_upgrade_on_rx(const uint8_t *data, uint16_t len)
+ void rotcc_upgrade_on_rx(const uint8_t *data, uint16_t len)
 {
     rotcc_protocol_frame_t frame;
     rot_state_t state;

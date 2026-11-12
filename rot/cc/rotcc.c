@@ -53,8 +53,7 @@ static uint8_t thread_rotcc_stack[ROTCC_TASK_STACK] __attribute__((aligned(8U)))
 
 static rotcc_msg_t cc_msg;
 
-_Static_assert((ROTCC_QUEUE_DEPTH & ROTCC_QUEUE_MASK) == 0U,
-               "queue depth must be a power of two");
+_Static_assert((ROTCC_QUEUE_DEPTH & ROTCC_QUEUE_MASK) == 0U, "queue depth must be a power of two");
 
 static void rotcc_rx_callback(const uint8_t *data, uint16_t len, void *ctx)
 {
