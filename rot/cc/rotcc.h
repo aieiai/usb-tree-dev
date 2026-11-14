@@ -2,6 +2,10 @@
 #ifndef ROTCC_H
 #define ROTCC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,5 +35,8 @@ bool rotcc_wait_idle(uint32_t timeout_ms);
 uint32_t rotcc_dropped(void);
 uint32_t rotcc_tx_dropped(void);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

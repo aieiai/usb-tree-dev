@@ -1,10 +1,13 @@
 #ifndef ROTSTA_H
 #define ROTSTA_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 typedef uint32_t rotsta_t;
-
 
 /** @brief Status code group definition
  *  @rule:
@@ -13,7 +16,6 @@ typedef uint32_t rotsta_t;
  */
 #define ROTSTA_MAKE(group, code) ((uint32_t)(group)*512U + (uint32_t)(code))
 // #define ROTSTA_CHECK(state) (state_success != (state))
-
 
 enum {
     rotsta_group_common = 0,
@@ -25,7 +27,6 @@ enum {
     rotsta_group_upgrade,
 };
 
-
 // General status code
 enum {
     rotsta_success = ROTSTA_MAKE(rotsta_group_common, 0),
@@ -36,5 +37,8 @@ enum {
     rotsta_not_found,
 };
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

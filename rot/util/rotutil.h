@@ -1,6 +1,9 @@
 #ifndef ROTUTIL_H
 #define ROTUTIL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define ROT_DIV_CEIL(size, align)               (((size) + (align) - 1) / (align))
 #define ROT_DIV_ROUND_NEAREST(size, align)      (((size) + (align)/2) / (align) ) // round to nearest integer
@@ -15,5 +18,9 @@
 #define ROT_ATTR_UNUSED                 __attribute__ ((unused))
 #define ROT_ATTR_USED                   __attribute__ ((used))
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

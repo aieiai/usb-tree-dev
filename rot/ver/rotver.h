@@ -1,6 +1,10 @@
 #ifndef ROTVER_H
 #define ROTVER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 /**
@@ -55,5 +59,10 @@ static inline const char *rotver_stage_str(unsigned stage) {
     static const char *const names[] = { "release", "dev", "alpha", "beta", "rc" };
     return (stage < (sizeof(names) / sizeof(names[0])) ? names[stage] : "unknown");
 }
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // ROTVER_H
