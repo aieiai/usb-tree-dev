@@ -1,5 +1,5 @@
-#ifndef ROTCC_PROTOCOL_H
-#define ROTCC_PROTOCOL_H
+#ifndef ROTPROTO_H
+#define ROTPROTO_H
 
 #include <stdint.h>
 

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "rotcc_protocol.h"
+#include "rotproto.h"
 
 /* USB-facing adapter: validates frames and queues work to the upgrade task. */
 void rotcc_upgrade_on_rx(const uint8_t *data, uint16_t len);

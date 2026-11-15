@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "rotsta.h"
-#include "rotcc_protocol.h"
+#include "rotproto.h"
 
 
 typedef enum {

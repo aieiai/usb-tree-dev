@@ -1,7 +1,7 @@
 #include <string.h>
 
 #include "rotcc.h"
-#include "rotcc_upgrade.h"
+#include "rot_upgrade.h"
 #include "rotrb.h"
 #include "hal_usb.h"
 

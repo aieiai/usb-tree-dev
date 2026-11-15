@@ -1,4 +1,4 @@
-#include "rotcc_protocol.h"
+#include "rotproto.h"
 
 #include <stddef.h>
 

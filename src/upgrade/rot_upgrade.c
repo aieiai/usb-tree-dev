@@ -1,9 +1,9 @@
-#include "rotcc_upgrade.h"
+#include "rot_upgrade.h"
 
 #include <string.h>
 
 #include "../hal/usb/diagnostic_tracking/hal_dt.h"
-#include "rotcc_protocol.h"
+#include "rotproto.h"
 #include "upgrade_task.h"
 
 
