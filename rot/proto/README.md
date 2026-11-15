@@ -1,102 +1,61 @@
-# CC 固件升级协议
+# Rot 协议分层
 
-固件传输只使用 CC Interface 1：
+正式规范见 `doc/Rot-Gen 协议规范.md` 与 `doc/Rot-CC 协议规范.md`。本目录实现三层：
 
-- 主机到设备：OUT `0x02`
-- 设备到主机：IN `0x82`
-- 高速 USB 下默认使用 1024 字节中断端点
-- 可用编译定义 `CONFIG_CC_EP_SIZE=64/128/512/1024` 覆盖高速端点大小
-- 上位机从端点描述符读取 IN/OUT 的 `packetSize`，按两者较小值自适应
-- 支持 64/128/512/1024 等 2 的幂端点；DATA 载荷为 `MPS - 10`
-- DT Interface 3 不参与升级协议，只承载日志
+- `rotgen_proto.c`：通用协议层。只负责 Rot-Gen 帧的组帧、CRC8/CRC16、
+  流式拆包与重同步，收发都通过回调交给上层，不依赖 USB。
+- `../cc/rotcc.c`：CC 传输与收发任务。OUT 中断只把字节写进环形缓冲并唤醒
+  CC 线程；线程把字节喂给协议层。发送没有队列，直接交给 IN 端点。
+- `rotcc_proto.c`：Rot-CC 设备协议解析。解析 `cmd/subcmd/reserve/payload`，
+  分发到系统信息、键码和升级处理。
 
-## 模块分层
-
-- `rotcc.c`：CC USB 队列、收发事件和 HAL 适配，不处理升级业务。
-- `rotcc_protocol.c`：协议帧解析、ACK/NAK 编码和 CRC 校验。
-- `rotcc_upgrade.c`：只把合法协议帧转换成升级任务命令。
-- `upgrade_task.c`：独立高优先级 `thread_upgrade`，负责会话状态、Flash
-  擦写、镜像校验和最终响应。
-- `upgrade.c`：纯升级领域操作，不依赖 USB 或 ThreadX。
-
-升级命令体最大约 1 KiB，超过 ThreadX `TX_QUEUE` 单消息 16 个 `ULONG`
-的限制。因此命令体由 `TX_BLOCK_POOL` 管理，`TX_QUEUE` 只传递块指针。
-
-升级操作以重启结束：成功、写入失败、校验失败或主机取消时，先排队发送
-最终 ACK/NAK 并等待发送空闲，然后复位设备。因此不需要挂起或恢复其他任务。
-
-## 设备信息查询
-
-上位机发送 `QUERY(0x20)`，设备由升级任务返回 `INFO(0x82)`：
-
-- 当前 BootROM remap 槽位（APP1 / APP2）
-- 编译时固件版本 `ROTVER`
-- 当前槽 Boot Header 中的 `SW_VERSION`
-- APP1 / APP2 是否存在、应用记录版本、Boot 选择版本及是否已退役
-- OTP word 25 的 `SEC_IMG_OFFSET` 和 `MAX_IMG_LEN`
-- 当前工程配置的 256 KiB 槽数量，以及是否与 OTP 布局匹配
-
-退役槽的 Boot 选择版本为 `0`，但应用记录和镜像仍可能存在。查询协议
-版本 4 会分别返回应用记录版本与退役状态，上位机不会再把退役槽误报为
-“无效”。
-
-BootROM OTA 的 START 会检查 OTP 布局。双槽未启用或槽地址与
-`SEC_IMG_OFFSET * 256 KiB` 不一致时，设备返回
-`rotsta_upgrade_boot_layout_mismatch`，不会擦写目标槽。
-
-### 降级规则
-
-BootROM 只比较 Boot Header 的 `SW_VERSION`，不比较应用编译版本 `ROTVER`。
-该规则由设备固件执行，上位机始终发送未经修改的官方升级文件。设备在
-正常升级到更高 Boot 版本时保留现有回退槽。仅当目标 Boot 版本小于或
-等于当前槽时，目标镜像校验完成后才把当前运行槽 Boot Header 的
-`SW_VERSION` 编程为 `0`；重启后 BootROM 会选择保留真实版本号的目标
-镜像。目标镜像的 `SW_VERSION`、应用 `ROTVER` 和 FOTA checksum 都不修改。
-
-退役顺序是硬约束：完整镜像回读校验 → 提交目标槽记录 → 重新读取记录并
-执行整槽验证 → 当前槽 `SW_VERSION=0` → 发送最终响应并复位。任一步失败
-都不会退役当前槽。
-
-降级语义是放弃当前槽：旧槽的 `SW_VERSION=0`，不再参与正常版本选择；
-下一次升级会覆盖该槽。该操作只适用于允许放弃旧槽的回滚场景，不能作为
-安全启动下的常规双向切换。
-
-## 包格式
-
-所有字段使用小端序：
+## Rot-Gen 帧
 
 | 偏移 | 长度 | 内容 |
 | --- | --- | --- |
-| 0 | 2 | magic `52 43`（`RC`） |
-| 2 | 1 | 协议版本，当前为 1 |
-| 3 | 1 | 包类型 |
-| 4 | 2 | 序号 |
-| 6 | 2 | 载荷长度，最大 `端点 MPS - 10` |
-| 8 | N | 载荷 |
-| 8+N | 2 | CRC16-CCITT，覆盖头和载荷 |
+| 0 | 1 | sof `'R'`（0x52） |
+| 1 | 1 | 协议版本，当前 1 |
+| 2 | 1 | options，bit3 为请求/响应 |
+| 3 | 1 | 源地址 |
+| 4 | 1 | 目的地址 |
+| 5 | 2 | payload 长度（小端） |
+| 7 | 2 | secret_key，保留 |
+| 9 | 1 | header CRC8（覆盖 0..8，poly 0x07） |
+| 10 | 2 | package CRC16（覆盖 0..9 与 payload，poly 0x1021） |
+| 12 | N | payload |
 
-包类型：
+地址：0 控制中心（上位机），1 键盘，2 鼠标，3 Hub，4 耳机。
 
-| 值 | 名称 | 说明 |
+## Rot-CC payload
+
+`cmd(1) subcmd(1) reserve(2) payload(n)`。响应与请求使用相同的 cmd/subcmd，
+并清除 options 的请求位；状态类响应的 payload 为 4 字节 `rotsta_t`，
+`0` 表示成功。
+
+| cmd | 名称 | subcmd |
 | --- | --- | --- |
-| `0x10` | START | 载荷为文件长度和 32 位会话 ID |
-| `0x11` | DATA | 文件数据，序号从 0 开始 |
-| `0x12` | END | 请求设备校验并提交镜像 |
-| `0x13` | ABORT | 取消当前传输 |
-| `0x80` | ACK | 载荷为 32 位 `rotsta_t` |
-| `0x81` | NAK | 载荷为 32 位 `rotsta_t` |
+| 0x00 | 系统信息 | 0 版本、1 握手、2 设备信息、3 重启、4 重置 |
+| 0x01 | 键码 | 0 获取、1 设置 |
+| 0x02 | 升级 | 0 QUERY、1 START、2 DATA、3 END、4 ABORT |
 
-## 流程
+键码命令用 `reserve` 指定位置：低字节为按键索引，高字节为层号。获取时
+payload 为空、响应为 4 字节 `rotkc_t`；设置时 payload 为 4 字节 `rotkc_t`。
 
-1. 主机发送 START，载荷依次为 `file_size` 和 `session_id`。
-2. 设备复位旧会话并确认 START；镜像仍由 `upgrade_feed()` 从文件头开始解析。
-   `file_size` 是包含 16 字节官方升级头的完整文件长度。
-3. 主机按端点 MPS 动态计算载荷并切分文件，使用递增 DATA 序号发送；
-   每包必须收到 ACK 后才继续。64/128/512/1024 端点对应载荷上限为
-   54/118/502/1014 字节。
-4. ACK 丢失时主机重发同一序号，设备对已接收的上一包直接再次 ACK。
-5. 全部字节确认后发送 END；设备调用 `upgrade_finish()`，成功后返回 ACK。
-6. 失败或取消时主机发送 ABORT，设备调用 `upgrade_abort()`。
+升级命令：
 
-浏览器实现位于 `tests/cc/web/webusb_dt.html`，C 侧实现位于
-`rotcc_upgrade.c`。
+- QUERY：payload 空，响应为设备槽位/版本信息（28 字节，首字节为信息版本 4）。
+- START：payload 为 `file_size(4) + session_id(4)`，开始擦写目标槽。
+- DATA：payload 为 `seq(2) + 镜像数据`，seq 从 0 递增；重发同一 seq 直接回
+  成功，用于响应丢失后的重试。
+- END：payload 空，校验并提交镜像，成功响应后复位。
+- ABORT：payload 空，取消会话并复位。
+
+设备端不再有独立的升级任务：CC 线程解析到升级命令后直接调用
+`upgrade_*`，`START/DATA` 每帧等待主机读取响应，相当于天然的流控。
+单帧镜像数据上限为 `端点 MPS - 12(Rot-Gen) - 4(Rot-CC) - 2(seq)`
+字节，1024 端点即 1006 字节。
+
+## 上位机
+
+浏览器实现位于 `tests/cc/web/webusb_dt.html`，已按本协议重写：可查询设备信息
+与槽位信息、读写键码、执行固件升级。

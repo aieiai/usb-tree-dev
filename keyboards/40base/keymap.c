@@ -21,7 +21,7 @@ const uint32_t keymap[KBD_MAP_MAX][KBD_KEY_MAX] = {
         //23            24              25              26              27              28              29              30          31              32              33
         _K(KC_LSFT),    _K(KC_Z),       _K(KC_X),       _K(KC_C),       _K(KC_V),       _K(KC_B),       _K(KC_N),       _K(KC_M),   _K(KC_COMMA),   _K(KC_DELETE),  _K(KC_RSFT),
         //34            35              36              37                              38                                          39              40              41
-        _K(KC_LCTL),    _K(KC_LGUI),    _K(KC_LALT),    _K(KC_SPACE),                   _FN(KC_FN1),                                _K(KC_LCTL),    _K(KC_LGUI),    _K(KC_LALT)
+        _K(KC_LCTL),    _K(KC_LGUI),    _K(KC_LALT),    _K(KC_SPACE),                   _FN(KC_FN1),                                _K(KC_RCTL),    _K(KC_RGUI),    _K(KC_RALT)
     },
     {
         //0         1           2           3           4           5           6           7           8               9               10          11

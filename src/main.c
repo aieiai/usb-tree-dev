@@ -7,8 +7,8 @@
 #include "cst.h"
 #include "fdb.h"
 #include "rotcc.h"
+#include "rotcc_proto.h"
 #include "upgrade.h"
-#include "upgrade_task.h"
 
 #include "usb_config.h"
 
@@ -56,9 +56,9 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
     }
 
-    state = upgrade_task_init();
+    state = rotcc_proto_init();
     if (state != rotsta_success) {
-        printf(TAG "upgrade task init failed: 0x%08x\r\n", (unsigned)state);
+        printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);
     }
 
     hal_usb_init();

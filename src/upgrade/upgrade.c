@@ -491,7 +491,7 @@ rotsta_t upgrade_get_runtime_info(upgrade_runtime_info_t *info)
     memset(info, 0, sizeof(*info));
     info->active_slot = s_active_slot;
     info->remap_enabled = (s_active_slot == 1U) ? 1U : 0U;
-    info->firmware_version = ROTVER;
+    info->firmware_version = FW_VER;
 
     uint32_t otp_boot = rom_otp_read_from_shadow(OTP_BOOT_WORD_INDEX);
     uint32_t otp_security = rom_otp_read_from_shadow(OTP_SECURITY_WORD_INDEX);
