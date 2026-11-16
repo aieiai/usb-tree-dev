@@ -19,7 +19,7 @@ extern "C" {
  */
 
 // v0.1.0-dev
-#define ROTVER_MAJOR 0
+#define ROTVER_MAJOR 1
 #define ROTVER_MINOR 1
 #define ROTVER_PATCH 0
 // "release", "dev", "alpha", "beta", "rc"

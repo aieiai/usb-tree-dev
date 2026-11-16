@@ -34,28 +34,27 @@
 
 | cmd | 名称 | subcmd |
 | --- | --- | --- |
-| 0x00 | 系统信息 | 0 版本、1 握手、2 设备信息、3 重启、4 重置 |
-| 0x01 | 键码 | 0 获取、1 设置 |
-| 0x02 | 升级 | 0 QUERY、1 START、2 DATA、3 END、4 ABORT |
+| 0x00 | 系统信息 | 1 握手（响应协议版本）、2 设备信息、3 重启、4 重置、5 按键数量 |
+| 0x01 | 升级 | 0 升级信息、1 请求升级、2 传输数据 |
+| 0x02 | 键码 | 0 获取、1 设置、2 映射层数、3 活动层、4 设置活动层 |
 
 键码命令用 `reserve` 指定位置：低字节为按键索引，高字节为层号。获取时
 payload 为空、响应为 4 字节 `rotkc_t`；设置时 payload 为 4 字节 `rotkc_t`。
 
 升级命令：
 
-- QUERY：payload 空，响应为设备槽位/版本信息（28 字节，首字节为信息版本 4）。
-- START：payload 为 `file_size(4) + session_id(4)`，开始擦写目标槽。
-- DATA：payload 为 `seq(2) + 镜像数据`，seq 从 0 递增；重发同一 seq 直接回
-  成功，用于响应丢失后的重试。
-- END：payload 空，校验并提交镜像，成功响应后复位。
-- ABORT：payload 空，取消会话并复位。
+- INFO：payload 空，响应 7 字节 `{u8 slot_cur; u8 slot_max; u32 slot_size; u8 encrypt}`。
+- REQUEST：payload 为 `{u32 req_ty; u32 fw_size; u32 fw_crc32; u8 src_addr; u8 dst_addr}`
+  （14 字节），`req_ty` 1 开始、2 停止、3 完成。
+- DATA：payload 为固件数据切片。没有序号，逐帧状态响应即流控；DATA 帧
+  不要重发，否则会重复写入。
 
 设备端不再有独立的升级任务：CC 线程解析到升级命令后直接调用
-`upgrade_*`，`START/DATA` 每帧等待主机读取响应，相当于天然的流控。
-单帧镜像数据上限为 `端点 MPS - 12(Rot-Gen) - 4(Rot-CC) - 2(seq)`
-字节，1024 端点即 1006 字节。
+`upgrade_*`，`DATA` 每帧等待主机读取响应。单帧镜像数据上限为
+`端点 MPS - 12(Rot-Gen) - 4(Rot-CC)` 字节，1024 端点即 1008 字节。
 
 ## 上位机
 
-浏览器实现位于 `tests/cc/web/webusb_dt.html`，已按本协议重写：可查询设备信息
-与槽位信息、读写键码、执行固件升级。
+浏览器实现位于 `tests/cc/rotcc-web/rotcc.html`：可查询设备信息与升级信息、
+读写键码、切换活动层、执行固件升级。升级直接选择原始固件 bin，CRC-32 与
+大小在 START 请求中下发。

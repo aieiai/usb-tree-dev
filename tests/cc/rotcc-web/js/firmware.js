@@ -98,16 +98,22 @@ function updateFirmwareProgress(done, total) {
 
 async function sendCcAbort(target) {
   if (!target || !device || !device.opened || !target.link.claimed) return;
+  const payload = new Uint8Array(14);
+  writeLe32(payload, 0, CC.UPGRADE_REQ_STOP);
   const frame = makeRotGenFrame(
-    packCcMessage(CC.CMD_UPGRADE, CC.UPGRADE_ABORT)
+    packCcMessage(CC.CMD_UPGRADE, CC.UPGRADE_REQUEST, 0, payload)
   );
-  await writeCcFrame(target, frame, 'ABORT').catch(error => {
+  await writeCcFrame(target, frame, 'STOP').catch(error => {
     appendLine(`[CC] 发送取消帧失败：${error.message || error}`, 'warn');
   });
 }
 
 async function startFirmwareUpgrade() {
   if (isFirmwareActive()) return;
+  if (kcBusy || sysBusy || ccQueryPromise !== null) {
+    setFirmwareState('CC 通道忙，请稍后再试。', 'err');
+    return;
+  }
   const file = $firmwareFile.files[0];
   if (!file) {
     setFirmwareState('请选择升级文件。', 'err');
@@ -139,25 +145,26 @@ async function startFirmwareUpgrade() {
 
     setFirmwareState(`读取文件 ${file.name} ...`);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.length < 16) {
-      throw new Error('升级文件小于 16 字节，无法包含升级头');
+    if (bytes.length === 0) {
+      throw new Error('升级文件为空');
     }
-    if (readLe32(bytes, 0) !== UPGRADE_IMAGE_MAGIC) {
-      throw new Error('升级文件头 magic 不匹配');
+    if (bytes.length > 256 * 1024) {
+      throw new Error('升级文件超过 256 KiB 槽容量');
     }
-    if (readLe32(bytes, 4) !== UPGRADE_DEVICE_ID) {
-      throw new Error('升级文件头的设备 ID 不匹配');
-    }
-    if (readLe32(bytes, 8) === 0) {
-      throw new Error('升级文件头的镜像长度为 0');
+    const bootAtPlain = bytes.length > 0xC00 && bytes[0xC00] === 0xbf;
+    const bootAtExip = bytes.length > 0x1000 && bytes[0x1000] === 0xbf;
+    if (!bootAtPlain && !bootAtExip) {
+      throw new Error('升级文件不是有效的应用镜像（未找到 0xBF 启动头）');
     }
     if (!device || !device.opened || !links.includes(target.link)) {
       throw new Error('设备已断开');
     }
+    const crc32 = ccCrc32(bytes);
     updateFirmwareProgress(0, bytes.length);
 
     current = await makeCcClient(target, {
       bytes,
+      crc32,
       onProgress: updateFirmwareProgress
     });
     firmwareSession = current;

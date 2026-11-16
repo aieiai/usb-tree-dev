@@ -22,11 +22,10 @@ async function writeCcFrame(target, data, label) {
   $traffic.textContent = `RX ${rxBytes} B · TX ${txBytes} B`;
 
   const msg = parseCcMessage(data.subarray(RG.HEADER_SIZE));
-  const logAlways = !msg ||
-    msg.cmd !== CC.CMD_UPGRADE ||
-    msg.subcmd !== CC.UPGRADE_DATA;
-  const seq = msg?.payload.length >= 2 ? readLe16(msg.payload, 0) : 0;
-  if (logAlways || seq === 0 || (seq & 0x3f) === 0) {
+  const isUpgradeData = msg &&
+    msg.cmd === CC.CMD_UPGRADE &&
+    msg.subcmd === CC.UPGRADE_DATA;
+  if (!isUpgradeData) {
     appendLine(
       `[CC TX IF${target.link.number} ${endpoinTag(target.epOut)} ` +
       `${data.length}B] ${label}`
@@ -34,7 +33,7 @@ async function writeCcFrame(target, data, label) {
   }
 }
 
-async function makeCcClient(target, { bytes = null, onProgress = null } = {}) {
+async function makeCcClient(target, { bytes = null, crc32 = 0, onProgress = null } = {}) {
   const write = (data, label) => writeCcFrame(target, data, label);
   const log = (text, className = '') => appendLine(`[CC] ${text}`, className);
 
@@ -48,7 +47,7 @@ async function makeCcClient(target, { bytes = null, onProgress = null } = {}) {
   if (bytes) {
     return new CcUpgradeClient({
       bytes,
-      sessionId: makeSessionId(),
+      crc32,
       packetSize: target.packetSize,
       write,
       log,
@@ -91,15 +90,5 @@ async function ccCall(target, handler) {
 
   if (failure) throw failure;
   return result;
-}
-
-function makeSessionId() {
-  if (globalThis.crypto?.getRandomValues) {
-    const value = new Uint32Array(1);
-    globalThis.crypto.getRandomValues(value);
-    if (value[0] !== 0) return value[0];
-  }
-  const fallback = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-  return fallback || 1;
 }
 

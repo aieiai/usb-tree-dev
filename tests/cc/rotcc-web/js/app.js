@@ -13,7 +13,7 @@ function selectView(name) {
   for (const btn of navButtons) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  for (const view of ['remap', 'upgrade', 'debug']) {
+  for (const view of ['remap', 'upgrade', 'system', 'debug']) {
     document.getElementById(`view-${view}`)
       .classList.toggle('active', view === name);
   }
@@ -39,6 +39,28 @@ $btnFirmwareStart.addEventListener('click', startFirmwareUpgrade);
 $btnFirmwareCancel.addEventListener('click', cancelFirmwareUpgrade);
 $btnCcQuery.addEventListener('click', () => {
   queryCcDeviceInfo().catch(() => {});
+});
+$btnHandshake.addEventListener('click', () => {
+  setSysState('正在握手...');
+  queryHandshake().catch(() => {});
+});
+$btnKeyCount.addEventListener('click', () => {
+  queryKeyCount().catch(() => {});
+});
+$btnSysReboot.addEventListener('click', rebootDevice);
+$btnSysReset.addEventListener('click', () => {
+  let options = 0;
+  if ($chkResetKc.checked) options |= SYS_RESET_KC;
+  if ($chkResetRgb.checked) options |= SYS_RESET_RGB;
+  if ($chkResetAdv.checked) options |= SYS_RESET_ADV;
+  if (options === 0) {
+    setSysState('请至少选择一个模块。', 'warn');
+    return;
+  }
+  resetDevice(options, '恢复所选模块');
+});
+$btnSysResetAll.addEventListener('click', () => {
+  resetDevice(SYS_RESET_ALL, '恢复出厂');
 });
 btnConnect.addEventListener('click', connect);
 btnDisconnect.addEventListener('click', disconnect);

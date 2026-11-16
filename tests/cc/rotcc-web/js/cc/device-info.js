@@ -2,10 +2,6 @@
 
 /* ------------------------------------------------------------ 设备信息 */
 
-function formatSwVersion(version) {
-  return `${version} (0x${version.toString(16).padStart(4, '0')})`;
-}
-
 function formatFwVersion64(value) {
   const major = Number((value >> 56n) & 0xffn);
   const minor = Number((value >> 46n) & 0x3ffn);
@@ -38,50 +34,15 @@ function decodeDeviceInfo(payload) {
 }
 
 function decodeUpgradeInfo(payload) {
-  const flags = payload[18];
-  const slotVersion = [readLe16(payload, 8), readLe16(payload, 10)];
   return {
-    protocolVersion: payload[0],
-    activeSlot: payload[1],
-    slotValid: [payload[2] !== 0, payload[3] !== 0],
-    slotRetired: [(flags & 0x08) !== 0, (flags & 0x10) !== 0],
-    slotRecordValid: [(flags & 0x20) !== 0, (flags & 0x40) !== 0],
-    version: readLe16(payload, 4),
-    headerLength: readLe16(payload, 6),
-    slotVersion,
-    slotAppVersion: [readLe16(payload, 24), readLe16(payload, 26)],
-    otpSecImgOffset: readLe16(payload, 12),
-    otpMaxImgLen: readLe16(payload, 14),
-    configuredSlotSize256k: readLe16(payload, 16),
-    remapEnabled: (flags & 0x01) !== 0,
-    bootOtaEnabled: (flags & 0x02) !== 0,
-    bootLayoutMatches: (flags & 0x04) !== 0,
-    exipEnabled: (flags & 0x80) !== 0,
-    firmwareVersion: readLe32(payload, 20)
+    slotCur: payload[0],
+    slotMax: payload[1],
+    slotSize: readLe32(payload, 2),
+    encrypt: payload[6] !== 0
   };
 }
 
 function applyCcDeviceInfo(deviceInfo, upgradeInfo) {
-  const slots = upgradeInfo ? [0, 1].map(index => {
-    const name = `APP${index + 1}`;
-    const notes = [];
-    if (!upgradeInfo.slotValid[index]) notes.push('槽头无效');
-    if (!upgradeInfo.slotRecordValid[index]) notes.push('应用记录无效');
-    if (upgradeInfo.slotRetired[index]) notes.push('已退役');
-    const status = notes.length ? `（${notes.join('，')}）` : '';
-    return `${name} 应用版本 ${upgradeInfo.slotAppVersion[index]}，` +
-      `SW_VERSION=${formatSwVersion(upgradeInfo.slotVersion[index])}${status}`;
-  }) : [];
-
-  const bootMode = !upgradeInfo
-    ? '槽位信息不可用'
-    : upgradeInfo.bootOtaEnabled
-      ? (upgradeInfo.bootLayoutMatches
-        ? `BootROM 双槽布局匹配 (${upgradeInfo.otpSecImgOffset} x 256 KiB)`
-        : `BootROM 布局不匹配 (OTP ${upgradeInfo.otpSecImgOffset} x 256 KiB / ` +
-          `配置 ${upgradeInfo.configuredSlotSize256k} x 256 KiB)`)
-      : 'BootROM 双槽未启用 (OTP SEC_IMG_OFFSET=0)';
-
   const head =
     `PN ${deviceInfo.pn || '--'} · SN ${deviceInfo.sn || '--'} · ` +
     `FW ${formatFwVersion64(deviceInfo.fwVersion)} · ` +
@@ -89,25 +50,19 @@ function applyCcDeviceInfo(deviceInfo, upgradeInfo) {
     `PID 0x${deviceInfo.pid.toString(16).padStart(4, '0')} · ` +
     `HW ${deviceInfo.hwVersion}`;
   const slotsText = upgradeInfo
-    ? `当前 APP${upgradeInfo.activeSlot} · ` +
-      `固件版本 ${upgradeInfo.firmwareVersion} · ` +
-      `SW_VERSION ${formatSwVersion(upgradeInfo.version)}`
+    ? `当前 APP${upgradeInfo.slotCur + 1} · ` +
+      `槽位 ${upgradeInfo.slotMax} × ` +
+      `${Math.round(upgradeInfo.slotSize / 1024)} KiB · ` +
+      `加密 ${upgradeInfo.encrypt ? '是' : '否'}`
     : '';
-  $ccDeviceInfo.textContent = [head, slotsText, ...slots, bootMode]
+
+  $ccDeviceInfo.textContent = [head, slotsText]
     .filter(text => text)
     .join(' · ');
 
-  appendLine(
-    `[CC INFO] ${head}`
-  );
-  if (upgradeInfo) {
-    appendLine(
-      `[CC INFO] 当前 APP${upgradeInfo.activeSlot}，查询协议=v` +
-      `${upgradeInfo.protocolVersion}，SW_VERSION=` +
-      `${formatSwVersion(upgradeInfo.version)}，${slots[0]}，${slots[1]}，` +
-      `${bootMode}，remap=${upgradeInfo.remapEnabled ? 1 : 0} ` +
-      `exip=${upgradeInfo.exipEnabled ? 1 : 0}`
-    );
+  appendLine(`[CC INFO] ${head}`);
+  if (slotsText) {
+    appendLine(`[CC INFO] ${slotsText}`);
   }
 }
 
@@ -133,11 +88,11 @@ async function queryCcDeviceInfo({ silent = false } = {}) {
       let upgradeInfo = null;
       try {
         const payload = await client.readPayload(
-          CC.CMD_UPGRADE, CC.UPGRADE_QUERY, 24, { label: '槽位信息' }
+          CC.CMD_UPGRADE, CC.UPGRADE_INFO, 7, { label: '升级信息' }
         );
         upgradeInfo = decodeUpgradeInfo(payload);
       } catch (error) {
-        appendLine(`[CC INFO] 槽位信息查询失败：${error.message || error}`, 'warn');
+        appendLine(`[CC INFO] 升级信息查询失败：${error.message || error}`, 'warn');
       }
 
       applyCcDeviceInfo(deviceInfo, upgradeInfo);

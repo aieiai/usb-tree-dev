@@ -10,9 +10,7 @@ const CC_RESPONSE_TIMEOUT_MS = 15000;
 const CC_START_TIMEOUT_MS = 60000;
 const CC_END_TIMEOUT_MS = 60000;
 const CC_MAX_RETRIES = 10;
-const UPGRADE_IMAGE_MAGIC = 0xbeaf5aa5;
-const UPGRADE_DEVICE_ID = 0x6750;
-const CC_UI_VERSION = 6;
+const CC_UI_VERSION = 7;
 
 
 const INTERFACE_HINTS = {
@@ -60,6 +58,17 @@ const $kcLayers = document.getElementById('kcLayers');
 const $keyboard = document.getElementById('keyboard');
 const $pickerTabs = document.getElementById('pickerTabs');
 const $pickerGroups = document.getElementById('pickerGroups');
+const $sysProtocol = document.getElementById('sysProtocol');
+const $sysKeyCount = document.getElementById('sysKeyCount');
+const $sysState = document.getElementById('sysState');
+const $btnHandshake = document.getElementById('btnHandshake');
+const $btnKeyCount = document.getElementById('btnKeyCount');
+const $btnSysReboot = document.getElementById('btnSysReboot');
+const $btnSysReset = document.getElementById('btnSysReset');
+const $btnSysResetAll = document.getElementById('btnSysResetAll');
+const $chkResetKc = document.getElementById('chkResetKc');
+const $chkResetRgb = document.getElementById('chkResetRgb');
+const $chkResetAdv = document.getElementById('chkResetAdv');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 
@@ -75,10 +84,11 @@ let firmwareStartedAt = 0;
 let firmwareDurationTimer = 0;
 let firmwareLastDurationMs = 0;
 let ccQueryPromise = null;
+let sysBusy = false;
 let kcBusy = false;
 let kcSelected = null;
 let kcLayerIndex = 0;
-const KC_LAYER_COUNT = 4;
+let kcLayerCount = 4;
 const kcValues = new Map();
 const kcKeyEls = new Map();
 

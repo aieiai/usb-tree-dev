@@ -23,19 +23,12 @@
 
 # 系统信息
 
-### 获取 Rot\-CC 协议版本
-
-|cmd|subcmd|reserve|payload|explain|
-|---|---|---|---|---|
-|0x00|0x00|0x0000|||
-|0x00|0x00|0x0000|0\-3 byte||
-
 ### 设备握手
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x00|0x01|0x0000|||
-|0x00|0x01|0x0000|||
+|0x00|0x01|0x0000||0\-3 byte: Rot\-CC 协议版本|
+|0x00|0x01|0x0000|0\-3 byte|0x00: succeed|
 
 ### 获取设备信息
 
@@ -49,21 +42,21 @@
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
 |0x00|0x03|0x0000|||
-|0x00|0x03|0x0000|||
+|0x00|0x03|0x0000|0\-3 byte|0x00: succeed|
 
 ### 重置
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x00|0x04|0x0000||由4字节组成，每个位都可单独恢复相应模块；0xFFFFFFFF则全局恢复出厂：<br>```C++<br>union {<br>    uint32_t options;<br>    struct {<br>        uint32_t bit_kc : 1;<br>        uint32_t bit_rgb : 1;<br>        uint32_t bit_adv_mt : 1;<br>    };<br>};<br>```|
-|0x00|0x04|0x0000|0\-3 byte|0x00000000: succeed|
+|0x00|0x04|0x0000|0\-3 byte|注：每个位都可单独恢复相应模块；0xFFFFFFFF则全局恢复出厂：<br>```C++<br>union {<br>    uint32_t options;<br>    struct {<br>        uint32_t bit_kc : 1;<br>        uint32_t bit_rgb : 1;<br>        uint32_t bit_adv_mt : 1;<br>    };<br>};<br>```|
+|0x00|0x04|0x0000|0\-3 byte|0x00: succeed|
 
 ### 获取按键数量
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x00|0x04|0x0000||由4字节组成，每个位都可单独恢复相应模块；0xFFFFFFFF则全局恢复出厂：<br>```C++<br>union {<br>    uint32_t options;<br>    struct {<br>        uint32_t bit_kc : 1;<br>        uint32_t bit_rgb : 1;<br>        uint32_t bit_adv_mt : 1;<br>    };<br>};<br>```|
-|0x00|0x04|0x0000|0\-3 byte|0x00000000: succeed|
+|0x00|0x05|0x0000|||
+|0x00|0x05|0x0000|0\-3 byte|返回实际键盘的按键数量|
 
 
 
@@ -71,7 +64,28 @@
 
 # 升级  
 
+### 升级信息
 
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x01|0x00|0x0000|||
+|0x01|0x00|0x0000||```C++<br>struct {<br>    uint8_t  slot_cur;  // 当前槽<br>    uint8_t  slot_max;  // 槽数量<br>    uint32_t slot_size; // 槽大小<br>    uint8_t  encrypt;   // 是否加密<br>};<br>```|
+
+### 请求升级
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x01<br>|0x01<br>|0x0000||```C++<br>struct {<br>    uint32_t req_ty;   // 升级请求类型，1：开始，2：停止，3：完成<br>    uint32_t fw_size;  // 固件大小<br>    uint32_t fw_crc32; // 固件包crc32校验<br>    uint8_t  src_addr; // 源地址<br>    uint8_t  dst_addr; // 目的地址<br>};<br>```|
+|0x01|0x01|0x0000|0\-3 byte|0x00: succeed|
+
+### 传输数据
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x01|0x02|0x0000|||
+|0x01|0x02|0x0000||固件数据传输|
+
+---
 
 # 键码
 
@@ -79,17 +93,40 @@
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x01|0x00|0x0000|||
-|0x01|0x00|0x0000|`kc_t` byte|各类键码结构定义，由4字节组成：<br>```C++<br>// key code type<br>enum { KCT_KBD = 0x00, KCT_SYS, KCT_CSM, KCT_ADV, KCT_MS, KCT_GP, KCT_FN, KCT_MAX };<br>// function customization type<br>enum { FN_UT = 0x00, FN_RGB, FN_BT, FN_RADIO, FN_DISP, FN_SHCT, FN_MAX };<br>// key code<br>union __attribute__((aligned(4))) {<br>    uint32_t code;<br>    struct __attribute__((packed)) {<br>        uint32_t lk: 1; // Lock<br>        uint32_t ty: 6; // Easy to search/query<br>        uint32_t rv: 25;<br>    };<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 10; uint32_t co: 16; } csm; // Consumer<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 13; uint32_t co: 8;  } adv; // Advanced<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } ms;  // Mouse<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } gp;  // Gamepad<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t fy: 5;  uint32_t co: 16; } fn;  // Function customization<br>};<br>```<br>|
+|0x02|0x00|0x0000|||
+|0x02|0x00|0x0000|`kc_t` byte|各类键码结构定义，由4字节组成：<br>```C++<br>// key code type<br>enum { KCT_KBD = 0x00, KCT_SYS, KCT_CSM, KCT_ADV, KCT_MS, KCT_GP, KCT_FN, KCT_MAX };<br>// function customization type<br>enum { FN_UT = 0x00, FN_RGB, FN_BT, FN_RADIO, FN_DISP, FN_SHCT, FN_MAX };<br>// key code<br>union __attribute__((aligned(4))) {<br>    uint32_t code;<br>    struct __attribute__((packed)) {<br>        uint32_t lk: 1; // Lock<br>        uint32_t ty: 6; // Easy to search/query<br>        uint32_t rv: 25;<br>    };<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 10; uint32_t co: 16; } csm; // Consumer<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 13; uint32_t co: 8;  } adv; // Advanced<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } ms;  // Mouse<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } gp;  // Gamepad<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t fy: 5;  uint32_t co: 16; } fn;  // Function customization<br>};<br>```<br>|
 
 ### 设置键码
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x01|0x01|0x0000|`kc_t` byte|格式见 `rotkc_t`|
-|0x01|0x01|0x0000|0\-3 byte|0x00000000: succeed|
+|0x02|0x01|0x0000|`kc_t` byte|格式见 `rotkc_t`|
+|0x02|0x01|0x0000|0\-3 byte|0x00: succeed|
+
+### 获取映射层数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x02|0x0000|||
+|0x02|0x02|0x0000|0\-3 byte|返回最大支持的映射层数|
+
+### 获取活动映射层
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x03|0x0000|||
+|0x02|0x03|0x0000|0\-3 byte|返回当前活动层|
+
+### 设置活动映射层
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x04|0x0000|0\-3 byte|当前活动层|
+|0x02|0x04|0x0000|0\-3 byte|0x00: succeed|
 
 
+
+---
 
 # 高级键
 

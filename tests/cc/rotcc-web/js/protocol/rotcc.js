@@ -4,20 +4,24 @@
 const CC = Object.freeze({
   HEADER_SIZE: 4,
   CMD_SYS: 0x00,
-  CMD_KC: 0x01,
-  CMD_UPGRADE: 0x02,
-  SYS_VERSION: 0x00,
+  CMD_UPGRADE: 0x01,
+  CMD_KC: 0x02,
   SYS_HANDSHAKE: 0x01,
   SYS_INFO: 0x02,
   SYS_REBOOT: 0x03,
   SYS_RESET: 0x04,
+  SYS_KEY_COUNT: 0x05,
   KC_GET: 0x00,
   KC_SET: 0x01,
-  UPGRADE_QUERY: 0x00,
-  UPGRADE_START: 0x01,
+  KC_LAYER_COUNT: 0x02,
+  KC_ACTIVE_LAYER: 0x03,
+  KC_SET_ACTIVE_LAYER: 0x04,
+  UPGRADE_INFO: 0x00,
+  UPGRADE_REQUEST: 0x01,
   UPGRADE_DATA: 0x02,
-  UPGRADE_END: 0x03,
-  UPGRADE_ABORT: 0x04,
+  UPGRADE_REQ_START: 1,
+  UPGRADE_REQ_STOP: 2,
+  UPGRADE_REQ_FINISH: 3,
   MIN_FRAME_SIZE: 64,
   MAX_FRAME_SIZE: 1024
 });
@@ -45,7 +49,19 @@ function parseCcMessage(payload) {
 
 
 function ccMaxDataSize(packetSize) {
-  return packetSize - RG.HEADER_SIZE - CC.HEADER_SIZE - 2;
+  return packetSize - RG.HEADER_SIZE - CC.HEADER_SIZE;
+}
+
+/* 标准 CRC-32（poly 0xEDB88320，初值/结果取反），与设备 upgrade 模块一致。 */
+function ccCrc32(data) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+  }
+  return (~crc) >>> 0;
 }
 
 function ccStatusText(status) {

@@ -37,6 +37,7 @@
   <nav id="sidebar">
     <button class="nav-btn active" data-view="remap">改键</button>
     <button class="nav-btn" data-view="upgrade">升级</button>
+    <button class="nav-btn" data-view="system">系统</button>
     <button class="nav-btn" data-view="debug">Debug</button>
   </nav>
   <main id="content">
@@ -67,8 +68,8 @@
         </div>
         <div class="hint">
           走 Rot-Gen 帧（12 字节头，src=0/DST=1，options 请求位）+ Rot-CC 消息
-          （cmd/subcmd/reserve/payload）。升级文件需包含 16 字节官方升级头；
-          降级兼容由设备固件处理，网页原样发送文件。
+          （cmd/subcmd/reserve/payload）。升级直接选择原始固件 bin：START 请求
+          携带 fw_size 与 fw_crc32，DATA 发送固件数据，FINISH 校验通过后设备重启。
         </div>
         <div class="device-info-row">
           <span id="ccDeviceInfo">设备信息：--</span>
@@ -86,6 +87,35 @@
             <div id="firmwareMeta">0 B / 0 B</div>
             <span id="firmwareDuration">总用时 --</span>
           </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-system" class="view">
+      <section id="sysPanel" class="interface">
+        <div class="interface-head">
+          <strong class="grow">Rot-CC 系统</strong>
+          <span id="sysProtocol" class="muted">协议版本 --</span>
+        </div>
+        <div class="hint">
+          系统命令：握手读取协议版本，按键数量用于校验当前键盘，重置可分别恢复改键、
+          灯光与高级键模块，恢复出厂等价于下发 0xFFFFFFFF。
+        </div>
+        <div class="upgrade-body">
+          <div class="upgrade-row">
+            <button id="btnHandshake" class="secondary" disabled>握手</button>
+            <button id="btnKeyCount" class="secondary" disabled>按键数量</button>
+            <span id="sysKeyCount" class="muted">--</span>
+            <button id="btnSysReboot" class="secondary" disabled>重启设备</button>
+          </div>
+          <div class="upgrade-row">
+            <label><input id="chkResetKc" type="checkbox" checked> 改键</label>
+            <label><input id="chkResetRgb" type="checkbox"> 灯光</label>
+            <label><input id="chkResetAdv" type="checkbox"> 高级键</label>
+            <button id="btnSysReset" class="secondary" disabled>恢复所选</button>
+            <button id="btnSysResetAll" class="danger" disabled>恢复出厂</button>
+          </div>
+          <div id="sysState" class="hint">连接后可执行系统命令。</div>
         </div>
       </section>
     </section>
@@ -119,6 +149,7 @@
   <script src="./js/cc/endpoint.js"></script>
   <script src="./js/cc/request.js"></script>
   <script src="./js/cc/device-info.js"></script>
+  <script src="./js/cc/system.js"></script>
   <script src="./js/keymap/data.js"></script>
   <script src="./js/keymap/picker.js"></script>
   <script src="./js/keymap/keyboard.js"></script>

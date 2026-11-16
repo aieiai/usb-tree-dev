@@ -12,34 +12,44 @@ extern "C" {
 
 
 /* Rot-CC payload: cmd(1) subcmd(1) reserve(2) payload(n). */
-#define ROTCC_PROTO_VERSION     (1U)
-#define ROTCC_MSG_HEADER_SIZE   (4U)
+#define ROTCC_PROTO_VERSION         (1U)
+#define ROTCC_MSG_HEADER_SIZE       (4U)
+#define ROTCC_UPGRADE_INFO_LEN      (7U)
+#define ROTCC_UPGRADE_REQUEST_LEN   (14U)
 
 enum {
     ROTCC_CMD_SYS = 0x00,
-    ROTCC_CMD_KC = 0x01,
-    ROTCC_CMD_UPGRADE = 0x02,
+    ROTCC_CMD_UPGRADE = 0x01,
+    ROTCC_CMD_KC = 0x02,
 };
 
 enum {
-    ROTCC_SYS_VERSION = 0x00,
-    ROTCC_SYS_HANDSHAKE,
-    ROTCC_SYS_INFO,
-    ROTCC_SYS_REBOOT,
-    ROTCC_SYS_RESET,
+    ROTCC_SYS_HANDSHAKE = 0x01,
+    ROTCC_SYS_INFO = 0x02,
+    ROTCC_SYS_REBOOT = 0x03,
+    ROTCC_SYS_RESET = 0x04,
+    ROTCC_SYS_KEY_COUNT = 0x05,
 };
 
 enum {
     ROTCC_KC_GET = 0x00,
-    ROTCC_KC_SET,
+    ROTCC_KC_SET = 0x01,
+    ROTCC_KC_LAYER_COUNT = 0x02,
+    ROTCC_KC_ACTIVE_LAYER = 0x03,
+    ROTCC_KC_SET_ACTIVE_LAYER = 0x04,
 };
 
 enum {
-    ROTCC_UPGRADE_QUERY = 0x00,
-    ROTCC_UPGRADE_START,
-    ROTCC_UPGRADE_DATA,
-    ROTCC_UPGRADE_END,
-    ROTCC_UPGRADE_ABORT,
+    ROTCC_UPGRADE_INFO = 0x00,
+    ROTCC_UPGRADE_REQUEST = 0x01,
+    ROTCC_UPGRADE_DATA = 0x02,
+};
+
+/* Request types carried by ROTCC_UPGRADE_REQUEST. */
+enum {
+    ROTCC_UPGRADE_REQ_START = 1,
+    ROTCC_UPGRADE_REQ_STOP = 2,
+    ROTCC_UPGRADE_REQ_FINISH = 3,
 };
 
 /* reset options, see the Rot-CC specification */

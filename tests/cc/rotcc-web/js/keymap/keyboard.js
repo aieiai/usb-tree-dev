@@ -80,7 +80,7 @@ function selectKey(index) {
 }
 
 async function readKeycode(index) {
-  if (kcBusy || isFirmwareActive()) return;
+  if (kcBusy || sysBusy || isFirmwareActive()) return;
   const layer = kcLayerIndex;
   const target = findCcTarget();
   if (!target) {
@@ -115,7 +115,7 @@ async function readKeycode(index) {
 }
 
 async function readKeycodeLayer() {
-  if (kcBusy || isFirmwareActive()) return;
+  if (kcBusy || sysBusy || isFirmwareActive()) return;
   const layer = kcLayerIndex;
   const target = findCcTarget();
   if (!target) {
@@ -151,7 +151,7 @@ async function readKeycodeLayer() {
 
 /* 连接后自动读取当前层的全部键码，已缓存则跳过。 */
 function autoReadKeymap() {
-  if (!device?.opened || !links.length || isFirmwareActive()) return;
+  if (!device?.opened || !links.length || sysBusy || isFirmwareActive()) return;
   const layer = kcLayerIndex;
   if (kcValues.has(kcCacheKey(layer, 0))) return;
   readKeycodeLayer();
@@ -159,7 +159,7 @@ function autoReadKeymap() {
 
 /* 把选中的键码写到当前键盘选中的按键上。 */
 async function assignKeycode(code, label) {
-  if (kcBusy || isFirmwareActive()) return;
+  if (kcBusy || sysBusy || isFirmwareActive()) return;
   const layer = kcLayerIndex;
   if (kcSelected === null) {
     appendLine('[KC] 请先在键盘上点选一个按键，再选择键码', 'warn');

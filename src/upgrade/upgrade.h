@@ -8,7 +8,7 @@
 #include "rotsta.h"
 
 
-/* Wire format used by the official HPMicro OTA example. */
+/* Official 16-byte header stored at the start of the IMGINFO page. */
 #define UPGRADE_IMAGE_HEADER_MAGIC  (0xbeaf5aa5UL)
 #define UPGRADE_DEVICE_ID           (0x6750UL)
 #define UPGRADE_IMAGE_MAX_SIZE      (FDB_APP_IMG_SIZ)
@@ -43,7 +43,7 @@ typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t device;
     uint32_t len;
-    uint32_t checksum; /* 32-bit byte sum, compatible with the official example. */
+    uint32_t checksum; /* 32-bit byte sum of the stored image. */
 } upgrade_image_header_t;
 
 
@@ -80,7 +80,6 @@ typedef struct {
     uint32_t image_offset;
     uint32_t image_size;
     uint32_t received_size;
-    uint32_t expected_checksum;
     uint32_t checksum;
     rotsta_t last_result;
 } upgrade_status_t;
@@ -108,7 +107,7 @@ typedef struct {
 
 
 _Static_assert(FDB_APP_IMG_NUM == 2, "upgrade module requires two application slots");
-_Static_assert(sizeof(upgrade_image_header_t) == 16U, "wire image header must stay 16 bytes");
+_Static_assert(sizeof(upgrade_image_header_t) == 16U, "IMGINFO header must stay 16 bytes");
 _Static_assert(sizeof(upgrade_record_t) == 40U, "upgrade record layout changed unexpectedly");
 
 
@@ -121,27 +120,20 @@ rotsta_t upgrade_get_active_slot(uint8_t *slot);
 rotsta_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
 
 /*
- * Start a transactional upgrade. The target image area is erased here, while
- * the current slot remains untouched until the target has been fully verified.
+ * Start a transactional upgrade. The target slot is erased here while the
+ * running slot stays untouched. image_crc32 is the standard CRC-32 of the
+ * complete image that will be streamed through upgrade_write().
  */
-rotsta_t upgrade_begin(const upgrade_image_header_t *header);
+rotsta_t upgrade_begin(uint32_t image_size, uint32_t image_crc32);
 
 /* Strict write interface: len may be unaligned, but must not exceed the image. */
 rotsta_t upgrade_write(const void *data, uint32_t len);
 
 /*
- * Finish the image, verify its byte-sum and boot header, then publish a CRC
- * protected record in the target slot's verify page.
+ * Finish the image, verify its CRC-32 and boot header, then publish the
+ * official image header plus a CRC protected record in the target IMGINFO page.
  */
 rotsta_t upgrade_finish(void);
-
-/*
- * Compatibility stream interface for the official packet format:
- * the first call must contain the complete 16-byte image header. Later
- * XMODEM padding after the declared image length is ignored.
- */
-rotsta_t upgrade_feed(const void *data, uint32_t len, bool *image_complete);
-rotsta_t upgrade_auto_write(const void *data, uint32_t len, bool *image_complete);
 
 /* Abort the current receive session. The inactive slot can be retried safely. */
 rotsta_t upgrade_abort(void);

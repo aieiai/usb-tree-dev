@@ -147,6 +147,8 @@ function destroyLinks() {
     for (const state of link.reads.values()) state.active = false;
   }
   links = [];
+  kcValues.clear();
+  kcSelected = null;
   renderInterfaces();
   updateCcPacketInfo();
 }
@@ -201,10 +203,26 @@ async function connect() {
       const auto = Boolean(INTERFACE_HINTS[link.number]?.auto);
       if (auto || $chkAll.checked) await claimLink(link);
     }
-    /* 连接后先查设备信息，再自动读取当前层的全部键码 */
-    queryCcDeviceInfo({ silent: true })
-      .catch(() => {})
-      .finally(() => { autoReadKeymap(); });
+    /* 连接后依次查询设备信息、握手、按键数量，再读取当前层键码 */
+    (async () => {
+      try {
+        await queryCcDeviceInfo({ silent: true });
+      } catch (error) {
+        /* 设备信息失败不影响后续命令 */
+      }
+      try {
+        await queryHandshake({ silent: true });
+      } catch (error) {
+        /* 旧固件可能不支持新协议 */
+      }
+      try {
+        await queryKeyCount({ silent: true });
+      } catch (error) {
+        /* 按键数量仅用于展示/校验 */
+      }
+      await queryKeymapInfo();
+      autoReadKeymap();
+    })();
     refreshControls();
   } catch (error) {
     appendLine(`[连接失败] ${error.message || error}`, 'err');

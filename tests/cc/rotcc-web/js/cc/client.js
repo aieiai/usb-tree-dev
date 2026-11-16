@@ -100,7 +100,8 @@ class CcClient {
       reserve = 0,
       payload = new Uint8Array(),
       label = `cmd=0x${cmd.toString(16)} subcmd=0x${subcmd.toString(16)}`,
-      timeoutMs = CC_RESPONSE_TIMEOUT_MS
+      timeoutMs = CC_RESPONSE_TIMEOUT_MS,
+      retries = CC_MAX_RETRIES
     } = options;
 
     const frame = makeRotGenFrame(packCcMessage(cmd, subcmd, reserve, payload));
@@ -109,7 +110,7 @@ class CcClient {
     }
 
     let lastError = null;
-    for (let attempt = 1; attempt <= CC_MAX_RETRIES; attempt++) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
       this.checkCancelled();
       await this.write(frame, `${label}（第 ${attempt} 次）`);
       try {
@@ -117,11 +118,13 @@ class CcClient {
       } catch (error) {
         if (this.cancelled || error instanceof CcAbortError) throw error;
         lastError = error;
-        this.log(
-          `${label} 失败，重试 ${attempt}/${CC_MAX_RETRIES}：` +
-          `${error.message || error}`,
-          'warn'
-        );
+        if (attempt < retries) {
+          this.log(
+            `${label} 失败，重试 ${attempt}/${retries}：` +
+            `${error.message || error}`,
+            'warn'
+          );
+        }
       }
     }
     throw lastError || new Error(`${label} 发送失败`);
@@ -157,10 +160,13 @@ class CcClient {
 }
 
 class CcUpgradeClient extends CcClient {
-  constructor({ bytes, sessionId, packetSize, write, log, onProgress }) {
+  constructor({ bytes, crc32, srcAddr = 0, dstAddr = 1,
+                packetSize, write, log, onProgress }) {
     super({ packetSize, write, log });
     this.bytes = bytes;
-    this.sessionId = sessionId;
+    this.crc32 = crc32 >>> 0;
+    this.srcAddr = srcAddr;
+    this.dstAddr = dstAddr;
     this.maxDataSize = ccMaxDataSize(packetSize);
     if (this.maxDataSize < 1) {
       throw new Error(`端点 MPS ${packetSize} 不足以承载升级数据帧`);
@@ -168,45 +174,48 @@ class CcUpgradeClient extends CcClient {
     this.onProgress = onProgress;
   }
 
-  async run() {
-    const startPayload = new Uint8Array(8);
-    writeLe32(startPayload, 0, this.bytes.length);
-    writeLe32(startPayload, 4, this.sessionId);
+  requestPayload(reqTy) {
+    const payload = new Uint8Array(14);
+    writeLe32(payload, 0, reqTy);
+    writeLe32(payload, 4, this.bytes.length);
+    writeLe32(payload, 8, this.crc32);
+    payload[12] = this.srcAddr;
+    payload[13] = this.dstAddr;
+    return payload;
+  }
 
+  async run() {
     this.log(
-      `开始升级会话 0x${this.sessionId.toString(16).padStart(8, '0')}，` +
-      `${this.bytes.length} 字节；端点 MPS=${this.packetSize} B，` +
+      `开始升级：${this.bytes.length} 字节，CRC32=0x` +
+      `${this.crc32.toString(16).padStart(8, '0')}；端点 MPS=${this.packetSize} B，` +
       `单帧数据=${this.maxDataSize} B`
     );
-    await this.statusRequest(CC.CMD_UPGRADE, CC.UPGRADE_START, {
-      payload: startPayload,
+    await this.statusRequest(CC.CMD_UPGRADE, CC.UPGRADE_REQUEST, {
+      payload: this.requestPayload(CC.UPGRADE_REQ_START),
       label: 'START',
       timeoutMs: CC_START_TIMEOUT_MS
     });
 
     let offset = 0;
-    let seq = 0;
     while (offset < this.bytes.length) {
       this.checkCancelled();
       const end = Math.min(offset + this.maxDataSize, this.bytes.length);
       const chunk = this.bytes.subarray(offset, end);
-      const payload = new Uint8Array(2 + chunk.length);
-      writeLe16(payload, 0, seq);
-      payload.set(chunk, 2);
 
+      /* DATA 不重试：设备没有序号，重发同一帧会导致镜像重复写入。 */
       await this.statusRequest(CC.CMD_UPGRADE, CC.UPGRADE_DATA, {
-        payload,
-        label: `DATA seq=${seq} @ ${offset}`
+        payload: chunk,
+        label: `DATA @ ${offset}`,
+        retries: 1
       });
       offset = end;
       this.onProgress(offset, this.bytes.length);
-      seq = (seq + 1) & 0xffff;
     }
 
-    this.log('文件数据已全部确认，请求设备校验并提交');
-    await this.statusRequest(CC.CMD_UPGRADE, CC.UPGRADE_END, {
-      payload: new Uint8Array(),
-      label: 'END',
+    this.log('固件数据已全部确认，请求设备校验并提交');
+    await this.statusRequest(CC.CMD_UPGRADE, CC.UPGRADE_REQUEST, {
+      payload: this.requestPayload(CC.UPGRADE_REQ_FINISH),
+      label: 'FINISH',
       timeoutMs: CC_END_TIMEOUT_MS
     });
     this.onProgress(this.bytes.length, this.bytes.length);
