@@ -11,24 +11,42 @@ extern "C" {
 
 #include "rotsta.h"
 
-
 /*
- * Rot-Gen frame:
- *   0      sof 'R'
- *   1      version
- *   2      options
- *   3      src_addr
- *   4      dst_addr
- *   5..6   payload_length
- *   7..8   secret_key
- *   9      header_crc8   over byte 0..8
- *   10..11 package_crc16 over byte 0..9 and the payload
- *   12..N  payload
+ * ,----------------------------------------------------------------------------------------------------------------------------------------------------------.
+ * | Rot-Gen frame:                                                                                                                                           |
+ * |----------+------------+------------+-------------+-------------+-------------------+---------------+----------------+------------------+-----------------|
+ * | sof 'R'  |   version  |   options  |   src_addr  |   dst_addr  |   payload_length  |   secret_key  |   header_crc8  |   package_crc16  |   payload ...   |
+ * |----------|------------|------------|-------------|-------------|-------------------|---------------|----------------|------------------|-----------------|
+ * |    0     |     1      |     2      |      3      |      4      |        5..6       |     7..8      |        9       |      10..11      |      12..N      |
+ * `----------------------------------------------------------------------------------------------------------------------------------------------------------'
  */
-#define ROTGEN_SOF                  (0x52U)
-#define ROTGEN_VERSION              (1U)
-#define ROTGEN_HEADER_SIZE          (12U)
-#define ROTGEN_SECRET_KEY           (0U)
+
+#define ROTGEN_SOF_IDX          (0U)
+#define ROTGEN_SOF_SIZE         (1U)
+#define ROTGEN_VER_IDX          (ROTGEN_SOF_IDX + ROTGEN_SOF_SIZE)
+#define ROTGEN_VER_SIZE         (1U)
+#define ROTGEN_OPT_IDX          (ROTGEN_VER_IDX + ROTGEN_VER_SIZE)
+#define ROTGEN_OPT_SIZE         (1U)
+#define ROTGEN_SRC_IDX          (ROTGEN_OPT_IDX + ROTGEN_OPT_SIZE)
+#define ROTGEN_SRC_SIZE         (1U)
+#define ROTGEN_DST_IDX          (ROTGEN_SRC_IDX + ROTGEN_SRC_SIZE)
+#define ROTGEN_DST_SIZE         (1U)
+#define ROTGEN_PLD_LEN_IDX      (ROTGEN_DST_IDX + ROTGEN_DST_SIZE)
+#define ROTGEN_PLD_LEN_SIZ      (2U)
+#define ROTGEN_KEK_IDX          (ROTGEN_PLD_LEN_IDX + ROTGEN_PLD_LEN_SIZ)
+#define ROTGEN_KEK_SIZE         (2U)
+#define ROTGEN_HDR_CRC8_IDX     (ROTGEN_KEK_IDX + ROTGEN_KEK_SIZE)
+#define ROTGEN_HDR_CRC8_SIZ     (1U)
+#define ROTGEN_PKG_CRC16_IDX    (ROTGEN_HDR_CRC8_IDX + ROTGEN_HDR_CRC8_SIZ)
+#define ROTGEN_PKG_CRC16_SIZ    (2U)
+#define ROTGEN_PLD_IDX          (ROTGEN_PKG_CRC16_IDX + ROTGEN_PKG_CRC16_SIZ)
+
+#define ROTGEN_SOF              ('R')
+#define ROTGEN_VER              (1U)
+#define ROTGEN_KEK              (0U)
+#define ROTGEN_HEADER_SIZE      (12U)
+
+_Static_assert((ROTGEN_PLD_IDX) == ROTGEN_HEADER_SIZE, "");
 
 /* Upper bound for one frame, the transport decides the real buffer size. */
 #ifndef ROTGEN_MAX_FRAME_SIZE

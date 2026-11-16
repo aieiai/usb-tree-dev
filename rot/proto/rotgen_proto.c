@@ -7,10 +7,8 @@
 #define ROTGEN_CRC8_POLY        (0x07U)
 #define ROTGEN_CRC16_POLY       (0x1021U)
 
-_Static_assert(ROTGEN_MAX_FRAME_SIZE > ROTGEN_HEADER_SIZE,
-               "frame buffer must hold the Rot-Gen header");
-_Static_assert(ROTGEN_MAX_FRAME_SIZE <= 0xFFFFU,
-               "frame size must fit the 16-bit payload length field");
+_Static_assert(ROTGEN_MAX_FRAME_SIZE > ROTGEN_HEADER_SIZE, "frame buffer must hold the Rot-Gen header");
+_Static_assert(ROTGEN_MAX_FRAME_SIZE <= 0xFFFFU, "frame size must fit the 16-bit payload length field");
 
 
 static uint16_t _get_le16(const uint8_t *data)
@@ -29,8 +27,7 @@ static uint16_t _crc16_update(uint16_t crc, const uint8_t *data, uint32_t len)
     for (uint32_t i = 0U; i < len; i++) {
         crc ^= (uint16_t)data[i] << 8;
         for (uint32_t bit = 0U; bit < 8U; bit++) {
-            crc = (crc & 0x8000U) ? (uint16_t)((crc << 1) ^ ROTGEN_CRC16_POLY)
-                                  : (uint16_t)(crc << 1);
+            crc = (crc & 0x8000U) ? (uint16_t)((crc << 1) ^ ROTGEN_CRC16_POLY) : (uint16_t)(crc << 1);
         }
     }
     return crc;
@@ -38,17 +35,17 @@ static uint16_t _crc16_update(uint16_t crc, const uint8_t *data, uint32_t len)
 
 static uint16_t _frame_len(const uint8_t *header)
 {
-    return (uint16_t)(ROTGEN_HEADER_SIZE + _get_le16(&header[5]));
+    return (uint16_t)(ROTGEN_HEADER_SIZE + _get_le16(&header[ROTGEN_PLD_LEN_IDX]));
 }
 
 static bool _header_valid(const rotgen_t *g)
 {
     const uint8_t *header = g->rx_buf;
 
-    if ((header[0] != ROTGEN_SOF) || (header[1] != ROTGEN_VERSION)) {
+    if ((header[ROTGEN_SOF_IDX] != ROTGEN_SOF) || (header[ROTGEN_VER_IDX] != ROTGEN_VER)) {
         return false;
     }
-    if (rotgen_crc8(header, ROTGEN_HEADER_SIZE - 3U) != header[ROTGEN_HEADER_SIZE - 3U]) {
+    if (rotgen_crc8(header, ROTGEN_HDR_CRC8_IDX) != header[ROTGEN_HDR_CRC8_IDX]) {
         return false;
     }
     return _frame_len(header) <= g->rx_cap;
@@ -65,23 +62,23 @@ static void _resync(rotgen_t *g)
 static void _deliver(rotgen_t *g)
 {
     rotgen_frame_t frame;
-    uint16_t payload_len = _get_le16(&g->rx_buf[5]);
-    uint16_t crc = _get_le16(&g->rx_buf[10]);
+    uint16_t payload_len = _get_le16(&g->rx_buf[ROTGEN_PLD_LEN_IDX]);
+    uint16_t crc = _get_le16(&g->rx_buf[ROTGEN_PKG_CRC16_IDX]);
     uint16_t calc;
 
-    calc = _crc16_update(0U, g->rx_buf, 10U);
-    calc = _crc16_update(calc, &g->rx_buf[ROTGEN_HEADER_SIZE], payload_len);
+    calc = _crc16_update(0U, g->rx_buf, (ROTGEN_HEADER_SIZE - ROTGEN_PKG_CRC16_SIZ));
+    calc = _crc16_update(calc, &g->rx_buf[ROTGEN_PLD_IDX], payload_len);
     if (crc != calc) {
         g->errors++;
         return;
     }
 
-    frame.version = g->rx_buf[1];
-    frame.options = g->rx_buf[2];
-    frame.src = g->rx_buf[3];
-    frame.dst = g->rx_buf[4];
+    frame.version = g->rx_buf[ROTGEN_VER_IDX];
+    frame.options = g->rx_buf[ROTGEN_OPT_IDX];
+    frame.src = g->rx_buf[ROTGEN_SRC_IDX];
+    frame.dst = g->rx_buf[ROTGEN_DST_IDX];
     frame.payload_len = payload_len;
-    frame.payload = &g->rx_buf[ROTGEN_HEADER_SIZE];
+    frame.payload = &g->rx_buf[ROTGEN_PLD_IDX];
 
     if ((frame.dst != g->addr) && ((frame.options & ROTGEN_OPT_BROADCAST) == 0U)) {
         return;
@@ -91,8 +88,7 @@ static void _deliver(rotgen_t *g)
     }
 }
 
-bool rotgen_init(rotgen_t *g, void *rx_buf, uint16_t rx_buf_size, uint8_t addr,
-                 rotgen_send_fn_t send, rotgen_frame_fn_t on_frame, void *ctx)
+bool rotgen_init(rotgen_t *g, void *rx_buf, uint16_t rx_buf_size, uint8_t addr, rotgen_send_fn_t send, rotgen_frame_fn_t on_frame, void *ctx)
 {
     if ((g == NULL) || (rx_buf == NULL) || (rx_buf_size <= ROTGEN_HEADER_SIZE)) {
         return false;
@@ -156,8 +152,7 @@ void rotgen_feed(rotgen_t *g, const void *data, uint16_t len)
     }
 }
 
-rotsta_t rotgen_send(rotgen_t *g, uint8_t options, uint8_t dst,
-                     const void *payload, uint16_t payload_len)
+rotsta_t rotgen_send(rotgen_t *g, uint8_t options, uint8_t dst, const void *payload, uint16_t payload_len)
 {
     uint8_t frame[ROTGEN_MAX_FRAME_SIZE];
     uint16_t total = (uint16_t)(ROTGEN_HEADER_SIZE + payload_len);
@@ -173,21 +168,21 @@ rotsta_t rotgen_send(rotgen_t *g, uint8_t options, uint8_t dst,
         return rotsta_invalid_argument;
     }
 
-    frame[0] = ROTGEN_SOF;
-    frame[1] = ROTGEN_VERSION;
-    frame[2] = options;
-    frame[3] = g->addr;
-    frame[4] = dst;
-    _put_le16(&frame[5], payload_len);
-    _put_le16(&frame[7], ROTGEN_SECRET_KEY);
-    frame[9] = rotgen_crc8(frame, ROTGEN_HEADER_SIZE - 3U);
+    frame[ROTGEN_SOF_IDX] = ROTGEN_SOF;
+    frame[ROTGEN_VER_IDX] = ROTGEN_VER;
+    frame[ROTGEN_OPT_IDX] = options;
+    frame[ROTGEN_SRC_IDX] = g->addr;
+    frame[ROTGEN_DST_IDX] = dst;
+    _put_le16(&frame[ROTGEN_KEK_IDX], ROTGEN_KEK);
+    _put_le16(&frame[ROTGEN_PLD_LEN_IDX], payload_len);
+    frame[ROTGEN_HDR_CRC8_IDX] = rotgen_crc8(frame, ROTGEN_HDR_CRC8_IDX);
     if (payload_len != 0U) {
-        memcpy(&frame[ROTGEN_HEADER_SIZE], payload, payload_len);
+        memcpy(&frame[ROTGEN_PLD_IDX], payload, payload_len);
     }
 
-    crc = _crc16_update(0U, frame, 10U);
-    crc = _crc16_update(crc, &frame[ROTGEN_HEADER_SIZE], payload_len);
-    _put_le16(&frame[10], crc);
+    crc = _crc16_update(0U, frame, (ROTGEN_HEADER_SIZE - ROTGEN_PKG_CRC16_SIZ));
+    crc = _crc16_update(crc, &frame[ROTGEN_PLD_IDX], payload_len);
+    _put_le16(&frame[ROTGEN_PKG_CRC16_IDX], crc);
 
     return g->send(frame, total, g->ctx);
 }
@@ -199,8 +194,7 @@ uint8_t rotgen_crc8(const uint8_t *data, uint32_t len)
     for (uint32_t i = 0U; i < len; i++) {
         crc ^= data[i];
         for (uint32_t bit = 0U; bit < 8U; bit++) {
-            crc = (crc & 0x80U) ? (uint8_t)((crc << 1) ^ ROTGEN_CRC8_POLY)
-                                : (uint8_t)(crc << 1);
+            crc = (crc & 0x80U) ? (uint8_t)((crc << 1) ^ ROTGEN_CRC8_POLY) : (uint8_t)(crc << 1);
         }
     }
     return crc;

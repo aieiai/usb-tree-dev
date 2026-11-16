@@ -1,0 +1,483 @@
+  :root {
+    color-scheme: dark;
+    --bg: #0d1115;
+    --panel: #151b21;
+    --panel2: #1b232b;
+    --line: #2a3540;
+    --text: #d7e0e8;
+    --muted: #8b98a5;
+    --accent: #38b2ac;
+    --blue: #2b6cb0;
+    --red: #e53e3e;
+    --green: #38a169;
+    --font-mono: "Cascadia Mono", Consolas, "Sarasa Mono SC", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 var(--font-mono);
+  }
+  header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 12px 0 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  button, select, input {
+    font: inherit;
+  }
+  button {
+    border: 0;
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: #fff;
+    background: var(--blue);
+    cursor: pointer;
+  }
+  button.secondary { background: #394653; }
+  button.danger { background: #7b2d2d; }
+  button:disabled {
+    color: #7f8a95;
+    background: #303840;
+    cursor: not-allowed;
+  }
+  input, select {
+    min-width: 0;
+    padding: 6px 8px;
+    color: var(--text);
+    background: #0a0e12;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  label { color: var(--muted); }
+  #status {
+    flex: none;
+    padding: 7px 14px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  #status b { color: var(--accent); font-weight: normal; }
+  #app {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+  }
+  #sidebar {
+    flex: 0 0 104px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 8px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  .nav-btn {
+    padding: 9px 12px;
+    text-align: left;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .nav-btn:hover { color: var(--text); background: var(--panel2); }
+  .nav-btn.active {
+    color: var(--accent);
+    background: #143038;
+    border-color: #1f4b52;
+  }
+  #content {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    padding: 10px;
+  }
+  .view {
+    display: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+  }
+  .view.active { display: flex; }
+  #view-debug { overflow: hidden; }
+  /* 改键页上 40%、下 60%，窗口过矮时整页滚动 */
+  #view-remap { overflow-y: auto; }
+  #view-remap > .interface { min-height: 0; }
+  #view-remap > .keyboard-card { flex: 4 1 0; min-height: 120px; }
+  #view-remap > .interface:not(.keyboard-card) { flex: 6 1 0; min-height: 200px; }
+  #layout-bottom {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    gap: 10px;
+  }
+  #left {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    overflow-y: auto;
+  }
+  /* 卡片保持内容高度，超出时由 #left 滚动，避免被 flex 压缩后裁切 */
+  #left > * { flex: 0 0 auto; }
+  #interfaces {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .interface {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .interface-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel2);
+  }
+  .interface-head strong { font-size: 14px; }
+  .grow { flex: 1; }
+  .muted { color: var(--muted); }
+  .hint {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0 10px 7px;
+  }
+  .claim {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .claim.ok { color: var(--accent); }
+  .claim.fail { color: #fc8181; }
+  .endpoints { padding: 4px 10px 10px; }
+  .endpoint {
+    padding: 8px 0;
+    border-top: 1px solid #222c35;
+  }
+  .endpoint:first-child { border-top: 0; }
+  .endpoint-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .endpoint-name { flex: 1 1 170px; min-width: 0; }
+  .endpoint-name b { color: var(--accent); font-weight: normal; }
+  .read-state {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+  }
+  .upgrade-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px 10px;
+  }
+  .upgrade-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .upgrade-row input[type="file"] { flex: 1 1 200px; min-width: 0; }
+  .kc-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px 10px;
+  }
+  /* 键盘卡片撑满上半区，键盘在其中水平垂直居中 */
+  .keyboard-card .kc-panel {
+    height: 100%;
+    padding: 16px;
+    align-items: center;
+    justify-content: center;
+  }
+  #view-remap > .interface:not(.keyboard-card) .kc-panel {
+    height: 100%;
+    gap: 10px;
+  }
+  .picker {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 10px;
+  }
+  .picker-tabs {
+    flex: 0 0 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .picker-tab {
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .picker-tab:hover { color: var(--text); background: var(--panel2); }
+  .picker-tab.active {
+    color: var(--accent);
+    background: #143038;
+    border-color: #1f4b52;
+  }
+  .picker-groups,
+  .picker-board {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 10px;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .picker-groups {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .picker-group-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--muted);
+  }
+  .picker-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pick-key {
+    min-width: 58px;
+    height: 32px;
+    padding: 0 8px;
+    color: var(--text);
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .pick-key:hover { color: #e6fffb; border-color: var(--accent); }
+  /* 基本字符页：整块 104 配列网格，1u 键帽为正方形。 */
+  .picker-board {
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .board {
+    flex: none;
+    display: grid;
+    grid-template-columns:
+      repeat(60, var(--q)) var(--sg)
+      repeat(12, var(--q)) var(--sg)
+      repeat(16, var(--q));
+    /* F 区与主键区之间留 0.5U 间隔 */
+    grid-template-rows: var(--key) var(--sg) repeat(5, var(--key));
+  }
+  .board-key {
+    margin: 2px;
+    min-width: 0;
+    padding: 0 2px;
+    color: var(--text);
+    background: #202832;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: clamp(10px, calc(var(--key) * 0.24), 13px);
+    line-height: 1.05;
+    white-space: pre-line;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .board-key:hover { color: #e6fffb; border-color: var(--accent); }
+  .kc-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .kc-layers { display: flex; gap: 4px; }
+  .kc-layer {
+    padding: 6px 10px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .kc-layer:hover { color: var(--text); background: var(--panel2); }
+  .kc-layer.active {
+    color: var(--accent);
+    background: #143038;
+    border-color: #1f4b52;
+  }
+  .kc-toolbar #kcCode { flex: 1 1 140px; min-width: 0; }
+  /* 40base 42 键：按 1/4U 列网格摆放，每行 12U，1U 键帽为正方形 */
+  .keyboard {
+    --u: 36px;
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(48, calc(var(--u) / 4));
+    grid-template-rows: repeat(4, var(--u));
+    margin: 0 auto;
+  }
+  .keycap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+    margin: 2px;
+    padding: 3px 4px;
+    color: var(--text);
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font: inherit;
+    font-size: clamp(10px, calc(var(--u) * 0.24), 13px);
+    line-height: 1.15;
+    cursor: pointer;
+    overflow: hidden;
+    user-select: none;
+  }
+  .keycap:hover { border-color: var(--accent); }
+  .keycap.selected {
+    color: #e6fffb;
+    background: #143038;
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .keycap .kc-value {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: inherit;
+    color: var(--muted);
+  }
+  .keycap .kc-value.set { color: var(--text); }
+  .device-info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border-top: 1px solid #222c35;
+    border-bottom: 1px solid #222c35;
+  }
+  #ccDeviceInfo {
+    flex: 1 1 240px;
+    min-width: 0;
+    color: var(--accent);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  #firmwareState { color: var(--accent); }
+  #firmwareState.warn { color: #f6ad55; }
+  #firmwareState.err { color: #fc8181; }
+  #firmwareProgress {
+    width: 100%;
+    height: 10px;
+    accent-color: var(--accent);
+  }
+  #firmwareMeta {
+    min-height: 17px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .firmware-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #firmwareDuration {
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .send-row {
+    display: flex;
+    gap: 7px;
+    margin-top: 7px;
+  }
+  .send-row input { flex: 1; }
+  #right {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  #log-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--line);
+  }
+  #log {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 9px 10px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #090c0f;
+  }
+  .warn { color: #f6ad55; }
+  .err { color: #fc8181; }
+  @media (max-width: 900px) {
+    html, body { height: auto; }
+    body { display: block; min-height: 100%; }
+    #app { display: block; }
+    #sidebar {
+      flex-direction: row;
+      overflow-x: auto;
+      padding: 8px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-btn { flex: 0 0 auto; text-align: center; }
+    #content { display: block; }
+    .view { display: none; }
+    .view.active { display: flex; }
+    #layout-bottom { display: block; }
+    #left { overflow: visible; }
+    #right { height: 60vh; margin-top: 10px; }
+  }

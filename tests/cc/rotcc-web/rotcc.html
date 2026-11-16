@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+<title> USB Debug Tool </title>
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+<header>
+  <h1> USB Debug Tool </h1>
+  <button id="btnConnect">连接设备</button>
+  <button id="btnDisconnect" class="danger" disabled>断开</button>
+  <label><input id="chkAllInterfaces" type="checkbox"> 尝试占用全部接口</label>
+  <label>显示
+    <select id="displayMode">
+      <option value="text">文本</option>
+      <option value="hex">HEX</option>
+    </select>
+  </label>
+  <label>发送
+    <select id="inputMode">
+      <option value="text">文本</option>
+      <option value="hex">HEX</option>
+    </select>
+  </label>
+  <label><input id="chkLf" type="checkbox" checked> 文本追加 LF</label>
+  <button id="btnClear" class="secondary">清空日志</button>
+</header>
+
+<div id="status">未连接。选择 USB 设备。</div>
+
+<div id="app">
+  <nav id="sidebar">
+    <button class="nav-btn active" data-view="remap">改键</button>
+    <button class="nav-btn" data-view="upgrade">升级</button>
+    <button class="nav-btn" data-view="debug">Debug</button>
+  </nav>
+  <main id="content">
+    <section id="view-remap" class="view active">
+      <section class="interface keyboard-card">
+        <div class="kc-panel">
+          <div id="keyboard" class="keyboard"></div>
+        </div>
+      </section>
+      <section class="interface">
+        <div class="kc-panel">
+          <div class="kc-toolbar">
+            <div id="kcLayers" class="kc-layers" role="group" aria-label="层"></div>
+          </div>
+          <div class="picker">
+            <div id="pickerTabs" class="picker-tabs"></div>
+            <div id="pickerGroups" class="picker-groups"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-upgrade" class="view">
+      <section class="interface">
+        <div class="interface-head">
+          <strong class="grow">CC 调试 / 固件升级</strong>
+          <span id="ccPacketInfo" class="muted">等待读取设备端点</span>
+        </div>
+        <div class="hint">
+          走 Rot-Gen 帧（12 字节头，src=0/DST=1，options 请求位）+ Rot-CC 消息
+          （cmd/subcmd/reserve/payload）。升级文件需包含 16 字节官方升级头；
+          降级兼容由设备固件处理，网页原样发送文件。
+        </div>
+        <div class="device-info-row">
+          <span id="ccDeviceInfo">设备信息：--</span>
+          <button id="btnCcQuery" class="secondary" disabled>查询设备信息</button>
+        </div>
+        <div class="upgrade-body">
+          <div class="upgrade-row">
+            <input id="firmwareFile" type="file" accept=".bin,.img,.fw,.ota">
+            <button id="btnFirmwareStart" disabled>开始升级</button>
+            <button id="btnFirmwareCancel" class="danger" disabled>取消</button>
+          </div>
+          <div id="firmwareState" aria-live="polite">请选择升级文件。</div>
+          <progress id="firmwareProgress" max="1" value="0"></progress>
+          <div class="firmware-meta-row">
+            <div id="firmwareMeta">0 B / 0 B</div>
+            <span id="firmwareDuration">总用时 --</span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-debug" class="view">
+      <div id="layout-bottom">
+        <section id="left">
+          <section id="interfaces">
+            <div class="interface">
+              <div class="interface-head"><strong>尚未连接</strong></div>
+              <div class="hint">连接后会列出所有接口、端点和 claim 结果。</div>
+            </div>
+          </section>
+        </section>
+        <section id="right">
+          <div id="log-head">
+            <strong class="grow">数据日志</strong>
+            <span id="traffic" class="muted">RX 0 B · TX 0 B</span>
+          </div>
+          <pre id="log"></pre>
+        </section>
+      </div>
+    </section>
+  </main>
+</div>
+
+  <script src="./js/core.js"></script>
+  <script src="./js/protocol/rotgen.js"></script>
+  <script src="./js/protocol/rotcc.js"></script>
+  <script src="./js/cc/client.js"></script>
+  <script src="./js/cc/endpoint.js"></script>
+  <script src="./js/cc/request.js"></script>
+  <script src="./js/cc/device-info.js"></script>
+  <script src="./js/keymap/data.js"></script>
+  <script src="./js/keymap/picker.js"></script>
+  <script src="./js/keymap/keyboard.js"></script>
+  <script src="./js/firmware.js"></script>
+  <script src="./js/ui.js"></script>
+  <script src="./js/interfaces.js"></script>
+  <script src="./js/keymap/layers.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

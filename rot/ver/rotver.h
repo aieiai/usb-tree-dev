@@ -66,7 +66,7 @@ static inline const char *rotver_stage_str(unsigned stage) {
     return (stage < ROTVER_STAGE_MAX ? names[stage] : "unknown");
 }
 
-static inline const uint8_t rotver_stage_num(char *name) {
+static inline uint8_t rotver_stage_num(char *name) {
     const char *const names[ROTVER_STAGE_MAX] = { "release", "dev", "alpha", "beta", "rc" };
     for (uint8_t i = 0; i < ROTVER_STAGE_MAX; i++) {
         if (strcmp(names[i], name) == 0) {
