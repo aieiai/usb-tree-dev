@@ -8,18 +8,18 @@
 #include "rotsta.h"
 
 
-/* Official 16-byte header stored at the start of the IMGINFO page. */
-#define UPGRADE_IMAGE_HEADER_MAGIC  (0xbeaf5aa5UL)
-#define UPGRADE_DEVICE_ID           (0x6750UL)
-#define UPGRADE_IMAGE_MAX_SIZE      (FDB_APP_IMG_SIZ)
-
 /*
- * FDB_APPx_IMGINFO_ADDR starts with the official 16-byte header. The extended
- * record follows it in the same page.
+ * Layout inside one application slot (relative to the slot base):
+ *   +0x0000  EXIP container   (encrypted images only)
+ *   +0x0400  NOR configuration
+ *   +0x1000  HPM boot header
+ *   +0x3000  user application
  */
-#define UPGRADE_RECORD_MAGIC        (0x55504752UL) /* "UPGR" */
-#define UPGRADE_RECORD_VERSION      (1U)
-#define UPGRADE_RECORD_STATE_READY  (0xa5U)
+#define UPGRADE_IMAGE_BASE_PLAIN    (FDB_APP1_NOR_CFG_ADDR - FDB_APP1_IMG_ADDR)
+#define UPGRADE_BOOT_HEAD_OFFSET    (FDB_APP1_BOOT_HEAD_ADDR - FDB_APP1_IMG_ADDR)
+#define UPGRADE_BOOT_HEAD_SIZE      (16U)
+#define UPGRADE_BOOT_HEAD_TAG       (0xbfU)
+#define UPGRADE_BOOT_HEAD_VERSION   (0x10U)
 
 
 enum {
@@ -32,6 +32,7 @@ enum {
     rotsta_upgrade_incomplete,
     rotsta_upgrade_checksum_mismatch,
     rotsta_upgrade_invalid_image,
+    /* Kept so the numeric codes below stay stable for the Rot-CC host. */
     rotsta_upgrade_record_invalid,
     rotsta_upgrade_verify_fail,
     rotsta_upgrade_boot_layout_mismatch,
@@ -39,112 +40,43 @@ enum {
 };
 
 
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t device;
-    uint32_t len;
-    uint32_t checksum; /* 32-bit byte sum of the stored image. */
-} upgrade_image_header_t;
-
-
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint16_t version;
-    uint16_t size;
-    uint8_t slot;
-    uint8_t state;
-    uint8_t reserved0[2];
-    uint32_t image_size;
-    uint32_t image_checksum;
-    uint32_t image_crc32;
-    uint32_t image_offset;
-    uint16_t sw_version;
-    uint16_t boot_header_length;
-    uint32_t reserved1;
-    uint32_t crc32; /* CRC-32 over all preceding fields. */
-} upgrade_record_t;
-
-
-typedef enum {
-    UPGRADE_STATE_IDLE = 0,
-    UPGRADE_STATE_RECEIVING,
-    UPGRADE_STATE_VERIFIED,
-    UPGRADE_STATE_FAILED,
-} upgrade_state_t;
-
-
 typedef struct {
-    upgrade_state_t state;
     uint8_t active_slot;
     uint8_t target_slot;
-    uint32_t image_offset;
-    uint32_t image_size;
-    uint32_t received_size;
-    uint32_t checksum;
-    rotsta_t last_result;
-} upgrade_status_t;
-
-
-typedef struct {
-    uint8_t active_slot;
-    uint8_t remap_enabled;
-    uint8_t boot_ota_enabled;
-    uint8_t boot_layout_matches;
-    uint8_t otp_exip_enabled;
-    uint8_t slot_valid[FDB_APP_IMG_NUM];
-    uint8_t slot_record_valid[FDB_APP_IMG_NUM];
-    uint8_t slot_retired[FDB_APP_IMG_NUM];
+    uint8_t encrypted;
+    uint8_t slot_count;
     uint16_t active_version;
-    uint32_t firmware_version;
-    uint16_t active_boot_header_length;
-    uint16_t slot_version[FDB_APP_IMG_NUM];
-    uint16_t slot_app_version[FDB_APP_IMG_NUM];
-    uint16_t slot_boot_header_length[FDB_APP_IMG_NUM];
-    uint16_t otp_sec_img_offset;
-    uint16_t otp_max_img_len;
-    uint16_t configured_slot_size_256k;
-} upgrade_runtime_info_t;
-
-
-_Static_assert(FDB_APP_IMG_NUM == 2, "upgrade module requires two application slots");
-_Static_assert(sizeof(upgrade_image_header_t) == 16U, "IMGINFO header must stay 16 bytes");
-_Static_assert(sizeof(upgrade_record_t) == 40U, "upgrade record layout changed unexpectedly");
+    uint32_t slot_size;
+    uint32_t image_base_offset;
+} upgrade_info_t;
 
 
 /* Initializes the shared flash HAL and detects the currently booted slot. */
 rotsta_t upgrade_init(void);
 
-rotsta_t upgrade_get_status(upgrade_status_t *status);
-rotsta_t upgrade_get_slot_info(uint8_t slot, uint32_t *image_offset, uint32_t *capacity);
-rotsta_t upgrade_get_active_slot(uint8_t *slot);
-rotsta_t upgrade_get_runtime_info(upgrade_runtime_info_t *info);
+/* Current slot, target slot, slot size and EXIP state for the Rot-CC INFO reply. */
+rotsta_t upgrade_get_info(upgrade_info_t *info);
 
 /*
- * Start a transactional upgrade. The target slot is erased here while the
- * running slot stays untouched. image_crc32 is the standard CRC-32 of the
- * complete image that will be streamed through upgrade_write().
+ * Start a transactional upgrade. The target slot is erased here, the running
+ * slot stays untouched. image_crc32 is the standard CRC-32 of the complete
+ * image that will be streamed through upgrade_write().
  */
-rotsta_t upgrade_begin(uint32_t image_size, uint32_t image_crc32);
+rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32);
 
-/* Strict write interface: len may be unaligned, but must not exceed the image. */
+/* Streaming write, len may be unaligned and must not exceed the image size. */
 rotsta_t upgrade_write(const void *data, uint32_t len);
 
 /*
- * Finish the image, verify its CRC-32 and boot header, then publish the
- * official image header plus a CRC protected record in the target IMGINFO page.
+ * Verify the stored image, publish the boot header and retire the running slot
+ * when the new version is lower.
  */
 rotsta_t upgrade_finish(void);
 
-/* Abort the current receive session. The inactive slot can be retried safely. */
+/* Abort the session and erase the target slot. */
 rotsta_t upgrade_abort(void);
 
-/* Read and validate the persistent record for one slot. */
-rotsta_t upgrade_read_record(uint8_t slot, upgrade_record_t *record);
-
-/* Validate both the record and the complete stored image checksum. */
-rotsta_t upgrade_validate_slot(uint8_t slot, upgrade_record_t *record);
-
-/* Reset after a successful upgrade. The bootloader should consume the record. */
+/* Reset after a successful upgrade. */
 void upgrade_reboot(void);
 
 

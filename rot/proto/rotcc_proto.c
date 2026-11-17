@@ -326,7 +326,7 @@ static void _upgrade_reset_session(bool abort_upgrade)
 
 static void _handle_upgrade_info(const rotcc_msg_t *msg)
 {
-    upgrade_runtime_info_t info;
+    upgrade_info_t info;
     uint8_t payload[ROTCC_UPGRADE_INFO_LEN] = {0};
     rotsta_t state;
 
@@ -335,37 +335,23 @@ static void _handle_upgrade_info(const rotcc_msg_t *msg)
         return;
     }
 
-    state = upgrade_get_runtime_info(&info);
+    state = upgrade_get_info(&info);
     if (state != rotsta_success) {
         _reply_status(msg, state);
         return;
     }
 
     payload[0] = info.active_slot;
-    payload[1] = (uint8_t)FDB_APP_IMG_NUM;
-    _put_le32(&payload[2], FDB_APP_IMG_SIZ);
-    payload[6] = info.otp_exip_enabled ? 1U : 0U;
+    payload[1] = info.slot_count;
+    _put_le32(&payload[2], info.slot_size);
+    payload[6] = info.encrypted;
 
     (void)_reply(msg, payload, sizeof(payload));
 }
 
 static void _handle_upgrade_start(const rotcc_msg_t *msg, uint32_t fw_size, uint32_t fw_crc32)
 {
-    upgrade_runtime_info_t info;
     rotsta_t state;
-
-    state = upgrade_get_runtime_info(&info);
-    if (state != rotsta_success) {
-        _reply_status(msg, state);
-        return;
-    }
-    if (!info.boot_ota_enabled || !info.boot_layout_matches) {
-        hal_dt_printf(TAG "boot layout mismatch: otp=%u, configured=%u\r\n",
-                      (unsigned)info.otp_sec_img_offset,
-                      (unsigned)info.configured_slot_size_256k);
-        _reply_status(msg, rotsta_upgrade_boot_layout_mismatch);
-        return;
-    }
 
     /* The previous START response may have been lost. Do not erase twice. */
     if ((s_worker_state == WORKER_STATE_RECEIVING) &&
@@ -385,9 +371,9 @@ static void _handle_upgrade_start(const rotcc_msg_t *msg, uint32_t fw_size, uint
         return;
     }
 
-    state = upgrade_begin(fw_size, fw_crc32);
+    state = upgrade_start(fw_size, fw_crc32);
     if (state != rotsta_success) {
-        hal_dt_printf(TAG "upgrade begin failed: 0x%08x\r\n", (unsigned)state);
+        hal_dt_printf(TAG "upgrade start failed: 0x%08x\r\n", (unsigned)state);
         _upgrade_reset_session(true);
         _reply_status(msg, state);
         return;
