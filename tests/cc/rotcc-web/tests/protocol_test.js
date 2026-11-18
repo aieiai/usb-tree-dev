@@ -359,9 +359,11 @@ async function main() {
       'ROTCC_KC_ACTIVE_LAYER', 'ROTCC_KC_SET_ACTIVE_LAYER'
     ];
     for (const name of handlers) {
+      const inTable = new RegExp(`\\{[^\\n]*\\b${name}\\b`).test(source);
+      const inCase = source.includes(`case ${name}:`);
       assert(
-        source.includes(`case ${name}:`),
-        `固件缺少 ${name} 的 case 处理`
+        inTable || inCase,
+        `固件缺少 ${name} 的分发处理`
       );
     }
   });

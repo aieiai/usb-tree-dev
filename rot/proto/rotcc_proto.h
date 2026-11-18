@@ -9,6 +9,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "rotsta.h"
+#include "rotutil.h"
 
 
 /* Rot-CC payload: cmd(1) subcmd(1) reserve(2) payload(n). */
@@ -32,17 +33,17 @@ enum {
 };
 
 enum {
+    ROTCC_UPGRADE_INFO = 0x00,
+    ROTCC_UPGRADE_REQUEST = 0x01,
+    ROTCC_UPGRADE_DATA = 0x02,
+};
+
+enum {
     ROTCC_KC_GET = 0x00,
     ROTCC_KC_SET = 0x01,
     ROTCC_KC_LAYER_COUNT = 0x02,
     ROTCC_KC_ACTIVE_LAYER = 0x03,
     ROTCC_KC_SET_ACTIVE_LAYER = 0x04,
-};
-
-enum {
-    ROTCC_UPGRADE_INFO = 0x00,
-    ROTCC_UPGRADE_REQUEST = 0x01,
-    ROTCC_UPGRADE_DATA = 0x02,
 };
 
 /* Request types carried by ROTCC_UPGRADE_REQUEST. */
@@ -69,9 +70,17 @@ typedef struct {
     const uint8_t *payload;
 } rotcc_msg_t;
 
+// Handler runs in the CC thread, so replies must not block.
+typedef void (*rotcc_cmd_handler_t)(const rotcc_msg_t *msg);
 
-/* Binds the device protocol to rotcc. Call once after rotcc_init(). */
+
+// Binds the device protocol to rotcc. Call once after rotcc_init().
 rotsta_t rotcc_proto_init(void);
+
+// Builds a response with the request's cmd/subcmd/reserve.
+rotsta_t rotcc_proto_reply(const rotcc_msg_t *msg, const void *payload, uint16_t payload_len);
+rotsta_t rotcc_proto_register_cmd(uint8_t cmd, uint8_t subcmd, rotcc_cmd_handler_t handler);
+rotsta_t rotcc_proto_unregister_cmd(uint8_t cmd, uint8_t subcmd);
 
 
 #ifdef __cplusplus

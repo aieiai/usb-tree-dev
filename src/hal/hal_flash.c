@@ -1,5 +1,5 @@
 #include "hal_flash.h"
-#include "fdb_map.h"
+#include "flash_layout.h"
 #include "rotutil.h"
 
 #include "board.h"
@@ -10,7 +10,7 @@
 #define NOR_XPI_BASE  BOARD_APP_XPI_NOR_XPI_BASE
 
 #ifndef HAL_FLASH_WRITE_BUFFER_SIZE
-#define HAL_FLASH_WRITE_BUFFER_SIZE FDB_SECTOR_SIZ
+#define HAL_FLASH_WRITE_BUFFER_SIZE FLASH_SECTOR_SIZ
 #endif
 
 #if defined(__riscv)
@@ -25,7 +25,7 @@
 #endif
 
 
-_Static_assert(FDB_BASE_ADDR == BOARD_FLASH_BASE_ADDRESS, "FDB_BASE_ADDR must match BOARD_FLASH_BASE_ADDRESS");
+_Static_assert(FLASH_BASE_ADDR == BOARD_FLASH_BASE_ADDRESS, "FLASH_BASE_ADDR must match BOARD_FLASH_BASE_ADDRESS");
 
 
 typedef struct {
@@ -69,7 +69,7 @@ static bool _mutex_put(void)
 static void _flash_invalidate_dcache(uint32_t offset_addr, uint32_t buf_size)
 {
     if (l1c_dc_is_enabled() && (0u < buf_size)) {
-        uint32_t flash_addr    = FDB_BASE_ADDR + offset_addr;
+        uint32_t flash_addr    = FLASH_BASE_ADDR + offset_addr;
         uint32_t aligned_start = HPM_L1C_CACHELINE_ALIGN_DOWN((uint32_t)flash_addr);
         uint32_t aligned_end   = HPM_L1C_CACHELINE_ALIGN_UP((uint32_t)flash_addr + buf_size);
         uint32_t aligned_size  = aligned_end - aligned_start;
@@ -103,7 +103,7 @@ static const void *_flash_get_mapped(uint32_t offset_addr)
     if (!hal_fm.ready || (offset_addr >= hal_fm.total_siz)) {
         return NULL;
     }
-    return (const void *)(uintptr_t)(FDB_BASE_ADDR + offset_addr);
+    return (const void *)(uintptr_t)(FLASH_BASE_ADDR + offset_addr);
 }
 
 static rotsta_t _flash_program_page(uint32_t offset_addr, const void *buf, uint32_t buf_size)
@@ -185,7 +185,7 @@ rotsta_t hal_flash_read_mem(uint32_t offset_addr, void *buf, uint32_t buf_size)
 
     uint32_t ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
     _flash_invalidate_dcache(offset_addr, buf_size);
-    memcpy(buf, (void *)(FDB_BASE_ADDR + offset_addr), buf_size);
+    memcpy(buf, (void *)(FLASH_BASE_ADDR + offset_addr), buf_size);
     restore_global_irq(ctx);
 
     (void)_mutex_put();
@@ -449,15 +449,15 @@ rotsta_t hal_flash_init(void)
         ((hal_fm.page_siz & 3U) != 0U) ||
         (hal_fm.sector_siz > hal_fm.block_siz) ||
         ((hal_fm.block_siz % hal_fm.sector_siz) != 0U) ||
-        (hal_fm.total_siz < (FDB_DATA_END_ADDR - FDB_BASE_ADDR)) ||
+        (hal_fm.total_siz < (FLASH_DATA_END_ADDR - FLASH_BASE_ADDR)) ||
         (hal_fm.total_siz > (UINT32_MAX - BOARD_FLASH_BASE_ADDRESS))) {
         printf(TAG "size mismatch\r\n");
         return rotsta_fail;
     }
 
-    if (hal_fm.total_siz != FDB_TOTAL_SIZ) {
-        // target flash 与 config/fdb_map.h 规划不符，布局仍按编译期固定地址使用
-        printf(TAG "total size mismatch %d != %d, use fixed address\r\n", hal_fm.total_siz, FDB_TOTAL_SIZ);
+    if (hal_fm.total_siz != FLASH_TOTAL_SIZ) {
+        // target flash 与 config/flash_layout.h 规划不符，布局仍按编译期固定地址使用
+        printf(TAG "total size mismatch %d != %d, use fixed address\r\n", hal_fm.total_siz, FLASH_TOTAL_SIZ);
     }
 
     printf(TAG "chip %u KB, block %u KB, sector %u KB, page %u B\r\n", hal_fm.total_siz / 1024u, hal_fm.block_siz / 1024u, hal_fm.sector_siz / 1024u, hal_fm.page_siz);

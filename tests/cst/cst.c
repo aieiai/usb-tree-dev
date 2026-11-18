@@ -3,7 +3,7 @@
 #include "hal_usb.h"
 
 
-#include "fdb.h"
+#include "db.h"
 #include "rotver.h"
 
 #include "tx_api.h"
@@ -34,7 +34,7 @@ static void cst_task(ULONG id)
 {
     (void)id;
 
-    if (fdb_sobi_init() != rotsta_success) {
+    if (db_sobi_init() != rotsta_success) {
         hal_dt_printf("[sobi] init failed\r\n");
     } else {
         cst_sobi_log("[sobi] load");
@@ -66,11 +66,11 @@ static void cst_task(ULONG id)
         if (btn_st != btn_st_pre) {
             btn_st_pre = btn_st;
             if (btn_st == BOARD_BUTTON_PRESSED_VALUE) {
-                // fdb_data.bif.gp_mode++;
-                // fdb_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
+                // db_data.bif.gp_mode++;
+                // db_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
                 
                 g_sobi.pi.test_cnt++;
-                if (rotsta_success == fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW)) {
+                if (rotsta_success == db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW)) {
                     cst_sobi_log("[sobi] saved");
                     // tx_thread_sleep(100);
                     // disable_global_irq(CSR_MSTATUS_MIE_MASK);

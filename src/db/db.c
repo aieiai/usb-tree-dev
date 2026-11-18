@@ -1,10 +1,10 @@
-#include "fdb.h"
+#include "db.h"
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "fdb_map.h"
+#include "flash_layout.h"
 #include "hal_flash.h"
 #include "rotver.h"
 #include "rotutil.h"
@@ -12,13 +12,13 @@
 #include "tx_api.h"
 #include "tx_config.h"
 
-#define TAG "fdb: "
+#define TAG "db: "
 
-#define FDB_SAVE_DELAY_MS       (5000U)
-#define FDB_NOW_TIMEOUT_MS      (5000U)
-#define FDB_ITEM_BIT(item_ty)   (1UL << (uint32_t)(item_ty))
+#define DB_SAVE_DELAY_MS       (5000U)
+#define DB_NOW_TIMEOUT_MS      (5000U)
+#define DB_ITEM_BIT(item_ty)   (1UL << (uint32_t)(item_ty))
 
-_Static_assert(FDB_ITEM_TY_MAX <= 32U, "FDB dirty mask supports at most 32 types");
+_Static_assert(DB_ITEM_TY_MAX <= 32U, "DB dirty mask supports at most 32 types");
 
 typedef struct {
     uint32_t    offset;
@@ -36,28 +36,28 @@ typedef struct {
 
 sobi_t g_sobi;
 
-static volatile item_t items[FDB_ITEM_TY_MAX];
-static const msg_t msgs[FDB_ITEM_TY_MAX] = {
-    [FDB_ITEM_TY_FAC]    = { .offset = FDB_FACTORY_ADDR - FDB_BASE_ADDR,  .cap = FDB_FACTORY_SIZ, .name = "fdb_factory", },
-    [FDB_ITEM_TY_CALIB]  = { .offset = FDB_CALIB_ADDR - FDB_BASE_ADDR,    .cap = FDB_CALIB_SIZ,   .name = "fdb_calib",   },
-    [FDB_ITEM_TY_COMMON] = { .offset = FDB_COMMON_ADDR - FDB_BASE_ADDR,   .cap = FDB_COMMON_SIZ,  .name = "fdb_common",  },
-    [FDB_ITEM_TY_SOBI]   = { .offset = FDB_SOBI_ADDR - FDB_BASE_ADDR,     .cap = FDB_SOBI_SIZ,     .name = "fdb_sobi",   },
-    [FDB_ITEM_TY_MAP]    = { .offset = FDB_MAP_ADDR - FDB_BASE_ADDR,      .cap = FDB_MAP_SIZ,     .name = "fdb_map",     },
-    [FDB_ITEM_TY_ADV]    = { .offset = FDB_ADV_ADDR - FDB_BASE_ADDR,      .cap = FDB_ADV_SIZ,     .name = "fdb_adv",     },
-    [FDB_ITEM_TY_RGB]    = { .offset = FDB_RGB_ADDR - FDB_BASE_ADDR,      .cap = FDB_RGB_SIZ,     .name = "fdb_rgb",     },
-    [FDB_ITEM_TY_MACRO]  = { .offset = FDB_MACRO_ADDR - FDB_BASE_ADDR,    .cap = FDB_MACRO_SIZ,   .name = "fdb_macro",   },
+static volatile item_t items[DB_ITEM_TY_MAX];
+static const msg_t msgs[DB_ITEM_TY_MAX] = {
+    [DB_ITEM_TY_FAC]    = { .offset = FLASH_FACTORY_ADDR - FLASH_BASE_ADDR,  .cap = FLASH_FACTORY_SIZ, .name = "db_factory", },
+    [DB_ITEM_TY_CALIB]  = { .offset = FLASH_CALIB_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_CALIB_SIZ,   .name = "db_calib",   },
+    [DB_ITEM_TY_COMMON] = { .offset = FLASH_COMMON_ADDR - FLASH_BASE_ADDR,   .cap = FLASH_COMMON_SIZ,  .name = "db_common",  },
+    [DB_ITEM_TY_SOBI]   = { .offset = FLASH_SOBI_ADDR - FLASH_BASE_ADDR,     .cap = FLASH_SOBI_SIZ,    .name = "db_sobi",    },
+    [DB_ITEM_TY_MAP]    = { .offset = FLASH_MAP_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_MAP_SIZ,     .name = "db_map",     },
+    [DB_ITEM_TY_ADV]    = { .offset = FLASH_ADV_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_ADV_SIZ,     .name = "db_adv",     },
+    [DB_ITEM_TY_RGB]    = { .offset = FLASH_RGB_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_RGB_SIZ,     .name = "db_rgb",     },
+    [DB_ITEM_TY_MACRO]  = { .offset = FLASH_MACRO_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_MACRO_SIZ,   .name = "db_macro",   },
 };
 
-static TX_THREAD fdb_thread;
+static TX_THREAD db_thread;
 static TX_MUTEX s_api_mutex;
 static TX_MUTEX s_data_mutex;
 static TX_SEMAPHORE s_wake_sem;
 static TX_SEMAPHORE s_done_sem;
-static uint8_t fdb_thread_stack[FDB_TASK_STACK] __attribute__((aligned(8U)));
+static uint8_t db_thread_stack[DB_TASK_STACK] __attribute__((aligned(8U)));
 
 
-static uint32_t s_generation[FDB_ITEM_TY_MAX];
-static rotsta_t s_save_result[FDB_ITEM_TY_MAX];
+static uint32_t s_generation[DB_ITEM_TY_MAX];
+static rotsta_t s_save_result[DB_ITEM_TY_MAX];
 
 static volatile uint32_t s_dirty_mask;
 static volatile uint32_t s_now_mask;
@@ -79,12 +79,12 @@ static void _sem_reset(TX_SEMAPHORE *semaphore) {
     while (TX_SUCCESS == tx_semaphore_get(semaphore, TX_NO_WAIT)) {}
 }
 
-static bool _type_valid(fdb_item_ty type) 
+static bool _type_valid(db_item_ty type) 
 {
-    return (uint32_t)type < (uint32_t)FDB_ITEM_TY_MAX;
+    return (uint32_t)type < (uint32_t)DB_ITEM_TY_MAX;
 }
 
-static void *_registered_record(fdb_item_ty type)
+static void *_registered_record(db_item_ty type)
 {
     if (!_type_valid(type) || !items[type].registered) {
         return NULL;
@@ -104,43 +104,43 @@ static void _state_snapshot(uint32_t *dirty, uint32_t *now)
     _mutex_unlock(&s_data_mutex);
 }
 
-static bool _type_is_dirty(fdb_item_ty type)
+static bool _type_is_dirty(db_item_ty type)
 {
     bool dirty;
 
     if (!_mutex_lock(&s_data_mutex)) {
         return false;
     }
-    dirty = (s_dirty_mask & FDB_ITEM_BIT(type)) != 0U;
+    dirty = (s_dirty_mask & DB_ITEM_BIT(type)) != 0U;
     _mutex_unlock(&s_data_mutex);
     return dirty;
 }
 
-static rotsta_t _snapshot_type(fdb_item_ty type, fdb_save_ty save_type)
+static rotsta_t _snapshot_type(db_item_ty type, db_save_ty save_type)
 {
     if (_registered_record(type) == NULL) {
-        return rotsta_fdb_not_registered;
+        return rotsta_db_not_registered;
     }
     if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_fdb_lock_fail;
+        return rotsta_db_lock_fail;
     }
 
     s_generation[type]++;
-    s_dirty_mask |= FDB_ITEM_BIT(type);
-    if (save_type == FDB_SAVE_TY_NOW) {
-        s_now_mask |= FDB_ITEM_BIT(type);
+    s_dirty_mask |= DB_ITEM_BIT(type);
+    if (save_type == DB_SAVE_TY_NOW) {
+        s_now_mask |= DB_ITEM_BIT(type);
     } else {
-        s_now_mask &= ~FDB_ITEM_BIT(type);
+        s_now_mask &= ~DB_ITEM_BIT(type);
     }
 
     _mutex_unlock(&s_data_mutex);
     return rotsta_success;
 }
 
-static rotsta_t _item_read(fdb_item_ty type)
+static rotsta_t _item_read(db_item_ty type)
 {
     if (!_type_valid(type)) {
-        return rotsta_fdb_invalid_type;
+        return rotsta_db_invalid_type;
     }
 
     rotsta_t result;
@@ -157,7 +157,7 @@ static rotsta_t _item_read(fdb_item_ty type)
     return rotsta_success;
 }
 
-static rotsta_t _item_write(fdb_item_ty type)
+static rotsta_t _item_write(db_item_ty type)
 {
     const volatile item_t *item;
     const msg_t *msg;
@@ -165,7 +165,7 @@ static rotsta_t _item_write(fdb_item_ty type)
     bool equal = false;
 
     if (!_type_valid(type)) {
-        return rotsta_fdb_invalid_type;
+        return rotsta_db_invalid_type;
     }
     item = &items[type];
     msg = item->msg;
@@ -174,7 +174,7 @@ static rotsta_t _item_write(fdb_item_ty type)
         return rotsta_invalid_argument;
     }
 
-    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FDB_SECTOR_SIZ);
+    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FLASH_SECTOR_SIZ);
     result = hal_flash_compare(msg->offset, item->buf, item->buf_size, &equal);
     if (result != rotsta_success) {
         return result;
@@ -190,19 +190,19 @@ static rotsta_t _item_write(fdb_item_ty type)
     return result;
 }
 
-static rotsta_t _save_type(fdb_item_ty type)
+static rotsta_t _save_type(db_item_ty type)
 {
     const volatile item_t *item = &items[type];
-    uint32_t type_bit = FDB_ITEM_BIT(type);
+    uint32_t type_bit = DB_ITEM_BIT(type);
     uint32_t generation;
     rotsta_t result;
 
     if ((!item->registered) || (item->buf == NULL) || (item->msg == NULL) || (item->buf_size == 0U) || 
         ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg->cap)) {
-        return rotsta_fdb_save_fail;
+        return rotsta_db_save_fail;
     }
     if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_fdb_lock_fail;
+        return rotsta_db_lock_fail;
     }
     generation = s_generation[type];
     _mutex_unlock(&s_data_mutex);
@@ -210,7 +210,7 @@ static rotsta_t _save_type(fdb_item_ty type)
     result = _item_write(type);
 
     if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_fdb_lock_fail;
+        return rotsta_db_lock_fail;
     }
     if (s_generation[type] == generation) {
         s_dirty_mask &= ~type_bit;
@@ -225,7 +225,7 @@ static rotsta_t _save_type(fdb_item_ty type)
     return result;
 }
 
-static void fdb_thread_entry(ULONG argument)
+static void db_thread_entry(ULONG argument)
 {
     (void)argument;
 
@@ -243,10 +243,10 @@ static void fdb_thread_entry(ULONG argument)
             }
 
             saved_now = false;
-            for (uint32_t i = 0U; i < (uint32_t)FDB_ITEM_TY_MAX; i++) {
-                if (((dirty & FDB_ITEM_BIT(i)) != 0U) &&
-                    ((now_mask & FDB_ITEM_BIT(i)) != 0U)) {
-                    (void)_save_type((fdb_item_ty)i);
+            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_TY_MAX; i++) {
+                if (((dirty & DB_ITEM_BIT(i)) != 0U) &&
+                    ((now_mask & DB_ITEM_BIT(i)) != 0U)) {
+                    (void)_save_type((db_item_ty)i);
                     saved_now = true;
                 }
             }
@@ -255,7 +255,7 @@ static void fdb_thread_entry(ULONG argument)
                 continue;
             }
 
-            if (_sem_wait(&s_wake_sem, FDB_SAVE_DELAY_MS)) {
+            if (_sem_wait(&s_wake_sem, DB_SAVE_DELAY_MS)) {
                 continue;
             }
 
@@ -263,9 +263,9 @@ static void fdb_thread_entry(ULONG argument)
             if ((dirty & now_mask) != 0U) {
                 continue;
             }
-            for (uint32_t i = 0U; i < (uint32_t)FDB_ITEM_TY_MAX; i++) {
-                if ((dirty & FDB_ITEM_BIT(i)) != 0U) {
-                    (void)_save_type((fdb_item_ty)i);
+            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_TY_MAX; i++) {
+                if ((dirty & DB_ITEM_BIT(i)) != 0U) {
+                    (void)_save_type((db_item_ty)i);
                 }
             }
             break;
@@ -273,16 +273,16 @@ static void fdb_thread_entry(ULONG argument)
     }
 }
 
-rotsta_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size)
+rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
 {
     volatile item_t *item;
     rotsta_t result;
 
     if (!s_initialized) {
-        return rotsta_fdb_not_init;
+        return rotsta_db_not_init;
     }
     if (!_type_valid(type)) {
-        return rotsta_fdb_invalid_type;
+        return rotsta_db_invalid_type;
     }
     if ((buf == NULL) || (buf_size == 0U) || ((buf_size & 3U) != 0U) || (buf_size > msgs[type].cap)) {
         return rotsta_invalid_argument;
@@ -313,25 +313,25 @@ rotsta_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size)
     return result;
 }
 
-rotsta_t fdb_update(fdb_item_ty type, fdb_save_ty save_type)
+rotsta_t db_update(db_item_ty type, db_save_ty save_type)
 {
     bool now;
     rotsta_t result;
 
     if (!s_initialized) {
-        return rotsta_fdb_not_init;
+        return rotsta_db_not_init;
     }
     if (!_type_valid(type)) {
-        return rotsta_fdb_invalid_type;
+        return rotsta_db_invalid_type;
     }
-    if ((uint32_t)save_type >= (uint32_t)FDB_SAVE_TY_MAX) {
-        return rotsta_fdb_invalid_save_type;
+    if ((uint32_t)save_type >= (uint32_t)DB_SAVE_TY_MAX) {
+        return rotsta_db_invalid_save_type;
     }
     if (!_mutex_lock(&s_api_mutex)) {
-        return rotsta_fdb_lock_fail;
+        return rotsta_db_lock_fail;
     }
 
-    now = save_type == FDB_SAVE_TY_NOW;
+    now = save_type == DB_SAVE_TY_NOW;
     if (now) {
         _sem_reset(&s_done_sem);
     }
@@ -343,14 +343,14 @@ rotsta_t fdb_update(fdb_item_ty type, fdb_save_ty save_type)
 
     if ((result == rotsta_success) && now) {
         while (_type_is_dirty(type)) {
-            if (!_sem_wait(&s_done_sem, FDB_NOW_TIMEOUT_MS)) {
+            if (!_sem_wait(&s_done_sem, DB_NOW_TIMEOUT_MS)) {
                 result = rotsta_timeout;
                 break;
             }
         }
         if (result == rotsta_success) {
             if (!_mutex_lock(&s_data_mutex)) {
-                result = rotsta_fdb_lock_fail;
+                result = rotsta_db_lock_fail;
             } else {
                 result = s_save_result[type];
                 _mutex_unlock(&s_data_mutex);
@@ -362,7 +362,7 @@ rotsta_t fdb_update(fdb_item_ty type, fdb_save_ty save_type)
     return result;
 }
 
-rotsta_t fdb_init(void)
+rotsta_t db_init(void)
 {
     rotsta_t result;
 
@@ -372,20 +372,20 @@ rotsta_t fdb_init(void)
 
     result = hal_flash_init();
     if (result != rotsta_success) {
-        return rotsta_fdb_init_fail;
+        return rotsta_db_init_fail;
     }
-    if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "fdb_api", TX_INHERIT)) ||
-        (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "fdb_data", TX_INHERIT)) ||
-        (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "fdb_wake", 0U)) ||
-        (TX_SUCCESS != tx_semaphore_create(&s_done_sem, "fdb_done", 0U))) {
-        return rotsta_fdb_init_fail;
+    if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "db_api", TX_INHERIT)) ||
+        (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "db_data", TX_INHERIT)) ||
+        (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "db_wake", 0U)) ||
+        (TX_SUCCESS != tx_semaphore_create(&s_done_sem, "db_done", 0U))) {
+        return rotsta_db_init_fail;
     }
 
     s_dirty_mask = 0U;
     s_now_mask = 0U;
 
-    if (TX_SUCCESS != tx_thread_create(&fdb_thread, "thread_fdb", fdb_thread_entry, 0U, fdb_thread_stack, sizeof(fdb_thread_stack), FDB_TASK_PRIORITY, FDB_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
-        return rotsta_fdb_init_fail;
+    if (TX_SUCCESS != tx_thread_create(&db_thread, "thread_db", db_thread_entry, 0U, db_thread_stack, sizeof(db_thread_stack), DB_TASK_PRIORITY, DB_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
+        return rotsta_db_init_fail;
     }
     s_initialized = true;
 
@@ -410,8 +410,8 @@ static void _sobi_load_defaults(void)
 {
     memset(&g_sobi, 0, sizeof(g_sobi));
 
-    g_sobi.magic   = FDB_SOBI_MAGIC;
-    g_sobi.version = FDB_SOBI_VER;
+    g_sobi.magic   = DB_SOBI_MAGIC;
+    g_sobi.version = DB_SOBI_VER;
     _sobi_set_str(g_sobi.name, sizeof(g_sobi.name), "Trace40");
 
     g_sobi.gp_mode = 0U;
@@ -429,18 +429,18 @@ static void _sobi_load_defaults(void)
     g_sobi.pi.test_cnt = 0U;
 }
 
-rotsta_t fdb_sobi_init(void)
+rotsta_t db_sobi_init(void)
 {
-    rotsta_t result = fdb_register(FDB_ITEM_TY_SOBI, &g_sobi, (uint32_t)sizeof(g_sobi));
+    rotsta_t result = db_register(DB_ITEM_TY_SOBI, &g_sobi, (uint32_t)sizeof(g_sobi));
     if (result != rotsta_success) {
         printf(TAG "sobi register failed: 0x%08x\r\n", (unsigned)result);
         return result;
     }
 
-    if ((g_sobi.magic != FDB_SOBI_MAGIC) || (g_sobi.version != FDB_SOBI_VER)) {
+    if ((g_sobi.magic != DB_SOBI_MAGIC) || (g_sobi.version != DB_SOBI_VER)) {
         printf(TAG "sobi blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_sobi.magic, (unsigned)g_sobi.version);
         _sobi_load_defaults();
-        result = fdb_update(FDB_ITEM_TY_SOBI, FDB_SAVE_TY_NOW);
+        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
             printf(TAG "sobi default save failed: 0x%08x\r\n", (unsigned)result);
         }

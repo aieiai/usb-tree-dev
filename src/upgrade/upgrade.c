@@ -8,6 +8,7 @@
 #include "hpm_ppor_drv.h"
 #include "hpm_romapi.h"
 #include "rotutil.h"
+#include "rotcrc.h"
 
 
 #define TAG "upgrade: "
@@ -28,7 +29,8 @@
 
 typedef struct {
     bool active;
-    uint8_t target_slot;
+    uint8_t slot_act;
+    uint8_t slot_tag;
     uint8_t encrypted;
     uint32_t slot_offset;
     uint32_t image_base_offset;
@@ -44,40 +46,22 @@ typedef struct {
 
 
 static bool s_initialized;
-static uint8_t s_active_slot;
-static upgrade_ctx_t s_ctx;
+static upgrade_ctx_t ctx;
 static uint8_t s_align_buf[4] __attribute__((aligned(4)));
 static uint8_t s_align_count;
 static uint32_t s_programmed_size;
 static uint8_t s_io_buf[UPGRADE_IO_CHUNK_SIZE] __attribute__((aligned(4)));
 
 
-static uint16_t _le16(const uint8_t *data)
-{
-    return (uint16_t)((uint16_t)data[0] | ((uint16_t)data[1] << 8));
-}
-
-static uint32_t _crc32_update(uint32_t crc, const void *data, uint32_t size)
-{
-    const uint8_t *bytes = (const uint8_t *)data;
-
-    for (uint32_t i = 0U; i < size; i++) {
-        crc ^= bytes[i];
-        for (uint32_t bit = 0U; bit < 8U; bit++) {
-            crc = (crc >> 1) ^ (0xedb88320UL & (0U - (crc & 1U)));
-        }
-    }
-    return crc;
-}
 
 static bool _slot_valid(uint8_t slot)
 {
-    return slot < FDB_APP_IMG_NUM;
+    return slot < FLASH_APP_IMG_NUM;
 }
 
 static uint32_t _slot_offset(uint8_t slot)
 {
-    return ((slot == 0U) ? FDB_APP1_IMG_ADDR : FDB_APP2_IMG_ADDR) - FDB_BASE_ADDR;
+    return ((slot == 0U) ? FLASH_APP1_IMG_ADDR : FLASH_APP2_IMG_ADDR) - FLASH_BASE_ADDR;
 }
 
 static uint32_t _boot_header_offset(uint8_t slot)
@@ -87,19 +71,15 @@ static uint32_t _boot_header_offset(uint8_t slot)
 
 static bool _boot_header_valid(const uint8_t *header, uint16_t *sw_version)
 {
-    uint16_t length = _le16(&header[2]);
+    uint16_t length = rotutil_get_le16(&header[2]);
     uint8_t fw_count = header[11];
 
-    if ((header[0] != UPGRADE_BOOT_HEAD_TAG) ||
-        (header[1] != UPGRADE_BOOT_HEAD_VERSION) ||
-        (length < UPGRADE_BOOT_HEAD_SIZE) ||
-        (length > 0x2000U) ||
-        (fw_count < 1U) ||
-        (fw_count > 2U)) {
+    if ((header[0] != UPGRADE_BOOT_HEAD_TAG) || (header[1] != UPGRADE_BOOT_HEAD_VERSION) || (length < UPGRADE_BOOT_HEAD_SIZE) ||
+        (length > 0x2000U) || (fw_count < 1U) || (fw_count > 2U)) {
         return false;
     }
 
-    *sw_version = _le16(&header[UPGRADE_SW_VERSION_OFFSET]);
+    *sw_version = rotutil_get_le16(&header[UPGRADE_SW_VERSION_OFFSET]);
     return true;
 }
 
@@ -131,11 +111,8 @@ static rotsta_t _check_otp_layout(void)
     uint32_t offset = sec_img_offset * OTP_SEC_IMG_UNIT;
     uint32_t size = ((max_img_len != 0U) ? max_img_len : sec_img_offset) * OTP_SEC_IMG_UNIT;
 
-    if ((sec_img_offset == 0U) ||
-        (offset != (FDB_APP2_IMG_ADDR - FDB_BASE_ADDR)) ||
-        (size != FDB_APP_IMG_SIZ)) {
-        printf(TAG "OTP boot layout mismatch: offset=%u, size=%u\r\n",
-               (unsigned)offset, (unsigned)size);
+    if ((sec_img_offset == 0U) || (offset != (FLASH_APP2_IMG_ADDR - FLASH_BASE_ADDR)) || (size != FLASH_APP_IMG_SIZE)) {
+        printf(TAG "OTP boot layout mismatch: offset=%u, size=%u\r\n", (unsigned)offset, (unsigned)size);
         return rotsta_upgrade_boot_layout_mismatch;
     }
     return rotsta_success;
@@ -143,7 +120,10 @@ static rotsta_t _check_otp_layout(void)
 
 static void _reset_ctx(void)
 {
-    memset(&s_ctx, 0, sizeof(s_ctx));
+    uint8_t slot_act = ctx.slot_act;
+
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.slot_act = slot_act;
     s_align_count = 0U;
     s_programmed_size = 0U;
 }
@@ -153,8 +133,8 @@ static rotsta_t _fail(rotsta_t state)
 {
     rotsta_t cleanup = rotsta_success;
 
-    if (s_ctx.active) {
-        cleanup = hal_flash_erase(s_ctx.slot_offset, FDB_APP_IMG_SIZ);
+    if (ctx.active) {
+        cleanup = hal_flash_erase(ctx.slot_offset, FLASH_APP_IMG_SIZE);
     }
     _reset_ctx();
     return (cleanup == rotsta_success) ? state : cleanup;
@@ -162,7 +142,7 @@ static rotsta_t _fail(rotsta_t state)
 
 static void _capture_boot_header(uint32_t image_offset, const uint8_t *data, uint32_t len)
 {
-    uint32_t head = s_ctx.file_boot_offset;
+    uint32_t head = ctx.file_boot_offset;
     uint32_t head_end = head + UPGRADE_BOOT_HEAD_SIZE;
     uint32_t end = image_offset + len;
     uint32_t start;
@@ -173,9 +153,9 @@ static void _capture_boot_header(uint32_t image_offset, const uint8_t *data, uin
     }
     start = (image_offset > head) ? image_offset : head;
     stop = (end < head_end) ? end : head_end;
-    memcpy(&s_ctx.boot_header[start - head], &data[start - image_offset], stop - start);
-    if (stop > s_ctx.boot_collected) {
-        s_ctx.boot_collected = (uint16_t)stop;
+    memcpy(&ctx.boot_header[start - head], &data[start - image_offset], stop - start);
+    if (stop > ctx.boot_collected) {
+        ctx.boot_collected = (uint16_t)stop;
     }
 }
 
@@ -185,9 +165,9 @@ static void _capture_boot_header(uint32_t image_offset, const uint8_t *data, uin
  */
 static rotsta_t _program_image(uint32_t image_offset, const uint8_t *data, uint32_t len)
 {
-    uint32_t dst = s_ctx.slot_offset + s_ctx.image_base_offset + image_offset;
+    uint32_t dst = ctx.slot_offset + ctx.image_base_offset + image_offset;
     uint32_t end = dst + len;
-    uint32_t head = s_ctx.slot_offset + UPGRADE_BOOT_HEAD_OFFSET;
+    uint32_t head = ctx.slot_offset + UPGRADE_BOOT_HEAD_OFFSET;
     uint32_t head_end = head + UPGRADE_BOOT_HEAD_SIZE;
 
     if ((end <= head) || (dst >= head_end)) {
@@ -269,11 +249,11 @@ static rotsta_t _verify_flash(void)
 {
     uint32_t consumed = 0U;
     uint32_t crc = 0xffffffffUL;
-    uint32_t head = s_ctx.file_boot_offset;
+    uint32_t head = ctx.file_boot_offset;
     uint32_t head_end = head + UPGRADE_BOOT_HEAD_SIZE;
 
-    while (consumed < s_ctx.image_size) {
-        uint32_t remaining = s_ctx.image_size - consumed;
+    while (consumed < ctx.image_size) {
+        uint32_t remaining = ctx.image_size - consumed;
         uint32_t read_size = ROT_ALIGN_UP(remaining, 4U);
         uint32_t sum_size;
         uint32_t start;
@@ -285,29 +265,25 @@ static rotsta_t _verify_flash(void)
         }
         sum_size = (remaining < read_size) ? remaining : read_size;
 
-        state = hal_flash_read(s_ctx.slot_offset + s_ctx.image_base_offset + consumed,
-                               s_io_buf, read_size);
+        state = hal_flash_read(ctx.slot_offset + ctx.image_base_offset + consumed, s_io_buf, read_size);
         if (state != rotsta_success) {
             return state;
         }
 
-        if ((s_ctx.boot_collected == UPGRADE_BOOT_HEAD_SIZE) &&
+        if ((ctx.boot_collected == UPGRADE_BOOT_HEAD_SIZE) &&
             (head_end > consumed) && (head < (consumed + sum_size))) {
             start = (head > consumed) ? head : consumed;
             stop = (head_end < (consumed + sum_size)) ? head_end : (consumed + sum_size);
-            memcpy(&s_io_buf[start - consumed],
-                   &s_ctx.boot_header[start - head],
-                   stop - start);
+            memcpy(&s_io_buf[start - consumed], &ctx.boot_header[start - head], stop - start);
         }
 
-        crc = _crc32_update(crc, s_io_buf, sum_size);
+        crc = rotcrc32_update(crc, s_io_buf, sum_size);
         consumed += sum_size;
     }
 
     crc = ~crc;
-    if ((crc != s_ctx.image_crc32) || (crc != ~s_ctx.received_crc32)) {
-        printf(TAG "crc mismatch: flash 0x%08x, start 0x%08x, stream 0x%08x\r\n",
-               (unsigned)crc, (unsigned)s_ctx.image_crc32, (unsigned)~s_ctx.received_crc32);
+    if ((crc != ctx.image_crc32) || (crc != ~ctx.received_crc32)) {
+        printf(TAG "crc mismatch: flash 0x%08x, start 0x%08x, stream 0x%08x\r\n", (unsigned)crc, (unsigned)ctx.image_crc32, (unsigned)~ctx.received_crc32);
         return rotsta_upgrade_checksum_mismatch;
     }
     return rotsta_success;
@@ -315,14 +291,13 @@ static rotsta_t _verify_flash(void)
 
 static rotsta_t _commit_boot_header(void)
 {
-    uint32_t offset = _boot_header_offset(s_ctx.target_slot);
+    uint32_t offset = _boot_header_offset(ctx.slot_tag);
     rotsta_t state;
     bool equal = false;
 
-    state = hal_flash_write(offset, s_ctx.boot_header, sizeof(s_ctx.boot_header));
+    state = hal_flash_write(offset, ctx.boot_header, sizeof(ctx.boot_header));
     if (state == rotsta_success) {
-        state = hal_flash_compare(offset, s_ctx.boot_header,
-                                  sizeof(s_ctx.boot_header), &equal);
+        state = hal_flash_compare(offset, ctx.boot_header, sizeof(ctx.boot_header), &equal);
     }
     if ((state != rotsta_success) || !equal) {
         return (state != rotsta_success) ? state : rotsta_upgrade_verify_fail;
@@ -333,7 +308,7 @@ static rotsta_t _commit_boot_header(void)
 /* NOR allows 1 -> 0, so retiring a slot needs no erase of the running image. */
 static rotsta_t _retire_active_slot(void)
 {
-    uint32_t offset = _boot_header_offset(s_active_slot) + UPGRADE_SW_VERSION_OFFSET;
+    uint32_t offset = _boot_header_offset(ctx.slot_act) + UPGRADE_SW_VERSION_OFFSET;
     uint8_t word[4] __attribute__((aligned(4)));
     rotsta_t state;
     bool equal = false;
@@ -367,9 +342,8 @@ rotsta_t upgrade_init(void)
     if (state != rotsta_success) {
         return state;
     }
-    if (hal_flash_get_sector_size() != FDB_SECTOR_SIZ) {
-        printf(TAG "sector size %u does not match FDB page size %u\r\n",
-               (unsigned)hal_flash_get_sector_size(), (unsigned)FDB_SECTOR_SIZ);
+    if (hal_flash_get_sector_size() != FLASH_SECTOR_SIZ) {
+        printf(TAG "sector size %u does not match DB page size %u\r\n", (unsigned)hal_flash_get_sector_size(), (unsigned)FLASH_SECTOR_SIZ);
         return rotsta_upgrade_init_fail;
     }
 
@@ -381,12 +355,11 @@ rotsta_t upgrade_init(void)
         return rotsta_upgrade_init_fail;
     }
 
-    s_active_slot = active_slot;
     _reset_ctx();
+    ctx.slot_act = active_slot;
     s_initialized = true;
 
-    printf(TAG "active APP%u, exip=%u\r\n",
-           (unsigned)(s_active_slot + 1U), _exip_enabled() ? 1U : 0U);
+    printf(TAG "active APP%u, exip=%u\r\n", (unsigned)(ctx.slot_act + 1U), _exip_enabled() ? 1U : 0U);
     return rotsta_success;
 }
 
@@ -401,15 +374,15 @@ rotsta_t upgrade_get_info(upgrade_info_t *info)
         return rotsta_upgrade_not_init;
     }
 
-    (void)_read_slot_version(s_active_slot, &version);
+    (void)_read_slot_version(ctx.slot_act, &version);
 
     memset(info, 0, sizeof(*info));
-    info->active_slot = s_active_slot;
-    info->target_slot = (uint8_t)(s_active_slot ^ 1U);
+    info->slot_act = ctx.slot_act;
+    info->slot_tag = (uint8_t)(ctx.slot_act ^ 1U);
     info->encrypted = _exip_enabled() ? 1U : 0U;
-    info->slot_count = FDB_APP_IMG_NUM;
+    info->slot_count = FLASH_APP_IMG_NUM;
     info->active_version = version;
-    info->slot_size = FDB_APP_IMG_SIZ;
+    info->slot_size = FLASH_APP_IMG_SIZE;
     info->image_base_offset = info->encrypted ? 0U : UPGRADE_IMAGE_BASE_PLAIN;
     return rotsta_success;
 }
@@ -417,7 +390,7 @@ rotsta_t upgrade_get_info(upgrade_info_t *info)
 rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
 {
     uint8_t active_slot = 0U;
-    uint8_t target_slot;
+    uint8_t slot_tag;
     uint32_t capacity;
     uint16_t active_version = 0U;
     rotsta_t state;
@@ -425,7 +398,7 @@ rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
     if (!s_initialized) {
         return rotsta_upgrade_not_init;
     }
-    if (s_ctx.active) {
+    if (ctx.active) {
         return rotsta_upgrade_busy;
     }
 
@@ -441,20 +414,18 @@ rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
     if (!_slot_valid(active_slot)) {
         return rotsta_upgrade_invalid_slot;
     }
-    s_active_slot = active_slot;
-    target_slot = (uint8_t)(active_slot ^ 1U);
+    slot_tag = (uint8_t)(active_slot ^ 1U);
 
     _reset_ctx();
-    s_ctx.target_slot = target_slot;
-    s_ctx.encrypted = _exip_enabled() ? 1U : 0U;
-    s_ctx.slot_offset = _slot_offset(target_slot);
-    s_ctx.image_base_offset = s_ctx.encrypted ? 0U : UPGRADE_IMAGE_BASE_PLAIN;
-    s_ctx.file_boot_offset = s_ctx.encrypted
-        ? UPGRADE_BOOT_HEAD_OFFSET
-        : (UPGRADE_BOOT_HEAD_OFFSET - UPGRADE_IMAGE_BASE_PLAIN);
-    capacity = FDB_APP_IMG_SIZ - s_ctx.image_base_offset;
+    ctx.slot_act = active_slot;
+    ctx.slot_tag = slot_tag;
+    ctx.encrypted = _exip_enabled() ? 1U : 0U;
+    ctx.slot_offset = _slot_offset(slot_tag);
+    ctx.image_base_offset = ctx.encrypted ? 0U : UPGRADE_IMAGE_BASE_PLAIN;
+    ctx.file_boot_offset = ctx.encrypted ? UPGRADE_BOOT_HEAD_OFFSET : (UPGRADE_BOOT_HEAD_OFFSET - UPGRADE_IMAGE_BASE_PLAIN);
+    capacity = FLASH_APP_IMG_SIZE - ctx.image_base_offset;
 
-    if ((image_size == 0U) || ((s_ctx.file_boot_offset + UPGRADE_BOOT_HEAD_SIZE) > image_size)) {
+    if ((image_size == 0U) || ((ctx.file_boot_offset + UPGRADE_BOOT_HEAD_SIZE) > image_size)) {
         _reset_ctx();
         return rotsta_upgrade_invalid_image;
     }
@@ -470,23 +441,20 @@ rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
         return state;
     }
 
-    s_ctx.image_size = image_size;
-    s_ctx.image_crc32 = image_crc32;
-    s_ctx.received_crc32 = 0xffffffffUL;
-    s_ctx.active_version = active_version;
-    memset(s_ctx.boot_header, 0xff, sizeof(s_ctx.boot_header));
-    s_ctx.active = true;
+    ctx.image_size = image_size;
+    ctx.image_crc32 = image_crc32;
+    ctx.received_crc32 = 0xffffffffUL;
+    ctx.active_version = active_version;
+    memset(ctx.boot_header, 0xff, sizeof(ctx.boot_header));
+    ctx.active = true;
 
     /* Erase the whole slot so stale EXIP data can never precede a plain image. */
-    state = hal_flash_erase(s_ctx.slot_offset, FDB_APP_IMG_SIZ);
+    state = hal_flash_erase(ctx.slot_offset, FLASH_APP_IMG_SIZE);
     if (state != rotsta_success) {
         return _fail(state);
     }
 
-    printf(TAG "APP%u->APP%u size=%u encrypted=%u base=0x%x boot=0x%x\r\n",
-           (unsigned)(s_active_slot + 1U), (unsigned)(target_slot + 1U),
-           (unsigned)image_size, (unsigned)s_ctx.encrypted,
-           (unsigned)s_ctx.image_base_offset, (unsigned)s_ctx.file_boot_offset);
+    printf(TAG "APP%u->APP%u size=%u encrypted=%u base=0x%x boot=0x%x\r\n", (unsigned)(ctx.slot_act + 1U), (unsigned)(slot_tag + 1U), (unsigned)image_size, (unsigned)ctx.encrypted, (unsigned)ctx.image_base_offset, (unsigned)ctx.file_boot_offset);
     return rotsta_success;
 }
 
@@ -498,24 +466,24 @@ rotsta_t upgrade_write(const void *data, uint32_t len)
     if (!s_initialized) {
         return rotsta_upgrade_not_init;
     }
-    if (!s_ctx.active) {
+    if (!ctx.active) {
         return rotsta_upgrade_incomplete;
     }
     if ((bytes == NULL) || (len == 0U)) {
         return rotsta_invalid_argument;
     }
-    if (len > (s_ctx.image_size - s_ctx.received_size)) {
+    if (len > (ctx.image_size - ctx.received_size)) {
         return _fail(rotsta_upgrade_image_too_large);
     }
 
-    _capture_boot_header(s_ctx.received_size, bytes, len);
+    _capture_boot_header(ctx.received_size, bytes, len);
     state = _write_image_bytes(bytes, len);
     if (state != rotsta_success) {
         return _fail(state);
     }
 
-    s_ctx.received_crc32 = _crc32_update(s_ctx.received_crc32, bytes, len);
-    s_ctx.received_size += len;
+    ctx.received_crc32 = rotcrc32_update(ctx.received_crc32, bytes, len);
+    ctx.received_size += len;
     return rotsta_success;
 }
 
@@ -527,10 +495,10 @@ rotsta_t upgrade_finish(void)
     if (!s_initialized) {
         return rotsta_upgrade_not_init;
     }
-    if (!s_ctx.active) {
+    if (!ctx.active) {
         return rotsta_upgrade_incomplete;
     }
-    if (s_ctx.received_size != s_ctx.image_size) {
+    if (ctx.received_size != ctx.image_size) {
         return _fail(rotsta_upgrade_incomplete);
     }
 
@@ -542,9 +510,7 @@ rotsta_t upgrade_finish(void)
     if (state != rotsta_success) {
         return _fail(state);
     }
-    if ((s_ctx.boot_collected != UPGRADE_BOOT_HEAD_SIZE) ||
-        !_boot_header_valid(s_ctx.boot_header, &sw_version) ||
-        (sw_version == 0U)) {
+    if ((ctx.boot_collected != UPGRADE_BOOT_HEAD_SIZE) || !_boot_header_valid(ctx.boot_header, &sw_version) || (sw_version == 0U)) {
         return _fail(rotsta_upgrade_invalid_image);
     }
 
@@ -558,18 +524,15 @@ rotsta_t upgrade_finish(void)
      * BootROM only looks at SW_VERSION. When the new image is older, retire the
      * running slot so the downgrade is selected after the reset.
      */
-    if (sw_version < s_ctx.active_version) {
+    if (sw_version < ctx.active_version) {
         state = _retire_active_slot();
         if (state != rotsta_success) {
             return _fail(state);
         }
-        printf(TAG "retired APP%u: SW_VERSION %u -> 0\r\n",
-               (unsigned)(s_active_slot + 1U), (unsigned)s_ctx.active_version);
+        printf(TAG "retired APP%u: SW_VERSION %u -> 0\r\n", (unsigned)(ctx.slot_act + 1U), (unsigned)ctx.active_version);
     }
 
-    printf(TAG "APP%u verified, sw_version=%u, crc=0x%08x\r\n",
-           (unsigned)(s_ctx.target_slot + 1U), (unsigned)sw_version,
-           (unsigned)s_ctx.image_crc32);
+    printf(TAG "APP%u verified, sw_version=%u, crc=0x%08x\r\n", (unsigned)(ctx.slot_tag + 1U), (unsigned)sw_version, (unsigned)ctx.image_crc32);
     _reset_ctx();
     return rotsta_success;
 }
@@ -583,9 +546,8 @@ rotsta_t upgrade_abort(void)
     return _fail(rotsta_success);
 }
 
-void upgrade_reboot(void)
+void upgrade_restart(void)
 {
-    printf(TAG "upgrade complete, resetting\r\n");
     (void)disable_global_irq(CSR_MSTATUS_MIE_MASK);
     SOC_ROM_FLAG_REG = 0U;
     ppor_sw_reset(HPM_PPOR, 1000U);

@@ -5,7 +5,7 @@
 
 ## 分区
 
-地址全部来自 `src/fdb/fdb_map.h`：
+地址全部来自 `src/db/flash_layout.h`：
 
 | 分区 | 镜像起点 | 容量 |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ while (has_data) {
     upgrade_write(data, size);
 }
 upgrade_finish();
-upgrade_reboot();
+upgrade_restart();
 ```
 
 Rot-CC 的 START 请求携带完整镜像的 `fw_size` 与标准 CRC-32（poly

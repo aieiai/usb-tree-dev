@@ -10,6 +10,8 @@ extern "C" {
 #include <stdint.h>
 
 #include "rotsta.h"
+#include "rotutil.h"
+
 
 /*
  * ,----------------------------------------------------------------------------------------------------------------------------------------------------------.
@@ -105,8 +107,7 @@ typedef struct {
  * Binds one protocol instance to its transport. rx_buf is the reassembly
  * buffer and also limits the accepted payload length.
  */
-bool rotgen_init(rotgen_t *g, void *rx_buf, uint16_t rx_buf_size, uint8_t addr,
-                 rotgen_send_fn_t send, rotgen_frame_fn_t on_frame, void *ctx);
+bool rotgen_init(rotgen_t *g, void *rx_buf, uint16_t rx_buf_size, uint8_t addr, rotgen_send_fn_t send, rotgen_frame_fn_t on_frame, void *ctx);
 
 /*
  * Consumes arbitrary transport chunks. Complete, CRC valid frames are handed to
@@ -116,11 +117,8 @@ bool rotgen_init(rotgen_t *g, void *rx_buf, uint16_t rx_buf_size, uint8_t addr,
 void rotgen_feed(rotgen_t *g, const void *data, uint16_t len);
 
 /* Encodes one frame and hands it to the registered send callback. */
-rotsta_t rotgen_send(rotgen_t *g, uint8_t options, uint8_t dst,
-                     const void *payload, uint16_t payload_len);
+rotsta_t rotgen_send(rotgen_t *g, uint8_t options, uint8_t dst, const void *payload, uint16_t payload_len);
 
-uint8_t rotgen_crc8(const uint8_t *data, uint32_t len);
-uint16_t rotgen_crc16(const uint8_t *data, uint32_t len);
 
 
 #ifdef __cplusplus

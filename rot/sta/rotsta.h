@@ -20,7 +20,7 @@ typedef uint32_t rotsta_t;
 enum {
     rotsta_group_common = 0,
     rotsta_group_flash,
-    rotsta_group_fdb,
+    rotsta_group_db,
     rotsta_group_hal_cc,
     rotsta_group_rotcc,
     rotsta_group_rotdt,

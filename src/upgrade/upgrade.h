@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "fdb_map.h"
+#include "flash_layout.h"
 #include "rotsta.h"
 
 
@@ -15,8 +15,8 @@
  *   +0x1000  HPM boot header
  *   +0x3000  user application
  */
-#define UPGRADE_IMAGE_BASE_PLAIN    (FDB_APP1_NOR_CFG_ADDR - FDB_APP1_IMG_ADDR)
-#define UPGRADE_BOOT_HEAD_OFFSET    (FDB_APP1_BOOT_HEAD_ADDR - FDB_APP1_IMG_ADDR)
+#define UPGRADE_IMAGE_BASE_PLAIN    (FLASH_APP1_NOR_CFG_ADDR - FLASH_APP1_IMG_ADDR)
+#define UPGRADE_BOOT_HEAD_OFFSET    (FLASH_APP1_BOOT_HEAD_ADDR - FLASH_APP1_IMG_ADDR)
 #define UPGRADE_BOOT_HEAD_SIZE      (16U)
 #define UPGRADE_BOOT_HEAD_TAG       (0xbfU)
 #define UPGRADE_BOOT_HEAD_VERSION   (0x10U)
@@ -41,8 +41,8 @@ enum {
 
 
 typedef struct {
-    uint8_t active_slot;
-    uint8_t target_slot;
+    uint8_t slot_act;
+    uint8_t slot_tag;
     uint8_t encrypted;
     uint8_t slot_count;
     uint16_t active_version;
@@ -77,7 +77,7 @@ rotsta_t upgrade_finish(void);
 rotsta_t upgrade_abort(void);
 
 /* Reset after a successful upgrade. */
-void upgrade_reboot(void);
+void upgrade_restart(void);
 
 
 #endif

@@ -5,7 +5,7 @@
 #include "hal_flash.h"
 
 #include "cst.h"
-#include "fdb.h"
+#include "db.h"
 #include "rotcc.h"
 #include "rotcc_proto.h"
 #include "upgrade.h"
@@ -41,9 +41,9 @@ void tx_application_define(void *first_unused_memory)
     (void)first_unused_memory;
     rotsta_t state;
 
-    state = fdb_init();
+    state = db_init();
     if (state != rotsta_success) {
-        printf(TAG "fdb init failed: 0x%08x\r\n", (unsigned)state);
+        printf(TAG "db init failed: 0x%08x\r\n", (unsigned)state);
     }
 
     state = upgrade_init();

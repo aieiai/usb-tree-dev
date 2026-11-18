@@ -1,40 +1,40 @@
-#ifndef FDB_H
-#define FDB_H
+#ifndef DB_H
+#define DB_H
 
 #include <stdint.h>
 #include "rotsta.h"
 
 
-#define FDB_SOBI_MAGIC  (0x534F4249U) /* "SOBI" */
-#define FDB_SOBI_VER    (2U)
+#define DB_SOBI_MAGIC  (0x534F4249U) /* "SOBI" */
+#define DB_SOBI_VER    (2U)
 
 enum {
-    rotsta_fdb_init_fail = ROTSTA_MAKE(rotsta_group_fdb, 1),
-    rotsta_fdb_not_init,
-    rotsta_fdb_invalid_type,
-    rotsta_fdb_not_registered,
-    rotsta_fdb_invalid_save_type,
-    rotsta_fdb_save_fail,
-    rotsta_fdb_lock_fail,
+    rotsta_db_init_fail = ROTSTA_MAKE(rotsta_group_db, 1),
+    rotsta_db_not_init,
+    rotsta_db_invalid_type,
+    rotsta_db_not_registered,
+    rotsta_db_invalid_save_type,
+    rotsta_db_save_fail,
+    rotsta_db_lock_fail,
 };
 
 typedef enum {
-    FDB_ITEM_TY_FAC = 0,
-    FDB_ITEM_TY_CALIB,
-    FDB_ITEM_TY_COMMON,
-    FDB_ITEM_TY_SOBI,
-    FDB_ITEM_TY_MAP,
-    FDB_ITEM_TY_ADV,
-    FDB_ITEM_TY_RGB,
-    FDB_ITEM_TY_MACRO,
-    FDB_ITEM_TY_MAX,
-} fdb_item_ty;
+    DB_ITEM_TY_FAC = 0,
+    DB_ITEM_TY_CALIB,
+    DB_ITEM_TY_COMMON,
+    DB_ITEM_TY_SOBI,
+    DB_ITEM_TY_MAP,
+    DB_ITEM_TY_ADV,
+    DB_ITEM_TY_RGB,
+    DB_ITEM_TY_MACRO,
+    DB_ITEM_TY_MAX,
+} db_item_ty;
 
 typedef enum {
-    FDB_SAVE_TY_NOW = 0,
-    FDB_SAVE_TY_D5S,
-    FDB_SAVE_TY_MAX,
-} fdb_save_ty;
+    DB_SAVE_TY_NOW = 0,
+    DB_SAVE_TY_D5S,
+    DB_SAVE_TY_MAX,
+} db_save_ty;
 
 
 // System on-board information
@@ -50,7 +50,6 @@ typedef struct {
         uint8_t cc_popup : 1;
     } en;
 
-    
     // product information
     struct __attribute__((packed)) {
         uint16_t vid;    // Vendor ID
@@ -71,11 +70,11 @@ typedef struct {
 extern sobi_t g_sobi;
 
 
-rotsta_t fdb_init(void);
-rotsta_t fdb_register(fdb_item_ty type, void *buf, uint32_t buf_size);
-rotsta_t fdb_update(fdb_item_ty type, fdb_save_ty save_type);
+rotsta_t db_init(void);
+rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size);
+rotsta_t db_update(db_item_ty type, db_save_ty save_type);
 
-rotsta_t fdb_sobi_init(void);
+rotsta_t db_sobi_init(void);
 
 
 #endif
