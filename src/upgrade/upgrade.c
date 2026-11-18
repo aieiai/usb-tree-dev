@@ -10,6 +10,7 @@
 #include "hpm_romapi.h"
 #include "rotutil.h"
 #include "rotcrc.h"
+#include "rotver.h"
 
 
 #define TAG "upgrade: "
@@ -154,8 +155,8 @@ static void _capture_boot_header(uint32_t image_offset, const uint8_t *data, uin
     start = (image_offset > head) ? image_offset : head;
     stop = (end < head_end) ? end : head_end;
     memcpy(&ctx.boot_header[start - head], &data[start - image_offset], stop - start);
-    if (stop > ctx.boot_collected) {
-        ctx.boot_collected = (uint16_t)stop;
+    if ((stop - head) > ctx.boot_collected) {
+        ctx.boot_collected = (uint16_t)(stop - head);
     }
 }
 
@@ -270,8 +271,7 @@ static rotsta_t _verify_flash(void)
             return state;
         }
 
-        if ((ctx.boot_collected == UPGRADE_BOOT_HEAD_SIZE) &&
-            (head_end > consumed) && (head < (consumed + sum_size))) {
+        if ((ctx.boot_collected == UPGRADE_BOOT_HEAD_SIZE) && (head_end > consumed) && (head < (consumed + sum_size))) {
             start = (head > consumed) ? head : consumed;
             stop = (head_end < (consumed + sum_size)) ? head_end : (consumed + sum_size);
             memcpy(&s_io_buf[start - consumed], &ctx.boot_header[start - head], stop - start);
@@ -365,7 +365,9 @@ rotsta_t upgrade_init(void)
 
 rotsta_t upgrade_get_info(upgrade_info_t *info)
 {
-    uint16_t version = 0U;
+    uint32_t otp_boot;
+    uint32_t sec_img_offset;
+    uint32_t max_img_len;
 
     if (info == NULL) {
         return rotsta_invalid_argument;
@@ -374,16 +376,45 @@ rotsta_t upgrade_get_info(upgrade_info_t *info)
         return rotsta_upgrade_not_init;
     }
 
-    (void)_read_slot_version(ctx.slot_act, &version);
-
     memset(info, 0, sizeof(*info));
     info->slot_act = ctx.slot_act;
     info->slot_tag = (uint8_t)(ctx.slot_act ^ 1U);
-    info->encrypted = _exip_enabled() ? 1U : 0U;
     info->slot_count = FLASH_APP_IMG_NUM;
-    info->active_version = version;
+    info->encrypted = _exip_enabled() ? 1U : 0U;
+    info->remap_enabled = (ctx.slot_act == 1U) ? 1U : 0U;
     info->slot_size = FLASH_APP_IMG_SIZE;
     info->image_base_offset = info->encrypted ? 0U : UPGRADE_IMAGE_BASE_PLAIN;
+    info->file_boot_offset = info->encrypted
+        ? UPGRADE_BOOT_HEAD_OFFSET
+        : (UPGRADE_BOOT_HEAD_OFFSET - UPGRADE_IMAGE_BASE_PLAIN);
+    info->firmware_version = FW_VER;
+
+    otp_boot = rom_otp_read_from_shadow(OTP_BOOT_WORD_INDEX);
+    sec_img_offset = otp_boot & OTP_SEC_IMG_OFFSET_MASK;
+    max_img_len = otp_boot >> OTP_MAX_IMG_LEN_SHIFT;
+    info->otp_sec_img_offset = (uint16_t)sec_img_offset;
+    info->otp_max_img_len = (uint16_t)max_img_len;
+    info->otp_offset = sec_img_offset * OTP_SEC_IMG_UNIT;
+    info->otp_size = ((max_img_len != 0U) ? max_img_len : sec_img_offset) * OTP_SEC_IMG_UNIT;
+    info->boot_ota_enabled = (sec_img_offset != 0U) ? 1U : 0U;
+    info->otp_address_match =
+        (info->otp_offset == (FLASH_APP2_IMG_ADDR - FLASH_BASE_ADDR)) ? 1U : 0U;
+    info->otp_length_match = (info->otp_size == FLASH_APP_IMG_SIZE) ? 1U : 0U;
+
+    for (uint8_t slot = 0U; slot < FLASH_APP_IMG_NUM; slot++) {
+        uint16_t version = 0U;
+        rotsta_t state = _read_slot_version(slot, &version);
+
+        if (state == rotsta_upgrade_invalid_image) {
+            continue;
+        }
+        if (state != rotsta_success) {
+            return state;
+        }
+        info->slot_valid[slot] = 1U;
+        info->slot_version[slot] = version;
+        info->slot_retired[slot] = (version == 0U) ? 1U : 0U;
+    }
     return rotsta_success;
 }
 
@@ -454,7 +485,8 @@ rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
         return _fail(state);
     }
 
-    printf(TAG "APP%u->APP%u size=%u encrypted=%u base=0x%x boot=0x%x\r\n", (unsigned)(ctx.slot_act + 1U), (unsigned)(slot_tag + 1U), (unsigned)image_size, (unsigned)ctx.encrypted, (unsigned)ctx.image_base_offset, (unsigned)ctx.file_boot_offset);
+    printf(TAG "APP%u->APP%u size=%u encrypted=%u base=0x%x boot=0x%x\r\n", (unsigned)(ctx.slot_act + 1U), (unsigned)(slot_tag + 1U), (unsigned)image_size, 
+                            (unsigned)ctx.encrypted, (unsigned)ctx.image_base_offset, (unsigned)ctx.file_boot_offset);
     return rotsta_success;
 }
 

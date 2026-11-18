@@ -56,7 +56,7 @@ const api = vm.runInContext(
     ccCrc32, ccMaxDataSize, ccStatusText,
     readLe16, readLe32, writeLe16, writeLe32,
     rgCrc8, rgCrc16Update,
-    decodeDeviceInfo, decodeUpgradeInfo
+    decodeDeviceInfo, decodeUpgradeInfo, upgradeInfoLines
   })`,
   context
 );
@@ -130,7 +130,7 @@ class MockDevice {
   }
 
   deviceInfo() {
-    const payload = new Uint8Array(45);
+    const payload = new Uint8Array(61);
     const view = new DataView(payload.buffer);
     view.setUint16(0, 0x7989, true);
     view.setUint16(2, 0x0001, true);
@@ -139,15 +139,35 @@ class MockDevice {
     const version = (1n << 56n) | (1n << 46n) | 0x12345678n;
     view.setBigUint64(36, version, true);
     payload[44] = 1;
+    writeString(payload, 45, '20260909151925');
     return payload;
   }
 
   upgradeInfo() {
-    const payload = new Uint8Array(7);
-    payload[0] = 0;
-    payload[1] = 2;
-    api.writeLe32(payload, 2, 256 * 1024);
-    payload[6] = 0;
+    const payload = new Uint8Array(48);
+    const view = new DataView(payload.buffer);
+    payload[0] = 0;                 /* slot_act */
+    payload[1] = 1;                 /* slot_tag */
+    payload[2] = 2;                 /* slot_count */
+    payload[3] = 0;                 /* encrypted */
+    payload[4] = 0;                 /* remap_enabled */
+    payload[5] = 1;                 /* boot_ota_enabled */
+    payload[6] = 1;                 /* otp_address_match */
+    payload[7] = 1;                 /* otp_length_match */
+    payload[8] = 1;                 /* slot0 valid */
+    payload[9] = 1;                 /* slot1 valid */
+    payload[10] = 0;                /* slot0 retired */
+    payload[11] = 1;                /* slot1 retired */
+    view.setUint16(12, 290, true);  /* slot0 SW_VERSION */
+    view.setUint16(14, 301, true);  /* slot1 SW_VERSION */
+    view.setUint32(16, 256 * 1024, true);
+    view.setUint32(20, 0x400, true);
+    view.setUint32(24, 0xc00, true);
+    view.setUint32(28, 256 * 1024, true);
+    view.setUint32(32, 256 * 1024, true);
+    view.setUint16(36, 16, true);
+    view.setUint16(38, 0, true);
+    view.setBigUint64(40, (1n << 56n) | (1n << 46n) | 0x12345678n, true);
     return payload;
   }
 
@@ -341,7 +361,7 @@ async function main() {
       defines[match[1]] = Number(match[2]);
     }
     assert.strictEqual(CC.HEADER_SIZE, defines.ROTCC_MSG_HEADER_SIZE);
-    assert.strictEqual(defines.ROTCC_UPGRADE_INFO_LEN, 7);
+    assert.strictEqual(defines.ROTCC_UPGRADE_INFO_LEN, CC.UPGRADE_INFO_LEN);
     assert.strictEqual(defines.ROTCC_UPGRADE_REQUEST_LEN, 14);
   });
 
@@ -398,7 +418,7 @@ async function main() {
   });
 
   await test('获取设备信息', async () => {
-    const payload = await client.readPayload(CC.CMD_SYS, CC.SYS_INFO, 45, {
+    const payload = await client.readPayload(CC.CMD_SYS, CC.SYS_INFO, 61, {
       label: '设备信息'
     });
     const info = api.decodeDeviceInfo(payload);
@@ -408,6 +428,7 @@ async function main() {
     assert.strictEqual(info.sn, 'SN0001');
     assert.strictEqual(info.fwVersion, (1n << 56n) | (1n << 46n) | 0x12345678n);
     assert.strictEqual(info.hwVersion, 1);
+    assert.strictEqual(info.buildDate, '20260909151925');
   });
 
   await test('获取按键数量', async () => {
@@ -475,14 +496,41 @@ async function main() {
   });
 
   await test('升级信息解码', async () => {
-    const payload = await client.readPayload(CC.CMD_UPGRADE, CC.UPGRADE_INFO, 7, {
-      label: '升级信息'
-    });
+    const payload = await client.readPayload(
+      CC.CMD_UPGRADE, CC.UPGRADE_INFO, CC.UPGRADE_INFO_LEN,
+      { label: '升级信息' }
+    );
     const info = api.decodeUpgradeInfo(payload);
-    assert.strictEqual(info.slotCur, 0);
-    assert.strictEqual(info.slotMax, 2);
+    assert.strictEqual(info.slotAct, 0);
+    assert.strictEqual(info.slotTag, 1);
+    assert.strictEqual(info.slotCount, 2);
     assert.strictEqual(info.slotSize, 256 * 1024);
     assert.strictEqual(info.encrypt, false);
+    assert.strictEqual(info.slotVersion[0], 290);
+    assert.strictEqual(info.slotVersion[1], 301);
+    assert.strictEqual(info.slotValid[0], true);
+    assert.strictEqual(info.slotValid[1], true);
+    assert.strictEqual(info.slotRetired[0], false);
+    assert.strictEqual(info.slotRetired[1], true);
+    assert.strictEqual(info.otpAddressMatch, true);
+    assert.strictEqual(info.otpLengthMatch, true);
+    assert.strictEqual(info.otpOffset, 256 * 1024);
+    assert.strictEqual(info.otpSize, 256 * 1024);
+    assert.strictEqual(info.otpSecImgOffset, 16);
+    assert.strictEqual(info.otpMaxImgLen, 0);
+    assert.strictEqual(info.imageBaseOffset, 0x400);
+    assert.strictEqual(info.fileBootOffset, 0xc00);
+    assert.strictEqual(
+      info.firmwareVersion, (1n << 56n) | (1n << 46n) | 0x12345678n
+    );
+
+    const lines = api.upgradeInfoLines(info);
+    assert(lines.some(line => line.includes('运行 APP1')));
+    assert(lines.some(line => line.includes('APP1 SW 290')));
+    assert(lines.some(line => line.includes('APP2 SW 301')));
+    assert(lines.some(line => line.includes('匹配')));
+    assert(lines.some(line => line.includes('boot head=0xc00')));
+    assert(lines.some(line => line.includes('v1.1.0-release+12345678')));
   });
 
   await test('完整升级流程（START/DATA/FINISH）', async () => {

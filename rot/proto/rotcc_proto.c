@@ -30,9 +30,11 @@ typedef struct __attribute__((packed)) {
     uint8_t sn[16];
     uint64_t fw_ver;
     uint8_t hw_ver;
+    uint8_t cd[16];     /* build time, YYYYMMDDHHMMSS */
 } rotcc_device_info_t;
 
-_Static_assert(sizeof(rotcc_device_info_t) == 45U, "device info payload layout changed");
+_Static_assert(sizeof(rotcc_device_info_t) == 61U, "device info payload layout changed");
+_Static_assert(sizeof(upgrade_info_t) == ROTCC_UPGRADE_INFO_LEN, "upgrade info payload layout changed");
 
 
 typedef enum {
@@ -127,6 +129,7 @@ static void _handle_sys_info(const rotcc_msg_t *msg)
     }
 
     memset(&info, 0, sizeof(info));
+    memcpy(info.cd, ROTVER_BUILD_TIME, sizeof(ROTVER_BUILD_TIME) - 1U);
     info.vid = USBD_VID;
     info.pid = USBD_PID;
     info.fw_ver = (uint64_t)FW_VER;
@@ -135,6 +138,7 @@ static void _handle_sys_info(const rotcc_msg_t *msg)
         info.pid = g_sobi.pi.pid;
         memcpy(info.pn, g_sobi.pi.pn, sizeof(info.pn));
         memcpy(info.sn, g_sobi.pi.sn, sizeof(info.sn));
+        memcpy(info.cd, g_sobi.pi.cd, sizeof(info.cd));
         info.fw_ver = g_sobi.pi.fv;
         info.hw_ver = (uint8_t)ROTVER_GET_MAJOR(g_sobi.pi.hv);
     }
@@ -192,7 +196,6 @@ static void _upgrade_reset_session(bool abort_upgrade)
 static void _handle_upgrade_info(const rotcc_msg_t *msg)
 {
     upgrade_info_t info;
-    uint8_t payload[ROTCC_UPGRADE_INFO_LEN] = {0};
     rotsta_t state;
 
     if (msg->payload_len != 0U) {
@@ -206,12 +209,7 @@ static void _handle_upgrade_info(const rotcc_msg_t *msg)
         return;
     }
 
-    payload[0] = info.slot_act;
-    payload[1] = info.slot_count;
-    rotutil_put_le32(&payload[2], info.slot_size);
-    payload[6] = info.encrypted;
-
-    (void)rotcc_proto_reply(msg, payload, sizeof(payload));
+    (void)rotcc_proto_reply(msg, &info, (uint16_t)sizeof(info));
 }
 
 static void _handle_upgrade_start(const rotcc_msg_t *msg, uint32_t fw_size, uint32_t fw_crc32)

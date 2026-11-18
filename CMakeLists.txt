@@ -65,6 +65,10 @@ if(GIT_HASH)
     sdk_compile_definitions("-DROTVER_GIT_HASH_STR=\"${GIT_HASH}\"")
 endif()
 
+# Build timestamp injected into SOBI, format YYYYMMDDHHMMSS.
+string(TIMESTAMP APP_BUILD_TIME "%Y%m%d%H%M%S")
+sdk_compile_definitions("-DROTVER_BUILD_TIME=\"${APP_BUILD_TIME}\"")
+
 if(TARGET app)
     target_compile_options(app PRIVATE "-Wextra") # "-Wignored-qualifiers"
 endif()

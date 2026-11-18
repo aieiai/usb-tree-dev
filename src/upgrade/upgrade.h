@@ -40,15 +40,30 @@ enum {
 };
 
 
-typedef struct {
-    uint8_t slot_act;
-    uint8_t slot_tag;
-    uint8_t encrypted;
-    uint8_t slot_count;
-    uint16_t active_version;
+typedef struct __attribute__((packed)) {
+    uint8_t  slot_act;          /* currently booted slot */
+    uint8_t  slot_tag;          /* slot the next upgrade will write */
+    uint8_t  slot_count;
+    uint8_t  encrypted;         /* OTP EXIP enabled */
+    uint8_t  remap_enabled;     /* ROM remap, i.e. running APP2 */
+    uint8_t  boot_ota_enabled;  /* OTP SEC_IMG_OFFSET is programmed */
+    uint8_t  otp_address_match; /* OTP SEC_IMG_OFFSET points at APP2 */
+    uint8_t  otp_length_match;  /* OTP image length covers one slot */
+    uint8_t  slot_valid[FLASH_APP_IMG_NUM];
+    uint8_t  slot_retired[FLASH_APP_IMG_NUM];
+    uint16_t slot_version[FLASH_APP_IMG_NUM];
     uint32_t slot_size;
     uint32_t image_base_offset;
+    uint32_t file_boot_offset;
+    uint32_t otp_offset;        /* OTP SEC_IMG_OFFSET in bytes */
+    uint32_t otp_size;          /* OTP MAX_IMG_LEN in bytes, 0 means default */
+    uint16_t otp_sec_img_offset;/* raw OTP word25[15:0], unit 16KB */
+    uint16_t otp_max_img_len;   /* raw OTP word25[31:16], 0 means default */
+    uint64_t firmware_version;  /* running FW_VER */
 } upgrade_info_t;
+
+_Static_assert(FLASH_APP_IMG_NUM == 2U, "upgrade info layout assumes two slots");
+_Static_assert(sizeof(upgrade_info_t) == 48U, "upgrade info payload layout changed");
 
 
 /* Initializes the shared flash HAL and detects the currently booted slot. */

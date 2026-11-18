@@ -43,7 +43,30 @@ payload 为空、响应为 4 字节 `rotkc_t`；设置时 payload 为 4 字节 `
 
 升级命令：
 
-- INFO：payload 空，响应 7 字节 `{u8 slot_cur; u8 slot_max; u32 slot_size; u8 encrypt}`。
+- INFO：payload 空，响应 48 字节 `upgrade_info_t`（packed、小端）：
+  ```c
+  struct {
+      uint8_t  slot_act;          /* 运行槽 */
+      uint8_t  slot_tag;          /* 下次升级目标槽 */
+      uint8_t  slot_count;
+      uint8_t  encrypted;         /* OTP EXIP */
+      uint8_t  remap_enabled;     /* ROM remap */
+      uint8_t  boot_ota_enabled;  /* OTP SEC_IMG_OFFSET 已烧录 */
+      uint8_t  otp_address_match; /* OTP 地址匹配 APP2 */
+      uint8_t  otp_length_match;  /* OTP 长度覆盖一个槽 */
+      uint8_t  slot_valid[2];
+      uint8_t  slot_retired[2];
+      uint16_t slot_version[2];   /* 每个槽的 Boot SW_VERSION */
+      uint32_t slot_size;
+      uint32_t image_base_offset;
+      uint32_t file_boot_offset;
+      uint32_t otp_offset;        /* OTP 地址，字节 */
+      uint32_t otp_size;          /* OTP 长度，字节 */
+      uint16_t otp_sec_img_offset;/* OTP word25[15:0] 原始值 */
+      uint16_t otp_max_img_len;   /* OTP word25[31:16] 原始值 */
+      uint64_t firmware_version;  /* 当前运行固件版本 */
+  };
+  ```
 - REQUEST：payload 为 `{u32 req_ty; u32 fw_size; u32 fw_crc32; u8 src_addr; u8 dst_addr}`
   （14 字节），`req_ty` 1 开始、2 停止、3 完成。
 - DATA：payload 为固件数据切片。没有序号，逐帧状态响应即流控；DATA 帧

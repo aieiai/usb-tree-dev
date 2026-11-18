@@ -400,6 +400,7 @@
     color: var(--accent);
     font-size: 12px;
     overflow-wrap: anywhere;
+    white-space: pre-line;
   }
   #firmwareState { color: var(--accent); }
   #firmwareState.warn { color: #f6ad55; }

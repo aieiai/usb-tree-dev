@@ -35,7 +35,7 @@
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
 |0x00|0x02|0x0000|||
-|0x00|0x02|0x0000|0\-49 byte|<br>```C++<br>struct {<br>    uint16_t vid;<br>    uint16_t pid;<br>    uint8_t  pn[16];<br>    uint8_t  sn[16];<br>    uint64_t fw_ver;<br>    uint8_t  hw_ver;<br>};<br>```|
+|0x00|0x02|0x0000|0\-60 byte|<br>```C++<br>struct {<br>    uint16_t vid;<br>    uint16_t pid;<br>    uint8_t  pn[16];<br>    uint8_t  sn[16];<br>    uint64_t fw_ver;<br>    uint8_t  hw_ver;<br>    uint8_t  cd[16]; // 构建时间 YYYYMMDDHHMMSS<br>};<br>```|
 
 ### 重启
 
@@ -69,7 +69,7 @@
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
 |0x01|0x00|0x0000|||
-|0x01|0x00|0x0000||```C++<br>struct {<br>    uint8_t  slot_cur;  // 当前槽<br>    uint8_t  slot_max;  // 槽数量<br>    uint32_t slot_size; // 槽大小<br>    uint8_t  encrypt;   // 是否加密<br>};<br>```|
+|0x01|0x00|0x0000||```C++<br>struct {<br>    uint8_t  slot_act;          // 运行槽<br>    uint8_t  slot_tag;          // 下次升级目标槽<br>    uint8_t  slot_count;        // 槽数量<br>    uint8_t  encrypted;         // OTP EXIP<br>    uint8_t  remap_enabled;     // ROM remap<br>    uint8_t  boot_ota_enabled;  // OTP SEC_IMG_OFFSET 已烧录<br>    uint8_t  otp_address_match; // OTP 地址匹配 APP2<br>    uint8_t  otp_length_match;  // OTP 长度覆盖一个槽<br>    uint8_t  slot_valid[2];     // 槽内 Boot Header 有效<br>    uint8_t  slot_retired[2];   // SW_VERSION 已清 0<br>    uint16_t slot_version[2];   // 每槽 Boot SW_VERSION<br>    uint32_t slot_size;         // 槽大小<br>    uint32_t image_base_offset; // 镜像在槽内的起点<br>    uint32_t file_boot_offset;  // Boot Header 在镜像内的偏移<br>    uint32_t otp_offset;        // OTP 地址，字节<br>    uint32_t otp_size;          // OTP 长度，字节<br>    uint16_t otp_sec_img_offset;// OTP word25[15:0]<br>    uint16_t otp_max_img_len;   // OTP word25[31:16]<br>    uint64_t firmware_version;  // 当前运行固件版本<br>};<br>```|
 
 ### 请求升级
 

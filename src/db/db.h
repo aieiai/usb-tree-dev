@@ -6,7 +6,7 @@
 
 
 #define DB_SOBI_MAGIC  (0x534F4249U) /* "SOBI" */
-#define DB_SOBI_VER    (2U)
+#define DB_SOBI_VER    (1U)
 
 enum {
     rotsta_db_init_fail = ROTSTA_MAKE(rotsta_group_db, 1),

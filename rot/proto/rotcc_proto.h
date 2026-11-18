@@ -15,7 +15,7 @@ extern "C" {
 /* Rot-CC payload: cmd(1) subcmd(1) reserve(2) payload(n). */
 #define ROTCC_PROTO_VERSION         (1U)
 #define ROTCC_MSG_HEADER_SIZE       (4U)
-#define ROTCC_UPGRADE_INFO_LEN      (7U)
+#define ROTCC_UPGRADE_INFO_LEN      (48U)
 #define ROTCC_UPGRADE_REQUEST_LEN   (14U)
 
 enum {

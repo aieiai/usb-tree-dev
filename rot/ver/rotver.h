@@ -47,11 +47,16 @@ enum {
 #define ROTVER_GIT_HASH_STR "01234567"
 #endif
 
+// 构建时间：由 CMake 注入，格式 YYYYMMDDHHMMSS；单独编译时回退为全 0
+#ifndef ROTVER_BUILD_TIME
+#define ROTVER_BUILD_TIME "00000000000000"
+#endif
+
 #define ROTVER_MAKE(major, minor, patch, stage, hash)   \
     ((((uint64_t)(major) & 0x0FFULL) << 56) |           \
      (((uint64_t)(minor) & 0x3FFULL) << 46) |           \
      (((uint64_t)(patch) & 0x3FFULL) << 36) |           \
-     (((uint64_t)(stage) & ROTVER_STAGE_MASK) << 32) |           \
+     (((uint64_t)(stage) & ROTVER_STAGE_MASK) << 32) |  \
      ((uint64_t)(hash)   & 0xFFFFFFFFULL))
 
 

@@ -422,7 +422,7 @@ static void _sobi_load_defaults(void)
     g_sobi.pi.pid = 0x0001U;
     g_sobi.pi.fv  = (uint64_t)FW_VER;
     g_sobi.pi.hv  = ROTVER_MAKE(0U, 1U, 0U, ROTVER_STAGE_RELEASE, 0U);
-    _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), __DATE__);
+    _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
     _sobi_set_str(g_sobi.pi.mn, sizeof(g_sobi.pi.mn), "Ray");
     _sobi_set_str(g_sobi.pi.pn, sizeof(g_sobi.pi.pn), "Trace40");
     _sobi_set_str(g_sobi.pi.sn, sizeof(g_sobi.pi.sn), "SN000000000001");
@@ -443,6 +443,32 @@ rotsta_t db_sobi_init(void)
         result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
             printf(TAG "sobi default save failed: 0x%08x\r\n", (unsigned)result);
+        }
+    }
+    else if (g_sobi.pi.fv != (uint64_t)FW_VER) {
+        uint64_t prev_fv = g_sobi.pi.fv;
+
+        /*
+         * Firmware changed: migrate persistent data from prev_fv here before
+         * the stored version is advanced. Keep the checks ordered by version,
+         * e.g. if (prev_fv < ROTVER_MAKE(1, 5, 0, ROTVER_STAGE_RELEASE, 0)).
+         */
+        g_sobi.pi.fv = (uint64_t)FW_VER;
+        _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
+        printf(TAG "sobi fw version 0x%08x%08x -> 0x%08x%08x\r\n",
+               (unsigned)(prev_fv >> 32), (unsigned)prev_fv,
+               (unsigned)(g_sobi.pi.fv >> 32), (unsigned)g_sobi.pi.fv);
+        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "sobi fw version save failed: 0x%08x\r\n", (unsigned)result);
+        }
+    }
+    else if ((g_sobi.pi.fv == (uint64_t)FW_VER) && strcmp((const char *)g_sobi.pi.cd, ROTVER_BUILD_TIME) != 0) {
+        printf(TAG "sobi compile date %s != %s, update\r\n", (const char *)g_sobi.pi.cd, ROTVER_BUILD_TIME);
+        _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
+        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "sobi compile date save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
     return result;
