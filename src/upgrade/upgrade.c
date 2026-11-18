@@ -379,7 +379,7 @@ rotsta_t upgrade_get_info(upgrade_info_t *info)
     memset(info, 0, sizeof(*info));
     info->slot_act = ctx.slot_act;
     info->slot_tag = (uint8_t)(ctx.slot_act ^ 1U);
-    info->slot_count = FLASH_APP_IMG_NUM;
+    info->slot_cnt = FLASH_APP_IMG_NUM;
     info->encrypted = _exip_enabled() ? 1U : 0U;
     info->remap_enabled = (ctx.slot_act == 1U) ? 1U : 0U;
     info->slot_size = FLASH_APP_IMG_SIZE;

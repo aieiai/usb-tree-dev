@@ -86,7 +86,7 @@ async function selectLayer(layer) {
     for (const [index, btn] of [...$kcLayers.children].entries()) {
       btn.classList.toggle('active', index === layer);
     }
-    kcSelected = null;
+    kcSelected.clear();
     appendLine(`[KC] 活动层已切换为 Fn${layer}`);
     switched = true;
   } catch (error) {

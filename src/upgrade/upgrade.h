@@ -43,7 +43,7 @@ enum {
 typedef struct __attribute__((packed)) {
     uint8_t  slot_act;          /* currently booted slot */
     uint8_t  slot_tag;          /* slot the next upgrade will write */
-    uint8_t  slot_count;
+    uint8_t  slot_cnt;
     uint8_t  encrypted;         /* OTP EXIP enabled */
     uint8_t  remap_enabled;     /* ROM remap, i.e. running APP2 */
     uint8_t  boot_ota_enabled;  /* OTP SEC_IMG_OFFSET is programmed */

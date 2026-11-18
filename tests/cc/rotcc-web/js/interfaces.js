@@ -148,7 +148,7 @@ function destroyLinks() {
   }
   links = [];
   kcValues.clear();
-  kcSelected = null;
+  kcSelected.clear();
   renderInterfaces();
   updateCcPacketInfo();
 }

@@ -127,7 +127,7 @@ async function resetDevice(options, label) {
 
   if (ok && (options & SYS_RESET_KC) !== 0) {
     kcValues.clear();
-    kcSelected = null;
+    kcSelected.clear();
     syncKeycaps();
     await queryKeymapInfo();
     autoReadKeymap();

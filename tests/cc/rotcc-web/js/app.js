@@ -2,6 +2,7 @@
 
 renderLayers();
 renderKeyboard();
+renderQuickSelect();
 renderPicker();
 if (globalThis.ResizeObserver) {
   new ResizeObserver(syncKeycapSize).observe($keyboard.closest('.keyboard-card'));

@@ -121,7 +121,14 @@
   /* 改键页上 40%、下 60%，窗口过矮时整页滚动 */
   #view-remap { overflow-y: auto; }
   #view-remap > .interface { min-height: 0; }
-  #view-remap > .keyboard-card { flex: 4 1 0; min-height: 120px; }
+  #view-remap > .keyboard-card {
+    flex: 4 1 0;
+    min-height: 120px;
+    padding: 10px;
+    background: transparent;
+    border: 0;
+    overflow: visible;
+  }
   #view-remap > .interface:not(.keyboard-card) { flex: 6 1 0; min-height: 200px; }
   #layout-bottom {
     flex: 1 1 auto;
@@ -216,6 +223,20 @@
     padding: 16px;
     align-items: center;
     justify-content: center;
+  }
+  /* 键盘底色只比键帽范围外扩 1U，不影响键帽尺寸 */
+  .keyboard-card .keyboard {
+    position: relative;
+    isolation: isolate;
+  }
+  .keyboard-card .keyboard::before {
+    content: '';
+    position: absolute;
+    inset: calc(var(--u) * -0.5);
+    z-index: -1;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
   }
   #view-remap > .interface:not(.keyboard-card) .kc-panel {
     height: 100%;
@@ -326,6 +347,12 @@
     flex-wrap: wrap;
   }
   .kc-layers { display: flex; gap: 4px; }
+  .kc-quick-group {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
   .kc-layer {
     padding: 6px 10px;
     color: var(--muted);
