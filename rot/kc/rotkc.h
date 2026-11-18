@@ -496,7 +496,7 @@ enum {
     MS_BTN6 = (1u << 5),
     MS_BTN7 = (1u << 6),
     MS_BTN8 = (1u << 7)
-} ;
+};
 
 /* Modifier usages E0..E7 map directly to the 8-bit modifier field. */
 enum {

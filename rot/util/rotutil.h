@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 #define ROT_DIV_CEIL(size, align)               (((size) + (align) - 1) / (align))
-#define ROT_DIV_ROUND_NEAREST(size, align)      (((size) + (align)/2) / (align) ) // round to nearest integer
+#define ROT_DIV_ROUND_NEAREST(size, align)      (((size) + (align)/2) / (align) ) /* round to nearest integer */
 #define ROT_ALIGN_UP(size, align)               (((size) + (align)-1) & ~((align)-1))
 #define ROT_ALIGN_DOWN(size, align)             ((size) & ~((align)-1))
 
@@ -17,6 +17,13 @@ extern "C" {
 #define ROT_ATTR_DEPRECATED(mess)       __attribute__ ((deprecated(mess)))
 #define ROT_ATTR_UNUSED                 __attribute__ ((unused))
 #define ROT_ATTR_USED                   __attribute__ ((used))
+
+#define rotutil_bit_wrt(val, bit)           ((val) = (bit))
+#define rotutil_bit_get(val, bit)           ((val) & (bit))
+#define rotutil_bit_set(val, bit)           ((val) |= (bit)) 
+#define rotutil_bit_not(val, bit)           ((val) ^= (bit))
+#define rotutil_bit_clr(val, bit)           ((val) &= ~(bit))
+#define rotutil_bit_mod(val, cbit, sbit)    ((val) = (((val) & (~(cbit))) | (sbit)))
 
 
 static inline uint16_t rotutil_get_le16(const uint8_t *data) {
