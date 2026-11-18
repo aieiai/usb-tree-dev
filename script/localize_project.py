@@ -129,7 +129,18 @@ def fail(message):
 
 
 def detect_localized_board(project_dir):
-    """从工程中的本地化 SDK 目录推断板卡名称。"""
+    """从工程配置或本地化 SDK 目录推断当前板卡。"""
+    # localized_sdk.cmake 记录着上次使用的板卡，优先采用，避免多个本地化
+    # SDK 目录共存时回落到默认板卡。
+    cmake_file = project_dir / "localized_sdk.cmake"
+    if cmake_file.is_file():
+        content = cmake_file.read_text(encoding="utf-8", errors="ignore")
+        for board in re.findall(
+            re.escape(LOCALIZED_PREFIX) + r"([A-Za-z0-9_]+)", content
+        ):
+            if (project_dir / (LOCALIZED_PREFIX + board)).is_dir():
+                return board
+
     candidates = [
         d.name[len(LOCALIZED_PREFIX):]
         for d in project_dir.iterdir()

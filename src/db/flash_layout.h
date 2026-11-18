@@ -1,22 +1,36 @@
 #ifndef FLASH_LAYOUT_H
 #define FLASH_LAYOUT_H
 
+
+/**
+ * @brief OTP section image layout
+ *      One map per supported SoC. Add a new #elif branch when another chip needs
+ *      a different layout, so a missing layout fails the build instead of silently
+ *      using the wrong addresses.
+ */
+#if defined(CHIP_SERIES_HPM5100)
+#   define OTP_SEC_IMG_UNIT         (1024u * 16u)   /* 16KB */
+#   define OTP_SEC_IMG_OFFSET       (16u)           /* OTP word25[15:0] */
+#   define OTP_SEC_MAX_IMG_LEN      (0u)            /* OTP word25[31:16]，0: default use SEC_IMG_OFFSET */
+#   define FLASH_TOTAL_SIZ          (0x100000)      /* 1MB */
+#   define FLASH_SECTOR_SIZ         (0x1000)        /* 4KB */
+#elif defined(CHIP_SERIES_HPM5300)
+#   define OTP_SEC_IMG_UNIT         (1024u * 256u)  /* 256KB */
+#   define OTP_SEC_IMG_OFFSET       (1u)            /* OTP word25[15:0] */
+#   define OTP_SEC_MAX_IMG_LEN      (0u)            /* OTP word25[31:16]，0: default use SEC_IMG_OFFSET */
+#   define FLASH_TOTAL_SIZ          (0x100000)      /* 1MB */
+#   define FLASH_SECTOR_SIZ         (0x1000)        /* 4KB */
+#else
+#   error "flash_layout.h: no flash layout defined for this SoC"
+#endif
+
 // Flash base message
-#define FLASH_OTP_SEC_IMG_UNIT      (16u * 1024u)
-#define FLASH_OTP_SEC_IMG_OFFSET    (16u) // OTP word25[15:0]
-#define FLASH_OTA_SEC_MAX_IMG_LEN   (0u) // OTP word25[31:16]，0 表示默认使用 SEC_IMG_OFFSET
-#define FLASH_APP_IMG_SIZE          (FLASH_OTP_SEC_IMG_OFFSET * FLASH_OTP_SEC_IMG_UNIT) // APP1/APP2 单分区大小
-
 #define FLASH_BASE_ADDR             (0x80000000)
-#define FLASH_TOTAL_SIZ             (0x100000) /* 1MB */
-#define FLASH_SECTOR_SIZ            (0x1000)   /* 4KB */
+#define FLASH_APP_IMG_NUM           (2)
 #define FLASH_INVALID_DAT           (0xFFFFFFFF)
-
+#define FLASH_APP_IMG_SIZE          (OTP_SEC_IMG_OFFSET * OTP_SEC_IMG_UNIT)
 
 // Firmware upgrade area
-#define FLASH_APP_IMG_NUM           (2)
-#define FLASH_APP_IMGINFO_SIZ       (FLASH_SECTOR_SIZ) /* 4KB */
-
 // APP1 image, layout follows the official bootrom example.
 #define FLASH_APP1_IMG_ADDR         (FLASH_BASE_ADDR)
 #define FLASH_APP1_IMG_END_ADDR     (FLASH_APP1_IMG_ADDR + FLASH_APP_IMG_SIZE)
@@ -51,11 +65,11 @@
 
 // Official image information pages.
 #define FLASH_APP1_IMGINFO_ADDR     (FLASH_APP2_IMG_END_ADDR)
-#define FLASH_APP1_IMGINFO_SIZE     (FLASH_APP_IMGINFO_SIZ)
-#define FLASH_APP2_IMGINFO_ADDR     (FLASH_APP1_IMGINFO_ADDR + FLASH_APP_IMGINFO_SIZ)
-#define FLASH_APP2_IMGINFO_SIZE     (FLASH_APP_IMGINFO_SIZ)
+#define FLASH_APP1_IMGINFO_SIZE     (FLASH_SECTOR_SIZ)
+#define FLASH_APP2_IMGINFO_ADDR     (FLASH_APP1_IMGINFO_ADDR + FLASH_SECTOR_SIZ)
+#define FLASH_APP2_IMGINFO_SIZE     (FLASH_SECTOR_SIZ)
 
-#define FLASH_RSV0_ADDR             (FLASH_APP2_IMGINFO_ADDR + FLASH_APP_IMGINFO_SIZ)
+#define FLASH_RSV0_ADDR             (FLASH_APP2_IMGINFO_ADDR + FLASH_SECTOR_SIZ)
 #define FLASH_RSV0_SIZ              (FLASH_SECTOR_SIZ * 2)
 
 

@@ -19,6 +19,7 @@ sdk_app_src(
     hal_usb.c
     
     hal_flash.c
+    hal_chip.c
     
     
 )

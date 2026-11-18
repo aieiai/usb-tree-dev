@@ -13,7 +13,7 @@
 参数说明：
     --sdk-env         补全本地化内容时使用的原 SDK 环境目录
     --sdk             直接指定 hpm_sdk 目录，优先级高于 --sdk-env
-    --board           目标板卡，默认自动识别本地化目录
+    --board           目标板卡，默认沿用 localized_sdk.cmake 中上次使用的板卡
     --hpm-build-type  HPM 构建类型，默认 flash_xip
     --config          编译配置，可选 debug / release，默认 debug
     --release         等同于 --config release
@@ -101,7 +101,8 @@ def main(argv=None):
     parser.add_argument(
         "--board",
         help="目标板卡。示例：--board hpm5300evk；"
-        "默认：自动识别本地化目录，否则使用 %s" % lp.DEFAULT_BOARD,
+        "默认：读取 localized_sdk.cmake 中上次使用的板卡，"
+        "否则自动识别本地化目录，最后使用 %s" % lp.DEFAULT_BOARD,
     )
     parser.add_argument(
         "--hpm-build-type",

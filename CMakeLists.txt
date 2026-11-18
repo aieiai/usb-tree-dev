@@ -38,6 +38,15 @@ get_git_author(GIT_AUTHOR)
 find_package(hpm-sdk REQUIRED HINTS $ENV{HPM_SDK_BASE})
 project(ray)
 
+# SoC identity from the SDK, used by hal_chip and the chip specific flash layout.
+if(NOT DEFINED HPM_SOC OR NOT DEFINED HPM_SOC_SERIES)
+    message(FATAL_ERROR "HPM SDK did not report HPM_SOC/HPM_SOC_SERIES")
+endif()
+message(STATUS "Target SoC: ${HPM_SOC} (${HPM_SOC_SERIES}), board: ${BOARD}")
+sdk_compile_definitions("-DCHIP_SOC=${HPM_SOC}")
+sdk_compile_definitions("-DCHIP_SERIES_${HPM_SOC_SERIES}")
+sdk_compile_definitions("-DCHIP_BOARD_${BOARD}")
+
 add_subdirectory(src)
 add_subdirectory(keyboards)
 add_subdirectory(rot)

@@ -3,6 +3,7 @@
 
 #include "hal_usb.h"
 #include "hal_flash.h"
+#include "hal_chip.h"
 
 #include "cst.h"
 #include "db.h"
@@ -40,10 +41,15 @@ void tx_application_define(void *first_unused_memory)
 {
     (void)first_unused_memory;
     rotsta_t state;
+    hal_chip_info_t chip;
 
     state = db_init();
     if (state != rotsta_success) {
         printf(TAG "db init failed: 0x%08x\r\n", (unsigned)state);
+    }
+
+    if (hal_chip_get_info(&chip) == rotsta_success) {
+        printf(TAG "OTP chip id 0x%08x, flash %u KB\r\n", (unsigned)chip.otp_chip_id, (unsigned)(chip.flash_size / 1024U));
     }
 
     state = upgrade_init();

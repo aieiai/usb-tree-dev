@@ -5,6 +5,7 @@
 
 #include "board.h"
 #include "hal_flash.h"
+#include "flash_layout.h"
 #include "hpm_ppor_drv.h"
 #include "hpm_romapi.h"
 #include "rotutil.h"
@@ -24,7 +25,6 @@
 #define OTP_MAX_IMG_LEN_SHIFT       (16U)
 #define OTP_EXIP_ENABLE_SHIFT       (12U)
 #define OTP_EXIP_ENABLE_MASK        (1UL << OTP_EXIP_ENABLE_SHIFT)
-#define OTP_SEC_IMG_UNIT            (16U * 1024U)
 
 
 typedef struct {
