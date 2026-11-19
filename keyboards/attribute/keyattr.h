@@ -27,39 +27,29 @@
 #define KTYPE_TTC_WCW_STROKE_DFT_VAL    ( 12000 )
 
 
+typedef enum {
+    KTRG_TY_NOM = 0,
+    KTRG_TY_RT,
+    KTRG_TY_RT_CTN,
+    KTRG_TY_ADV,
+} ktrg_ty;
 
 typedef enum {
     KATTR_AXIS_GDL = 0,
-    KATTR_AXIS_GDL,
     KATTR_AXIS_TTC,
     KATTR_AXIS_MAX,
     KATTR_AXIS_DFT = KATTR_AXIS_GDL,
 } kattr_axis_ty;
 
-
-typedef enum _key_type_user_defined {
+typedef enum {
     KTYPE_UDEF0, /* User-defined */
     KTYPE_UDEF1,
     KTYPE_UDEF2,
     KTYPE_UDEF3,
     KTYPE_UDEF_MAX,
-} ktype_udef_t;
+} kattr_axis_udef_ty;
 
-typedef enum _key_layer_type {
-    KLAYER_MAIN = 0,
-    KLAYER_SUB0,
-    KLAYER_MAX,
-} klayer_type_t;
-
-typedef enum _key_save_status {
-    KSV_STA_NOINIT = 0,
-    KSV_STA_INIT,
-    KSV_STA_LOAD,
-    KSV_STA_IDLE,
-    KSV_STA_WAIT_SAVE,
-} ksv_sta_t;
-
-typedef struct _key_type_parameter {
+typedef struct {
     /* NOTE: The premise is that the key shaft is inserted in the pcba surface */
     uint16_t t2h_dst; /* Distance from the top to Hall; Note: The distance from the initial height of the key shaft to Hall. */
     uint16_t b2h_dst; /* Distance from the bottom to Hall; Note: The distance from the positive surface of pcba to Hall. */
@@ -68,13 +58,8 @@ typedef struct _key_type_parameter {
     kcal_lmt_t top;
     kcal_lmt_t bot;
     kcal_lmt_t dif;
-} __attribute__((aligned(4))) ktp_para_t;
+} __attribute__((aligned(4))) kattr_para_t;
 
-typedef struct _key_save {
-    ksv_sta_t sta;
-    uint32_t addr;
-    uint32_t time;
-} __attribute__((packed)) ksv_t;
 
 typedef struct _key_attribute {
     ktype_t type;
@@ -110,19 +95,10 @@ typedef struct _key_attribute {
     } rt;
 
     struct {
-        kadv_type_t type;
+        kadv_ty type;
     } adv;
 } __attribute__((aligned(4))) kattr_t;
 
-typedef struct _kb_info {
-    bool nkro;
-    hid_kc_t map[KLAYER_MAX][KEY_NUM];
-} __attribute__((aligned(4))) kb_info_t;
-
-typedef struct _key_config {
-    kb_info_t info;
-    kattr_t attr[KEY_NUM];
-} __attribute__((aligned(4))) kcfg_t;
 
 
 
@@ -132,4 +108,4 @@ typedef struct _key_config {
 
 
 
-#endif
+#endif  /* KEY_ATTR_H */

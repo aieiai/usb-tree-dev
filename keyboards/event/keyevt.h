@@ -25,7 +25,13 @@
 #define CKK_IS_D(trg) ((trg) > KEVT_TRG_D2U)
 #endif
 
+#ifndef CKK_IS_FU
+#define CKK_IS_FU(trg) ((trg) == KEVT_TRG_D2U)
+#endif
 
+#ifndef CKK_IS_FD
+#define CKK_IS_FD(trg) ((trg) == KEVT_TRG_U2D)
+#endif
 
 
 // key event trigger
@@ -90,5 +96,5 @@ uint16_t kevt_dst2pt(uint8_t ki, int16_t dst);
 void kevt_updete(uint8_t ki, uint16_t val);
 void kevt_update_factor(uint8_t ki);
 
-#endif
+#endif  /* KEY_EVENT_H */
 

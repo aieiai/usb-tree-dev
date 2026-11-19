@@ -1,33 +1,35 @@
 /**
  * @Author: wj
- * @Brief:  key check.
+ * @Brief:  key combo.
  * @Date:   2024/07/02
  */
-#include "key_check.h"
+#include "key_adv.h"
+
 
 /**
- * @brief:
+ * @brief:  
  * @param:  None
  * @return: None
  */
-void kck_detection(void)
+void kadv_tgl_handle(void)
 {
 }
 
 /**
- * @brief:
+ * @brief:  
  * @param:  None
  * @return: None
  */
-void kck_init(void)
+void kadv_tgl_init(void)
 {
 }
 
 /**
- * @brief:
+ * @brief:  
  * @param:  None
  * @return: None
  */
-void kck_deinit(void)
+void kadv_tgl_deinit(void)
 {
 }
+

@@ -1,12 +1,39 @@
 /**
  * @Author: wj
- * @Brief:  key real-time status.
+ * @Brief:  key real-time event.
  * @Date:   2024/07/02
  */
-#include "key_sta.h"
-#include "hal.h"
+#include "keyevt.h"
 
-ksta_t ksta[KEY_NUM];
+// key action status
+typedef enum {
+    KACT_STA_IDLE = 0,
+    KACT_STA_UP,
+    KACT_STA_SC,
+    KACT_STA_SCL,
+    KACT_STA_SCN,
+    KACT_STA_DC,
+    KACT_STA_DCL,
+} kact_sta_ty;
+
+typedef struct {
+    kact_sta_ty sta;
+    uint32_t act_tk;
+    uint32_t t2b_dst;
+} kmsg_t;
+
+typedef struct {
+    uint32_t sclt;
+    uint32_t sclto;
+    uint32_t dclt;
+    uint32_t dclto;
+} ktk_t;
+
+kevt_t g_kevt[KBD_KEY_NUM];
+static kmsg_t kmsg[KBD_KEY_NUM];
+static ktk_t ktk[KBD_KEY_NUM];
+
+
 
 /**
  * @brief:  Detect the action event of the key.
@@ -15,171 +42,143 @@ ksta_t ksta[KEY_NUM];
  *
  *          Detect the action event of the key by the enter event and action state.
  *          The action event can be one of the following:
- *            - KSTA_EVT_ACT_IDLE: Idle.
- *            - KSTA_EVT_ACT_UP: Up.
- *            - KSTA_EVT_ACT_SC: Click.
- *            - KSTA_EVT_ACT_SCL: Click long.
- *            - KSTA_EVT_ACT_SCLTO: Click long timeout.
- *            - KSTA_EVT_ACT_DC: Double click.
- *            - KSTA_EVT_ACT_DCL: Double click long.
- *            - KSTA_EVT_ACT_DCLTO: Double click long timeout.
+ *            - KEVT_ACT_IDLE: Idle.
+ *            - KEVT_ACT_UP: Up.
+ *            - KEVT_ACT_SC: Click.
+ *            - KEVT_ACT_SCL: Click long.
+ *            - KEVT_ACT_SCLTO: Click long timeout.
+ *            - KEVT_ACT_DC: Double click.
+ *            - KEVT_ACT_DCL: Double click long.
+ *            - KEVT_ACT_DCLTO: Double click long timeout.
  */
-static __inline ksta_evt_act_t ksta_act_detect(uint8_t ki)
+static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
 {
-    switch (ksta[ki].act_sta)
-    {
+    kevt_t *p_evt = &g_kevt[ki];
+    kmsg_t *p_msg = &kmsg[ki];
+    ktk_t *p_tk   = &ktk[ki];
+
+    switch (p_msg->sta) {
         case KACT_STA_IDLE:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_U2U)
-            {
-                ksta[ki].evt_act = KSTA_EVT_ACT_IDLE; /* idle */
+            if (CKK_IS_U(p_evt->trg)) {
+                p_evt->act = KEVT_ACT_IDLE; /* idle */
                 break;
             }
-            else
-            {
-                ksta[ki].act_tk  = 0;
-                ksta[ki].act_sta = KACT_STA_SC;
+            else {
+                p_msg->sta = KACT_STA_SC;
+                p_msg->act_tk  = 0;
             }
-        }
         // break;
+
         case KACT_STA_SC:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_U2U)
-            {
-                ksta[ki].act_tk  = 0;
-                ksta[ki].act_sta = KACT_STA_SCN;
+            if (CKK_IS_U(p_evt->trg)) {
+                p_msg->act_tk  = 0;
+                p_msg->sta = KACT_STA_SCN;
             }
-            else
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.sclt)
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_SCL;
+            else {
+                if (p_msg->act_tk >= p_tk->sclt) {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_SCL;
                 }
-                else
-                {
-                    ksta[ki].act_tk++;
+                else {
+                    p_msg->act_tk++;
                 }
             }
-        }
         break;
+
         case KACT_STA_SCN:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_D2D)
-            {
-                ksta[ki].act_tk  = 0;
-                ksta[ki].act_sta = KACT_STA_DC;
+            if (CKK_IS_D(p_evt->trg)) {
+                p_msg->act_tk  = 0;
+                p_msg->sta = KACT_STA_DC;
             }
-            else
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.dcit)
+            else {
+                if (p_msg->act_tk >= p_tk->dclt)
                 {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_IDLE;
-                    ksta[ki].evt_act = KSTA_EVT_ACT_SC; /* click */
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_IDLE;
+                    p_evt->act = KEVT_ACT_SC; /* click */
                 }
-                else
-                {
-                    ksta[ki].act_tk++;
+                else {
+                    p_msg->act_tk++;
                 }
             }
-        }
         break;
+
         case KACT_STA_DC:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_U2U)
-            {
-                ksta[ki].act_tk  = 0;
-                ksta[ki].act_sta = KACT_STA_IDLE;
-                ksta[ki].evt_act = KSTA_EVT_ACT_DC; /* double click */
+            if (CKK_IS_U(p_evt->trg)) {
+                p_msg->act_tk  = 0;
+                p_msg->sta = KACT_STA_IDLE;
+                p_evt->act = KEVT_ACT_DC; /* double click */
             }
-            else
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.dclt)
+            else {
+                if (p_msg->act_tk >= p_tk->dclt)
                 {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_DCL;
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_DCL;
                 }
                 else
                 {
-                    ksta[ki].act_tk++;
+                    p_msg->act_tk++;
                 }
             }
-        }
         break;
+
         case KACT_STA_SCL:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_D2D)
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.sclto)
+            if (CKK_IS_D(p_evt->trg)) {
+                if (p_msg->act_tk >= p_tk->sclto)
                 {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_UP;
-                    ksta[ki].evt_act = KSTA_EVT_ACT_SCLTO; /* click long timeout */
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_UP;
+                    p_evt->act = KEVT_ACT_SCLTO; /* click long timeout */
                 }
-                else
-                {
-                    ksta[ki].act_tk++;
+                else {
+                    p_msg->act_tk++;
                 }
             }
-            else
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.sclto)
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_IDLE;
+            else {
+                if (p_msg->act_tk >= p_tk->sclto) {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_IDLE;
                 }
-                else
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_IDLE;
-                    ksta[ki].evt_act = KSTA_EVT_ACT_SCL; /* click long */
+                else {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_IDLE;
+                    p_evt->act = KEVT_ACT_SCL; /* click long */
                 }
             }
-        }
         break;
+
         case KACT_STA_DCL:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_D2D)
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.dclto)
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_UP;
-                    ksta[ki].evt_act = KSTA_EVT_ACT_DCLTO; /* double click long timeout */
+            if (CKK_IS_D(p_evt->trg)) {
+                if (p_msg->act_tk >= p_tk->dclto) {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_UP;
+                    p_evt->act = KEVT_ACT_DCLTO; /* double click long timeout */
                 }
-                else
-                {
-                    ksta[ki].act_tk++;
+                else {
+                    p_msg->act_tk++;
                 }
             }
-            else
-            {
-                if (ksta[ki].act_tk >= g_kcfg.attr[ki].tk.dclto)
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_IDLE;
+            else {
+                if (p_msg->act_tk >= p_tk->dclto) {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_IDLE;
                 }
-                else
-                {
-                    ksta[ki].act_tk  = 0;
-                    ksta[ki].act_sta = KACT_STA_IDLE;
-                    ksta[ki].evt_act = KSTA_EVT_ACT_DCL; /* double click long */
+                else {
+                    p_msg->act_tk  = 0;
+                    p_msg->sta = KACT_STA_IDLE;
+                    p_evt->act = KEVT_ACT_DCL; /* double click long */
                 }
             }
-        }
         break;
+
         case KACT_STA_UP:
-        {
-            if (ksta[ki].evt_ent == KSTA_EVT_ENT_U2U)
-            {
-                ksta[ki].act_sta = KACT_STA_IDLE;
-                ksta[ki].evt_act = KSTA_EVT_ACT_UP; /* up */
+            if (CKK_IS_U(p_evt->trg)) {
+                p_msg->sta = KACT_STA_IDLE;
+                p_evt->act = KEVT_ACT_UP; /* up */
             }
-        }
         break;
     }
-    return ksta[ki].evt_act;
+    return p_evt->act;
 }
 
 /**
@@ -189,15 +188,14 @@ static __inline ksta_evt_act_t ksta_act_detect(uint8_t ki)
  *
  *          Detect the move direction of the key by comparing the current value
  *          with the previous value. The move direction can be one of the following:
- *            - KSTA_EVT_MD_U: Move up.
- *            - KSTA_EVT_MD_D: Move down.
- *            - KSTA_EVT_MD_S: Stay still.
+ *            - KEVT_MD_U: Move up.
+ *            - KEVT_MD_D: Move down.
+ *            - KEVT_MD_S: Stay still.
  */
-static __inline ksta_evt_md_t ksta_md_detect(uint8_t ki)
+static __inline kevt_md_ty kevt_md_detect(uint8_t ki)
 {
-    return ((ksta[ki].valc > 0)   ? KSTA_EVT_MD_U
-            : (ksta[ki].valc < 0) ? KSTA_EVT_MD_D
-                                  : KSTA_EVT_MD_S);
+    kevt_t *p_evt = &g_kevt[ki];
+    return ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S);
 }
 
 /**
@@ -208,16 +206,16 @@ static __inline ksta_evt_md_t ksta_md_detect(uint8_t ki)
  *          Detect the trigger event of the key by comparing the current value
  *          with the previous value and threshold. The trigger event can be one
  *          of the following:
- *            - KSTA_EVT_TRG_U2U: From up to up.
- *            - KSTA_EVT_TRG_U2D: From up to down.
- *            - KSTA_EVT_TRG_D2D: From down to down.
- *            - KSTA_EVT_TRG_D2U: From down to up.
+ *            - KEVT_TRG_U2U: From up to up.
+ *            - KEVT_TRG_U2D: From up to down.
+ *            - KEVT_TRG_D2D: From down to down.
+ *            - KEVT_TRG_D2U: From down to up.
  */
-static __inline ksta_evt_trg_t ksta_trg_detect(uint8_t ki)
+static __inline kevt_trg_ty ktrg_detect(uint8_t ki)
 {
-    return ((ksta[ki].evt_trg < KSTA_EVT_TRG_D2D)
-                ? ((ksta[ki].valn <= ksta[ki].pp) ? KSTA_EVT_TRG_U2D : KSTA_EVT_TRG_U2U)
-                : ((ksta[ki].valn >= ksta[ki].rp) ? KSTA_EVT_TRG_D2U : KSTA_EVT_TRG_D2D));
+    kevt_t *p_evt = &g_kevt[ki];
+    return (CKK_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
+                                 : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
 }
 
 /**
@@ -230,12 +228,11 @@ static __inline ksta_evt_trg_t ksta_trg_detect(uint8_t ki)
  *            - KSTA_EVT_ENT_D2D: The key is pressed from down to down.
  *            - KSTA_EVT_ENT_U2U: The key is pressed from up to up.
  */
-static __inline ksta_evt_ent_t ksta_ent_detect(uint8_t ki)
-{
-    return ((ksta[ki].evt_trg < KSTA_EVT_TRG_D2D)
-                ? KSTA_EVT_ENT_U2U
-                : KSTA_EVT_ENT_D2D);
-}
+// static __inline kevt_ent_ty kevt_ent_detect(uint8_t ki)
+// {
+//     kevt_t *p_evt = &g_kevt[ki];
+//     return ((CKK_IS_D(p_evt->trg) ? KEVT_ENT_U2U : KEVT_ENT_D2D));
+// }
 
 /**
  * @brief:  Detect the position event of the key.
@@ -248,12 +245,11 @@ static __inline ksta_evt_ent_t ksta_ent_detect(uint8_t ki)
  *            - KSTA_EVT_POS_BOT: The key is pressed and the position is at the bottom.
  *            - KSTA_EVT_POS_MID: The key is pressed and the position is between the top and the bottom.
  */
-static __inline ksta_evt_pos_t ksta_pos_detect(uint8_t ki)
+static __inline kevt_pos_ty kevt_pos_detect(uint8_t ki)
 {
-    return ((ksta[ki].dst <= 50) ? KSTA_EVT_POS_TOP
-            : (ksta[ki].dst >= ksta[ki].type_para->t2b_dst)
-                ? KSTA_EVT_POS_BOT
-                : KSTA_EVT_POS_MID);
+    kevt_t *p_evt = &g_kevt[ki];
+    kmsg_t *p_msg = &kmsg[ki];
+    return ((p_evt->dst <= 50) ? KEVT_POS_TOP : (p_evt->dst >= p_msg->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID);
 }
 
 /**
@@ -338,17 +334,17 @@ static __inline uint16_t ksta_update_pt(uint8_t ki, int16_t pdst)
  */
 void ksta_updete(uint8_t ki, uint16_t val)
 {
-    ksta[ki].valp  = ksta[ki].valn;
+    ksta[ki].valp  = ksta[ki].val;
     ksta[ki].valcp = ksta[ki].valc;
 
-    ksta[ki].valn = val;
-    ksta[ki].valc = ksta[ki].valn - ksta[ki].valp;
+    ksta[ki].val = val;
+    ksta[ki].valc = ksta[ki].val - ksta[ki].valp;
 
     ksta[ki].evt_md  = ksta_md_detect(ki);
     ksta[ki].evt_trg = ksta_trg_detect(ki);
     ksta[ki].evt_ent = ksta_ent_detect(ki);
     ksta[ki].evt_act = ksta_act_detect(ki);
-    ksta[ki].dst     = ksta_update_dst(ki, ksta[ki].valn);
+    ksta[ki].dst     = ksta_update_dst(ki, ksta[ki].val);
     ksta[ki].evt_pos = ksta_pos_detect(ki);
 }
 
@@ -365,8 +361,8 @@ ksta_t *ksta_init(void)
         ksta[ki].type_para = (ktp_para_t *)&g_ktp_para[g_kcfg.attr[ki].type];
 
         ksta_update_factor(ki);
-        ksta[ki].pp = ksta_update_pt(ki, g_kcfg.attr[ki].nom.p_dst);
-        ksta[ki].rp = ksta_update_pt(ki, g_kcfg.attr[ki].nom.r_dst);
+        ksta[ki].pv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.p_dst);
+        ksta[ki].rv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.r_dst);
     }
     return ksta;
 }

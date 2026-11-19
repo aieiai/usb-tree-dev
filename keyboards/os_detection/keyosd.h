@@ -1,0 +1,5 @@
+#ifndef KEY_OS_DETECTION_H
+#define KEY_OS_DETECTION_H
+
+
+#endif  /* KEY_OS_DETECTION_H */
