@@ -42,7 +42,7 @@
   }
   button {
     border: 0;
-    border-radius: 4px;
+    border-radius: 10px;
     padding: 6px 12px;
     color: #fff;
     background: var(--blue);
@@ -61,7 +61,7 @@
     color: var(--text);
     background: #0a0e12;
     border: 1px solid var(--line);
-    border-radius: 4px;
+    border-radius: 10px;
     outline: none;
   }
   input:focus, select:focus { border-color: var(--accent); }
@@ -155,7 +155,7 @@
   .interface {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
   }
   .interface-head {
@@ -236,7 +236,7 @@
     z-index: -1;
     background: var(--panel2);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
   }
   #view-remap > .interface:not(.keyboard-card) .kc-panel {
     height: 100%;
@@ -275,7 +275,7 @@
     padding: 10px;
     background: var(--panel2);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
   }
   .picker-groups {
     overflow-y: auto;
@@ -301,7 +301,7 @@
     color: var(--text);
     background: var(--panel2);
     border: 1px solid var(--line);
-    border-radius: 5px;
+    border-radius: 10px;
     font-size: 12px;
   }
   .pick-key:hover { color: #e6fffb; border-color: var(--accent); }
@@ -329,7 +329,7 @@
     color: var(--text);
     background: #202832;
     border: 1px solid var(--line);
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: clamp(10px, calc(var(--key) * 0.24), 13px);
     line-height: 1.05;
     white-space: pre-line;
@@ -358,7 +358,7 @@
     color: var(--muted);
     background: transparent;
     border: 1px solid var(--line);
-    border-radius: 4px;
+    border-radius: 10px;
   }
   .kc-layer:hover { color: var(--text); background: var(--panel2); }
   .kc-layer.active {
@@ -388,7 +388,7 @@
     color: var(--text);
     background: var(--panel2);
     border: 1px solid var(--line);
-    border-radius: 5px;
+    border-radius: 6px;
     font: inherit;
     font-size: clamp(10px, calc(var(--u) * 0.24), 13px);
     line-height: 1.15;
@@ -466,7 +466,7 @@
     flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
   }
   #log-head {
