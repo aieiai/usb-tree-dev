@@ -9,28 +9,21 @@
 #include <stdint.h>
 
 
-#ifndef KBD_KEY_NUM
-#define KBD_KEY_NUM 42
+
+#ifndef EVT_IS_U
+#define EVT_IS_U(trg) ((trg) < KEVT_TRG_D2D)
 #endif
 
-#ifndef CK_KI
-#define CK_KI(ki) ((ki) < KBD_KEY_NUM)
+#ifndef EVT_IS_D
+#define EVT_IS_D(trg) ((trg) > KEVT_TRG_D2U)
 #endif
 
-#ifndef CKK_IS_U
-#define CKK_IS_U(trg) ((trg) < KEVT_TRG_D2D)
+#ifndef EVT_IS_FU
+#define EVT_IS_FU(trg) ((trg) == KEVT_TRG_D2U)
 #endif
 
-#ifndef CKK_IS_D
-#define CKK_IS_D(trg) ((trg) > KEVT_TRG_D2U)
-#endif
-
-#ifndef CKK_IS_FU
-#define CKK_IS_FU(trg) ((trg) == KEVT_TRG_D2U)
-#endif
-
-#ifndef CKK_IS_FD
-#define CKK_IS_FD(trg) ((trg) == KEVT_TRG_U2D)
+#ifndef EVT_IS_FD
+#define EVT_IS_FD(trg) ((trg) == KEVT_TRG_U2D)
 #endif
 
 

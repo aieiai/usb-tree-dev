@@ -59,7 +59,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
 
     switch (p_msg->sta) {
         case KACT_STA_IDLE:
-            if (CKK_IS_U(p_evt->trg)) {
+            if (EVT_IS_U(p_evt->trg)) {
                 p_evt->act = KEVT_ACT_IDLE; /* idle */
                 break;
             }
@@ -70,7 +70,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         // break;
 
         case KACT_STA_SC:
-            if (CKK_IS_U(p_evt->trg)) {
+            if (EVT_IS_U(p_evt->trg)) {
                 p_msg->act_tk  = 0;
                 p_msg->sta = KACT_STA_SCN;
             }
@@ -86,7 +86,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         break;
 
         case KACT_STA_SCN:
-            if (CKK_IS_D(p_evt->trg)) {
+            if (EVT_IS_D(p_evt->trg)) {
                 p_msg->act_tk  = 0;
                 p_msg->sta = KACT_STA_DC;
             }
@@ -104,7 +104,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         break;
 
         case KACT_STA_DC:
-            if (CKK_IS_U(p_evt->trg)) {
+            if (EVT_IS_U(p_evt->trg)) {
                 p_msg->act_tk  = 0;
                 p_msg->sta = KACT_STA_IDLE;
                 p_evt->act = KEVT_ACT_DC; /* double click */
@@ -123,7 +123,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         break;
 
         case KACT_STA_SCL:
-            if (CKK_IS_D(p_evt->trg)) {
+            if (EVT_IS_D(p_evt->trg)) {
                 if (p_msg->act_tk >= p_tk->sclto)
                 {
                     p_msg->act_tk  = 0;
@@ -148,7 +148,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         break;
 
         case KACT_STA_DCL:
-            if (CKK_IS_D(p_evt->trg)) {
+            if (EVT_IS_D(p_evt->trg)) {
                 if (p_msg->act_tk >= p_tk->dclto) {
                     p_msg->act_tk  = 0;
                     p_msg->sta = KACT_STA_UP;
@@ -172,7 +172,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
         break;
 
         case KACT_STA_UP:
-            if (CKK_IS_U(p_evt->trg)) {
+            if (EVT_IS_U(p_evt->trg)) {
                 p_msg->sta = KACT_STA_IDLE;
                 p_evt->act = KEVT_ACT_UP; /* up */
             }
@@ -214,7 +214,7 @@ static __inline kevt_md_ty kevt_md_detect(uint8_t ki)
 static __inline kevt_trg_ty ktrg_detect(uint8_t ki)
 {
     kevt_t *p_evt = &g_kevt[ki];
-    return (CKK_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
+    return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
                                  : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
 }
 
@@ -231,7 +231,7 @@ static __inline kevt_trg_ty ktrg_detect(uint8_t ki)
 // static __inline kevt_ent_ty kevt_ent_detect(uint8_t ki)
 // {
 //     kevt_t *p_evt = &g_kevt[ki];
-//     return ((CKK_IS_D(p_evt->trg) ? KEVT_ENT_U2U : KEVT_ENT_D2D));
+//     return ((EVT_IS_D(p_evt->trg) ? KEVT_ENT_U2U : KEVT_ENT_D2D));
 // }
 
 /**

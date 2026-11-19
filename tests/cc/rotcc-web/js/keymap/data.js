@@ -166,7 +166,7 @@ const KC_BOARD_ROWS = [
   },
 ];
 
-/* 键码选择表，值按 rotkc.h 的 32 位键码编码：type 位于 bit1..5 */
+/* 键码选择表，值按 kc.h 的 32 位键码编码：type 位于 bit1..5 */
 const KC_PICKER = [
   { id: 'basic', name: '基本字符', board: KC_BOARD_ROWS },
   {

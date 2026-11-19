@@ -1,5 +1,5 @@
 #include "kbd_config.h"
-#include "rotkc.h"
+#include "kc.h"
 
 /** 40% keyboard layout
  * ,------------------------------------------------------------------------------------.

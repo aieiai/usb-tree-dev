@@ -9,4 +9,3 @@ endif()
 
 sdk_inc(${KBD_MAP})
 sdk_app_src(${KBD_MAP}/keymap.c)
-# target_sources(app PRIVATE ${KBD_MAP}/keymap.c)

@@ -1,9 +1,9 @@
 /**
  * @Author: wj
- * @Brief:  key .
+ * @Brief:  key rapid trigger.
  * @Date:   2024/07/02
  */
-#include "key_rt.h"
+#include "keyrt.h"
 #include "key_sta.h"
 #include "key_cfg.h"
 

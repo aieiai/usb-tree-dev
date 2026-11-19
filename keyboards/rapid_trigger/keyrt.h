@@ -1,10 +1,10 @@
 /**
  * @Author: wj
- * @Brief:  key .
+ * @Brief:  key rapid trigger.
  * @Date:   2024/07/02
  */
-#ifndef _KEY_RAPID_TRIGGER_H_
-#define _KEY_RAPID_TRIGGER_H_
+#ifndef KEY_RAPID_TRIGGER_H
+#define KEY_RAPID_TRIGGER_H
 #include "stdint.h"
 #include "stdbool.h"
 
