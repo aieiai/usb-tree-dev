@@ -92,8 +92,7 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
                 p_msg->sta = KACT_STA_DC;
             }
             else {
-                if (p_msg->act_tk >= p_tk->dclt)
-                {
+                if (p_msg->act_tk >= p_tk->dclt) {
                     p_msg->act_tk  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_SC; /* click */
@@ -111,13 +110,11 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
                 p_evt->act = KEVT_ACT_DC; /* double click */
             }
             else {
-                if (p_msg->act_tk >= p_tk->dclt)
-                {
+                if (p_msg->act_tk >= p_tk->dclt) {
                     p_msg->act_tk  = 0;
                     p_msg->sta = KACT_STA_DCL;
                 }
-                else
-                {
+                else {
                     p_msg->act_tk++;
                 }
             }
@@ -125,8 +122,7 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
 
         case KACT_STA_SCL:
             if (EVT_IS_D(p_evt->trg)) {
-                if (p_msg->act_tk >= p_tk->sclto)
-                {
+                if (p_msg->act_tk >= p_tk->sclto) {
                     p_msg->act_tk  = 0;
                     p_msg->sta = KACT_STA_UP;
                     p_evt->act = KEVT_ACT_SCLTO; /* click long timeout */
@@ -354,8 +350,7 @@ void kevt_updete(uint8_t ki, uint16_t val)
  */
 kevt_t *kevt_init(void)
 {
-    for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++)
-    {
+    for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
         memset(&g_kevt[ki], 0, sizeof(g_kevt[ki]));
         g_kevt[ki].type_para = (ktp_para_t *)&g_ktp_para[g_kcfg.attr[ki].type];
 

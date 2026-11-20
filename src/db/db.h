@@ -5,8 +5,8 @@
 #include "rotsta.h"
 
 
-#define DB_OBI_MAGIC  (0x534F4249U) /* "OBI" */
-#define DB_OBI_VER    (1U)
+#define MAGIC_OBI  (0x534F4249U) /* "OBI" */
+#define OBI_VER    (1U)
 
 enum {
     rotsta_db_init_fail = ROTSTA_MAKE(rotsta_group_db, 1),
@@ -19,15 +19,14 @@ enum {
 };
 
 typedef enum {
-    DB_ITEM_TY_FAC = 0,
+    DB_ITEM_TY_OBF = 0,
     DB_ITEM_TY_CALIB,
     DB_ITEM_TY_COMMON,
     DB_ITEM_TY_OBI,
-    DB_ITEM_TY_ATTR,
-    DB_ITEM_TY_MAP,
-    DB_ITEM_TY_ADV,
-    DB_ITEM_TY_RGB,
-    DB_ITEM_TY_MACRO,
+    DB_ITEM_TY_OBM,
+    DB_ITEM_TY_OBA,
+    DB_ITEM_TY_OBR,
+    DB_ITEM_TY_OBKP,
     DB_ITEM_TY_MAX,
 } db_item_ty;
 

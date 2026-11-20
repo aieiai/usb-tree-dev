@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#define KBD_MAP_MAX         (4)     /* 层数 */
 #define KBD_SYS_MAX         (3)     /* 系统数 */
+#define KBD_MAP_MAX         (4)     /* 层数 */
 #define KBD_KEY_MAX         (42)    /* 按键数 */
 
 #ifndef KBD_CK_KI

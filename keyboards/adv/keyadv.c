@@ -6,13 +6,14 @@
 #include "key_adv.h"
 
 adv_func_t adv_func[KADV_TYPE_MAX] = {NULL};
+oba_t g_oba;
 
 /**
  * @brief:  
  * @param:  None
  * @return: None
  */
-kadv_t *kadv_init(void)
+oba_t *kadv_init(void)
 {
     return NULL;
 }
@@ -22,7 +23,7 @@ kadv_t *kadv_init(void)
  * @param:  None
  * @return: None
  */
-kadv_t *kadv_deinit(void)
+oba_t *kadv_deinit(void)
 {
     return NULL;
 }

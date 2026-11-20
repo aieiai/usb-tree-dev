@@ -37,15 +37,14 @@ typedef struct {
 
 static volatile item_t items[DB_ITEM_TY_MAX];
 static const msg_t msgs[DB_ITEM_TY_MAX] = {
-    [DB_ITEM_TY_FAC]    = { .offset = FLASH_FACTORY_ADDR - FLASH_BASE_ADDR,  .cap = FLASH_FACTORY_SIZ, .name = "db_factory", },
-    [DB_ITEM_TY_CALIB]  = { .offset = FLASH_CALIB_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_CALIB_SIZ,   .name = "db_calib",   },
-    [DB_ITEM_TY_COMMON] = { .offset = FLASH_COMMON_ADDR - FLASH_BASE_ADDR,   .cap = FLASH_COMMON_SIZ,  .name = "db_common",  },
-    [DB_ITEM_TY_OBI]    = { .offset = FLASH_OBI_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBI_SIZ,     .name = "db_obi",     },
-    [DB_ITEM_TY_ATTR]   = { .offset = FLASH_ATTR_ADDR - FLASH_BASE_ADDR,     .cap = FLASH_ATTR_SIZ,    .name = "db_attr",    },
-    [DB_ITEM_TY_MAP]    = { .offset = FLASH_MAP_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_MAP_SIZ,     .name = "db_map",     },
-    [DB_ITEM_TY_ADV]    = { .offset = FLASH_ADV_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_ADV_SIZ,     .name = "db_adv",     },
-    [DB_ITEM_TY_RGB]    = { .offset = FLASH_RGB_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_RGB_SIZ,     .name = "db_rgb",     },
-    [DB_ITEM_TY_MACRO]  = { .offset = FLASH_MACRO_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_MACRO_SIZ,   .name = "db_macro",   },
+    // [DB_ITEM_TY_OBF]    = { .offset = FLASH_OBF_ADDR - FLASH_BASE_ADDR,  .cap = FLASH_OBF_SIZ, .name = "db_obf, factory", },
+    // [DB_ITEM_TY_CALIB]  = { .offset = FLASH_CALIB_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_CALIB_SIZ,   .name = "db_calib",   },
+    // [DB_ITEM_TY_COMMON] = { .offset = FLASH_COMMON_ADDR - FLASH_BASE_ADDR,   .cap = FLASH_COMMON_SIZ,  .name = "db_common",  },
+    [DB_ITEM_TY_OBI]    = { .offset = FLASH_OBI_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBI_SIZ,     .name = "db_obi, info",     },
+    [DB_ITEM_TY_OBM]    = { .offset = FLASH_OBM_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBM_SIZ,     .name = "db_obm, mapping",  },
+    [DB_ITEM_TY_OBA]    = { .offset = FLASH_OBA_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBA_SIZ,     .name = "db_oba, advanced", },
+    [DB_ITEM_TY_OBR]    = { .offset = FLASH_OBR_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBR_SIZ,     .name = "db_obr, rgb",      },
+    [DB_ITEM_TY_OBKP]   = { .offset = FLASH_OBKP_ADDR - FLASH_BASE_ADDR,     .cap = FLASH_OBKP_SIZ,    .name = "db_obkp, property", },
 };
 
 static TX_THREAD db_thread;

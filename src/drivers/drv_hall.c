@@ -2,6 +2,7 @@
 
 #include "board.h"
 
+#include "config/hall_scan_cfg.h"
 
 #include "hpm_soc.h"
 #include "hpm_trgm_drv.h"
@@ -93,9 +94,6 @@
 /* trgm */
 #ifndef SENSOR_MATRIX_SOF_USB
 #    define SENSOR_MATRIX_SOF_USB INST_CONCAT(USB0, SOF)
-#endif
-#ifndef SENSOR_MATRIX_SOF_EXT
-#    define SENSOR_MATRIX_SOF_EXT INST_CONCAT(TRGM0, P00)
 #endif
 #define SENSOR_MATRIX_TRGM_BASE HPM_TRGM0_BASE
 #define SENSOR_MATRIX_TRGM ((TRGM_Type *)SENSOR_MATRIX_TRGM_BASE)
@@ -386,33 +384,13 @@ static void sensor_matrix_init_adc_common(ADC16_Type *ptr, bool clk_src_ahb)
     adc16_init(ptr, &cfg);
 }
 
-static uint8_t sensor_matrix_adc_index(ADC16_Type *ptr) 
-{
-    if (ptr == HPM_ADC0) 
-	{
-        return 0;
-    }
-    if (ptr == HPM_ADC1) 
-	{
-        return 1;
-    }
-    if (ptr == HPM_ADC2) 
-	{
-        return 2;
-    }
-    if (ptr == HPM_ADC3) 
-	{
-        return 3;
-    }
-    return 0xFF;
-}
 
-static void sensor_matrix_init_adc_config(ADC16_Type *ptr) 
+static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx) 
 {
     adc16_seq_config_t     seq_cfg;
     adc16_dma_config_t     dma_cfg;
     adc16_channel_config_t ch_cfg;
-    const uint8_t          adc_index = sensor_matrix_adc_index(ptr);
+    const uint8_t          adc_index = idx;
     const uint8_t          channel_count = (adc_index < SENSOR_MATRIX_ADC_INSTANCES) ? adc_channel_counts[adc_index] : 0U;
     uint32_t               channel_offset = 0U;
     uint8_t                index = 0U;
@@ -488,16 +466,13 @@ static void sensor_matrix_init_adc(void)
 {
     uint32_t freq;
     (void)freq;
-    ADC16_Type *const adc_instances[SENSOR_MATRIX_ADC_INSTANCES] = 
-	{
-        HPM_ADC0, HPM_ADC1, HPM_ADC2, HPM_ADC3,
-    };
+    ADC16_Type *const adc_instances[SENSOR_MATRIX_ADC_INSTANCES] = SENSOR_MATRIX_ADC_PORT;
 
     for (uint8_t i = 0; i < SENSOR_MATRIX_ADC_INSTANCES; i++) 
 	{
         freq = sensor_matrix_init_adc_clock(adc_instances[i], true);
         sensor_matrix_init_adc_common(adc_instances[i], true);
-        sensor_matrix_init_adc_config(adc_instances[i]);
+        sensor_matrix_init_adc_config(adc_instances[i], i);
     }
 }
 
@@ -511,10 +486,7 @@ static void sensor_matrix_init_trgm(void)
     trgm_sel_cfg.input  = SENSOR_MATRIX_TRGM_SEL_INPUT_SRC;
 
     /* trigger adc sampling */
-    const uint8_t trgm_tag_src[SENSOR_MATRIX_ADC_INSTANCES] = {
-       HPM_TRGM0_OUTPUT_SRC_ADC0_STRGI, HPM_TRGM0_OUTPUT_SRC_ADC1_STRGI,
-       HPM_TRGM0_OUTPUT_SRC_ADC2_STRGI, HPM_TRGM0_OUTPUT_SRC_ADC3_STRGI,
-    };
+    const uint8_t trgm_tag_src[SENSOR_MATRIX_ADC_INSTANCES] = SENSOR_MATRIX_ADC_OUTPUT_SOURCES;
 
     for (uint8_t i = 0; i < SENSOR_MATRIX_ADC_INSTANCES; i++) {
         trgm_output_config(SENSOR_MATRIX_TRGM, trgm_tag_src[i], &trgm_sel_cfg);

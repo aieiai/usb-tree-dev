@@ -6,7 +6,8 @@
 
 #ifndef KEY_ADVANCED_H
 #define KEY_ADVANCED_H
-#include "utils.h"
+
+#include <stdint.h>
 
 typedef void *(*adv_func_t)(void *user);
 
@@ -21,14 +22,18 @@ typedef enum {
     KADV_TY_MAX,
 } kadv_ty;
 
-typedef struct _key_advanced {
-    uint16_t tmp;
-} __attribute__((aligned(4))) kadv_t;
+typedef struct {
+    uint32_t magic;
+    uint32_t crc32;
+    uint32_t version;
+    uint8_t  name[32];
 
+} __attribute__((aligned(4))) oba_t;
 
+extern oba_t g_oba;
 
-kadv_t *kadv_init(void);
-kadv_t *kadv_deinit(void);
+oba_t *kadv_init(void);
+oba_t *kadv_deinit(void);
 
 #endif /* KEY_ADVANCED_H */
 

@@ -49,6 +49,7 @@ sdk_compile_definitions("-DCHIP_BOARD_${BOARD}")
 
 add_subdirectory(src)
 add_subdirectory(keyboards)
+add_subdirectory(rgb)
 add_subdirectory(rot)
 add_subdirectory(tu)
 add_subdirectory(tests/cst)

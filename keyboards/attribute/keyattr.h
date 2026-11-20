@@ -15,7 +15,6 @@
 #include "keyaxis.h"
 #include "keycode.h"
 
-#define RT_PULS_EVT_NUM (4)
 
 typedef enum {
     KTRG_TY_NOM = 0,
@@ -36,9 +35,10 @@ typedef struct {
 } __attribute__((aligned(4))) kattr_para_t;
 
 
-// key attribute
+// on-board key property
 typedef struct {
     uint32_t magic;
+    uint32_t crc32;
 
     kaxis_ty axis;
     kaxis_udef_ty axis_udef;
@@ -73,18 +73,19 @@ typedef struct {
         uint8_t pls_ty;
         uint16_t ssp_dst;     /* rapid trigger sensitivity press dist */
         uint16_t ssr_dst;     /* rapid trigger sensitivity raise dist */
-        rotkc_t pls_kc[RT_PULS_EVT_NUM];
+        rotkc_t pls_kc[4];
     } rt;
 
     // struct {
     //     kadv_ty type;
     // } adv;
-} __attribute__((aligned(4))) kattr_t;
+} __attribute__((aligned(4))) obkp_t;
 
 
 // on-board information
 typedef struct {
     uint32_t magic;
+    uint32_t crc32;
     uint32_t version;
     uint8_t  name[32];
 
@@ -103,14 +104,6 @@ typedef struct {
         uint8_t crc8;
     } pi;
 
-    // Keyboard mapping
-    struct {
-        uint8_t max; // max map 
-        uint8_t cur; // cur map
-        uint8_t key_max; // max key number
-        uint8_t rsv[1+16];
-    } km;
-
     // power management
     struct {
         uint8_t en;
@@ -127,8 +120,6 @@ typedef struct {
         uint8_t  cc_popup : 1; // startup control center popup
         uint8_t  rsv : 3;
 
-        uint8_t  layout_ty; 
-        uint8_t  sys_mode; // windows or mac or linux
         uint8_t  gp_mode; // off / xbox / hid
         uint8_t  link_mode;  // USB, Bluetooth and Radio
 
@@ -141,13 +132,12 @@ typedef struct {
 
         uint8_t  rsv1[14];
     } fs;
-    
-    kattr_t g_ka[KBD_KEY_MAX];
-
 } __attribute__ ((aligned (4))) obi_t;
 
 
 extern obi_t g_obi;
+extern obkp_t g_obp[KBD_KEY_MAX];
+
 
 rotsta_t keyattr_init(void);
 

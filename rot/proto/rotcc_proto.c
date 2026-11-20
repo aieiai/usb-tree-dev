@@ -134,7 +134,7 @@ static void _handle_sys_info(const rotcc_msg_t *msg)
     info.vid = USBD_VID;
     info.pid = USBD_PID;
     info.fw_ver = (uint64_t)FW_VER;
-    if (g_obi.magic == DB_OBI_MAGIC) {
+    if (g_obi.magic == MAGIC_OBI) {
         info.vid = g_obi.pi.vid;
         info.pid = g_obi.pi.pid;
         memcpy(info.pn, g_obi.pi.pn, sizeof(info.pn));
@@ -169,7 +169,7 @@ static void _handle_sys_reset(const rotcc_msg_t *msg)
     if ((options & ROTCC_RESET_KC) != 0U) {
         state = keymap_reset();
         if (state == rotsta_success) {
-            state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_NOW);
+            state = db_update(DB_ITEM_TY_OBM, DB_SAVE_TY_NOW);
         }
     }
     /* RGB / advanced-matrix modules are not present on this device. */
@@ -384,7 +384,7 @@ static void _handle_kc_set(const rotcc_msg_t *msg)
 
     state = keymap_set_key(layer, key, rotutil_get_le32(msg->payload));
     if (state == rotsta_success) {
-        state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
+        state = db_update(DB_ITEM_TY_OBM, DB_SAVE_TY_D5S);
     }
     _reply_status(msg, state);
 }
@@ -425,7 +425,7 @@ static void _handle_kc_set_active_layer(const rotcc_msg_t *msg)
     layer = rotutil_get_le32(msg->payload);
     state = keymap_set_active_layer((uint8_t)layer);
     if (state == rotsta_success) {
-        state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
+        state = db_update(DB_ITEM_TY_OBM, DB_SAVE_TY_D5S);
     }
     _reply_status(msg, state);
 }

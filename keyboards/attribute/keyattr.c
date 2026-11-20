@@ -10,6 +10,7 @@
 
 
 obi_t g_obi;
+obkp_t g_obp[KBD_KEY_MAX];
 
 
 
@@ -29,12 +30,11 @@ static void _obi_load_defaults(void)
 {
     memset(&g_obi, 0, sizeof(g_obi));
 
-    g_obi.magic   = DB_OBI_MAGIC;
-    g_obi.version = DB_OBI_VER;
+    g_obi.magic   = MAGIC_OBI;
+    g_obi.version = OBI_VER;
     _obi_set_str(g_obi.name, sizeof(g_obi.name), "Trace40");
 
     g_obi.fs.gp_mode = 0U;
-    g_obi.fs.sys_mode = 0U;
     g_obi.fs.cc_popup = 0U;
 
     g_obi.pi.vid = 0x7989U;
@@ -55,7 +55,7 @@ static rotsta_t obi_init(void)
         return result;
     }
 
-    if ((g_obi.magic != DB_OBI_MAGIC) || (g_obi.version != DB_OBI_VER)) {
+    if ((g_obi.magic != MAGIC_OBI) || (g_obi.version != OBI_VER)) {
         printf(TAG "kattr blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obi.magic, (unsigned)g_obi.version);
         _obi_load_defaults();
         result = db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW);

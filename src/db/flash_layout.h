@@ -76,10 +76,10 @@
 // Public parameter configuration area
 #define FLASH_DATA_BASE_ADDR        (FLASH_RSV0_ADDR + FLASH_RSV0_SIZ)
 
-#define FLASH_FACTORY_ADDR          (FLASH_DATA_BASE_ADDR)
-#define FLASH_FACTORY_SIZ           (FLASH_SECTOR_SIZ)
+#define FLASH_OBF_ADDR              (FLASH_DATA_BASE_ADDR)
+#define FLASH_OBF_SIZ               (FLASH_SECTOR_SIZ)
 
-#define FLASH_CALIB_ADDR            (FLASH_FACTORY_ADDR + FLASH_FACTORY_SIZ)
+#define FLASH_CALIB_ADDR            (FLASH_OBF_ADDR + FLASH_OBF_SIZ)
 #define FLASH_CALIB_SIZ             (FLASH_SECTOR_SIZ)
 
 #define FLASH_COMMON_ADDR           (FLASH_CALIB_ADDR + FLASH_CALIB_SIZ)
@@ -90,30 +90,27 @@
 
 
 // Multiple on-board parameter configurations area
-#define FLASH_OBI_ADDR             (FLASH_RSV1_ADDR + FLASH_RSV1_SIZ)
-#define FLASH_OBI_SIZ              (FLASH_SECTOR_SIZ)
+#define FLASH_OBI_ADDR              (FLASH_RSV1_ADDR + FLASH_RSV1_SIZ)
+#define FLASH_OBI_SIZ               (FLASH_SECTOR_SIZ)
 
-#define FLASH_MAP_ADDR              (FLASH_OBI_ADDR + FLASH_OBI_SIZ)
-#define FLASH_MAP_SIZ               (FLASH_SECTOR_SIZ)
+#define FLASH_OBM_ADDR              (FLASH_OBI_ADDR + FLASH_OBI_SIZ)
+#define FLASH_OBM_SIZ               (FLASH_SECTOR_SIZ * 2)
 
-#define FLASH_ATTR_ADDR             (FLASH_MAP_ADDR + FLASH_MAP_SIZ)
-#define FLASH_ATTR_SIZ              (FLASH_SECTOR_SIZ)
+#define FLASH_OBR_ADDR              (FLASH_OBM_ADDR + FLASH_OBM_SIZ)
+#define FLASH_OBR_SIZ               (FLASH_SECTOR_SIZ)
 
-#define FLASH_ADV_ADDR              (FLASH_ATTR_ADDR + FLASH_ATTR_SIZ)
-#define FLASH_ADV_SIZ               (FLASH_SECTOR_SIZ)
+#define FLASH_OBA_ADDR              (FLASH_OBR_ADDR + FLASH_OBR_SIZ)
+#define FLASH_OBA_SIZ               (FLASH_SECTOR_SIZ * 3)
 
-#define FLASH_RGB_ADDR              (FLASH_ADV_ADDR + FLASH_ADV_SIZ)
-#define FLASH_RGB_SIZ               (FLASH_SECTOR_SIZ)
+#define FLASH_OBKP_ADDR             (FLASH_OBA_ADDR + FLASH_OBA_SIZ)
+#define FLASH_OBKP_SIZ              (FLASH_SECTOR_SIZ)
 
-#define FLASH_RSV2_ADDR             (FLASH_RGB_ADDR + FLASH_RGB_SIZ)
+#define FLASH_RSV2_ADDR             (FLASH_OBKP_ADDR + FLASH_OBKP_SIZ)
 #define FLASH_RSV2_SIZ              (FLASH_SECTOR_SIZ)
-
-#define FLASH_MACRO_ADDR            (FLASH_RSV2_ADDR + FLASH_RSV2_SIZ)
-#define FLASH_MACRO_SIZ             (FLASH_SECTOR_SIZ * 2)
 
 #define FLASH_OBCFG_NUM             (4)
 #define FLASH_OBCFG_ADDR            (FLASH_OBI_ADDR)
-#define FLASH_OBCFG_SIZ             (FLASH_OBI_SIZ + FLASH_MAP_SIZ + FLASH_ATTR_SIZ + FLASH_ADV_SIZ + FLASH_RGB_SIZ + FLASH_RSV2_SIZ + FLASH_MACRO_SIZ)
+#define FLASH_OBCFG_SIZ             (FLASH_OBI_SIZ + FLASH_OBM_SIZ + FLASH_OBKP_SIZ + FLASH_OBA_SIZ + FLASH_OBR_SIZ + FLASH_RSV2_SIZ)
 // Cache
 #define FLASH_OBCFG_CACHE_ADDR      (FLASH_OBCFG_ADDR + (FLASH_OBCFG_SIZ * FLASH_OBCFG_NUM))
 #define FLASH_OBCFG_CACHE_SIZ       (FLASH_OBCFG_SIZ)
