@@ -7,6 +7,7 @@
 
 #include "cst.h"
 #include "db.h"
+#include "keymap.h"
 #include "rotcc.h"
 #include "rotcc_proto.h"
 #include "upgrade.h"
@@ -46,6 +47,11 @@ void tx_application_define(void *first_unused_memory)
     state = db_init();
     if (state != rotsta_success) {
         printf(TAG "db init failed: 0x%08x\r\n", (unsigned)state);
+    }
+
+    state = keymap_init();
+    if (state != rotsta_success) {
+        printf(TAG "keymap init failed: 0x%08x, using defaults\r\n", (unsigned)state);
     }
 
     if (hal_chip_get_info(&chip) == rotsta_success) {

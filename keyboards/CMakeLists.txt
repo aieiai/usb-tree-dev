@@ -1,6 +1,9 @@
-sdk_inc(kc)
+sdk_inc(code axis)
+
+
 
 add_subdirectory(map)
-add_subdirectory(matrix)
-add_subdirectory(event)
 add_subdirectory(attribute)
+add_subdirectory(magnet)
+# add_subdirectory(event)
+# add_subdirectory(matrix)

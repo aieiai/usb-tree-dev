@@ -4,6 +4,7 @@
  * @Date:   2024/07/02
  */
 #include "keyevt.h"
+#include "kbdconfig.h"
 
 // key action status
 typedef enum {
@@ -29,9 +30,9 @@ typedef struct {
     uint32_t dclto;
 } ktk_t;
 
-kevt_t g_kevt[KBD_KEY_NUM];
-static kmsg_t kmsg[KBD_KEY_NUM];
-static ktk_t ktk[KBD_KEY_NUM];
+kevt_t g_kevt[KBD_KEY_MAX];
+static kmsg_t kmsg[KBD_KEY_MAX];
+static ktk_t ktk[KBD_KEY_MAX];
 
 
 
@@ -51,7 +52,7 @@ static ktk_t ktk[KBD_KEY_NUM];
  *            - KEVT_ACT_DCL: Double click long.
  *            - KEVT_ACT_DCLTO: Double click long timeout.
  */
-static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
+static __inline kevt_act_ty _act_detect(uint8_t ki)
 {
     kevt_t *p_evt = &g_kevt[ki];
     kmsg_t *p_msg = &kmsg[ki];
@@ -192,7 +193,7 @@ static __inline kevt_act_ty kevt_act_detect(uint8_t ki)
  *            - KEVT_MD_D: Move down.
  *            - KEVT_MD_S: Stay still.
  */
-static __inline kevt_md_ty kevt_md_detect(uint8_t ki)
+static __inline kevt_md_ty _md_detect(uint8_t ki)
 {
     kevt_t *p_evt = &g_kevt[ki];
     return ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S);
@@ -211,7 +212,7 @@ static __inline kevt_md_ty kevt_md_detect(uint8_t ki)
  *            - KEVT_TRG_D2D: From down to down.
  *            - KEVT_TRG_D2U: From down to up.
  */
-static __inline kevt_trg_ty ktrg_detect(uint8_t ki)
+static __inline kevt_trg_ty _trg_detect(uint8_t ki)
 {
     kevt_t *p_evt = &g_kevt[ki];
     return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
@@ -245,7 +246,7 @@ static __inline kevt_trg_ty ktrg_detect(uint8_t ki)
  *            - KSTA_EVT_POS_BOT: The key is pressed and the position is at the bottom.
  *            - KSTA_EVT_POS_MID: The key is pressed and the position is between the top and the bottom.
  */
-static __inline kevt_pos_ty kevt_pos_detect(uint8_t ki)
+static __inline kevt_pos_ty _pos_detect(uint8_t ki)
 {
     kevt_t *p_evt = &g_kevt[ki];
     kmsg_t *p_msg = &kmsg[ki];
@@ -261,13 +262,13 @@ void ksta_update_factor(uint8_t ki)
 {
     float topv  = g_kcfg.attr[ki].val.top;
     float botv  = g_kcfg.attr[ki].val.bot;
-    float t2hdm = ksta[ki].type_para->t2h_dst / 1000.0f;
-    float b2hdm = ksta[ki].type_para->b2h_dst / 1000.0f;
+    float t2hdm = g_kevt[ki].type_para->t2h_dst / 1000.0f;
+    float b2hdm = g_kevt[ki].type_para->b2h_dst / 1000.0f;
     float t2bv  = topv - botv;
     float k     = (HAL_ADC_VEF / (float)((0x01 << HAL_ADC_BIT) - 1.0f) * t2bv) / ((1.0f / t2hdm) - (1.0f / b2hdm));
     float b     = (HAL_ADC_VEF / (float)((0x01 << HAL_ADC_BIT) - 1.0f) * topv) - (k / t2hdm);
-    ksta[ki].k  = (1000.0f * 1000.0f / (HAL_ADC_VEF * 1000.0f) * (float)((0x01 << HAL_ADC_BIT) - 1.0f)) * k;
-    ksta[ki].b  = (1000.0f * (float)((0x01 << HAL_ADC_BIT) - 1.0f) / (HAL_ADC_VEF * 1000.0f)) * b;
+    g_kevt[ki].k  = (1000.0f * 1000.0f / (HAL_ADC_VEF * 1000.0f) * (float)((0x01 << HAL_ADC_BIT) - 1.0f)) * k;
+    g_kevt[ki].b  = (1000.0f * (float)((0x01 << HAL_ADC_BIT) - 1.0f) / (HAL_ADC_VEF * 1000.0f)) * b;
 }
 
 /**
@@ -299,7 +300,7 @@ int16_t ksta_pt2dst(uint8_t ki, uint16_t pt)
  */
 uint16_t ksta_dst2pt(uint8_t ki, int16_t dst)
 {
-    return (uint16_t)((ksta[ki].k / (float)(ksta[ki].type_para->t2h_dst - dst)) + ksta[ki].b);
+    return (uint16_t)((g_kevt[ki].k / (float)(g_kevt[ki].type_para->t2h_dst - dst)) + g_kevt[ki].b);
 }
 
 /**
@@ -307,7 +308,7 @@ uint16_t ksta_dst2pt(uint8_t ki, int16_t dst)
  * @param:  None
  * @return: None
  */
-static __inline int16_t ksta_update_dst(uint8_t ki, uint16_t val)
+static __inline int16_t _update_dst(uint8_t ki, uint16_t val)
 {
     return ksta_pt2dst(ki, val);
 }
@@ -317,7 +318,7 @@ static __inline int16_t ksta_update_dst(uint8_t ki, uint16_t val)
  * @param:  None
  * @return: None
  */
-static __inline uint16_t ksta_update_pt(uint8_t ki, int16_t pdst)
+static __inline uint16_t _update_pt(uint8_t ki, int16_t pdst)
 {
     return ksta_dst2pt(ki, pdst);
 }
@@ -332,20 +333,18 @@ static __inline uint16_t ksta_update_pt(uint8_t ki, int16_t pdst)
  *          value change, move direction, trigger event, enter event, action event,
  *          and position event.
  */
-void ksta_updete(uint8_t ki, uint16_t val)
+void kevt_updete(uint8_t ki, uint16_t val)
 {
-    ksta[ki].valp  = ksta[ki].val;
-    ksta[ki].valcp = ksta[ki].valc;
+    g_kevt[ki].valp  = g_kevt[ki].val;
+    g_kevt[ki].valdp = g_kevt[ki].vald;
+    g_kevt[ki].val   = val;
+    g_kevt[ki].vald  = g_kevt[ki].val - g_kevt[ki].valp;
 
-    ksta[ki].val = val;
-    ksta[ki].valc = ksta[ki].val - ksta[ki].valp;
-
-    ksta[ki].evt_md  = ksta_md_detect(ki);
-    ksta[ki].evt_trg = ksta_trg_detect(ki);
-    ksta[ki].evt_ent = ksta_ent_detect(ki);
-    ksta[ki].evt_act = ksta_act_detect(ki);
-    ksta[ki].dst     = ksta_update_dst(ki, ksta[ki].val);
-    ksta[ki].evt_pos = ksta_pos_detect(ki);
+    g_kevt[ki].md  = kevt_md_detect(ki);
+    g_kevt[ki].trg = kevt_trg_detect(ki);
+    g_kevt[ki].act = kevt_act_detect(ki);
+    g_kevt[ki].dst = kevt_update_dst(ki, g_kevt[ki].val);
+    g_kevt[ki].pos = kevt_pos_detect(ki);
 }
 
 /**
@@ -353,18 +352,18 @@ void ksta_updete(uint8_t ki, uint16_t val)
  * @param:  None
  * @return: None
  */
-ksta_t *ksta_init(void)
+kevt_t *kevt_init(void)
 {
-    for (uint8_t ki = 0; ki < KEY_NUM; ki++)
+    for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++)
     {
-        memset(&ksta[ki], 0, sizeof(ksta[ki]));
-        ksta[ki].type_para = (ktp_para_t *)&g_ktp_para[g_kcfg.attr[ki].type];
+        memset(&g_kevt[ki], 0, sizeof(g_kevt[ki]));
+        g_kevt[ki].type_para = (ktp_para_t *)&g_ktp_para[g_kcfg.attr[ki].type];
 
         ksta_update_factor(ki);
-        ksta[ki].pv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.p_dst);
-        ksta[ki].rv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.r_dst);
+        g_kevt[ki].pv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.p_dst);
+        g_kevt[ki].rv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.r_dst);
     }
-    return ksta;
+    return g_kevt;
 }
 
 /**

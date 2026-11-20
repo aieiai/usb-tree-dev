@@ -4,8 +4,11 @@
 #include <string.h>
 
 #include "db.h"
-#include "flash_layout.h"
-#include "kbd_config.h"
+
+#include "kbdconfig.h"
+#include "keyattr.h"
+#include "keymap.h"
+
 #include "rotcc.h"
 #include "rotver.h"
 #include "upgrade.h"
@@ -50,8 +53,6 @@ static uint32_t s_fw_crc32;
 static uint32_t s_received_size;
 static bool s_initialized;
 
-static uint32_t s_keymap[KBD_MAP_MAX][KBD_KEY_MAX];
-static uint8_t s_active_layer;
 static uint8_t s_tx_payload[ROTGEN_MAX_PAYLOAD_SIZE] __attribute__((aligned(4)));
 
 
@@ -129,18 +130,18 @@ static void _handle_sys_info(const rotcc_msg_t *msg)
     }
 
     memset(&info, 0, sizeof(info));
-    memcpy(info.cd, ROTVER_BUILD_TIME, sizeof(ROTVER_BUILD_TIME) - 1U);
+    memcpy(info.cd, rotver_get_cd(), sizeof(rotver_get_cd()) - 1);
     info.vid = USBD_VID;
     info.pid = USBD_PID;
     info.fw_ver = (uint64_t)FW_VER;
-    if (g_sobi.magic == DB_SOBI_MAGIC) {
-        info.vid = g_sobi.pi.vid;
-        info.pid = g_sobi.pi.pid;
-        memcpy(info.pn, g_sobi.pi.pn, sizeof(info.pn));
-        memcpy(info.sn, g_sobi.pi.sn, sizeof(info.sn));
-        memcpy(info.cd, g_sobi.pi.cd, sizeof(info.cd));
-        info.fw_ver = g_sobi.pi.fv;
-        info.hw_ver = (uint8_t)ROTVER_GET_MAJOR(g_sobi.pi.hv);
+    if (g_obi.magic == DB_OBI_MAGIC) {
+        info.vid = g_obi.pi.vid;
+        info.pid = g_obi.pi.pid;
+        memcpy(info.pn, g_obi.pi.pn, sizeof(info.pn));
+        memcpy(info.sn, g_obi.pi.sn, sizeof(info.sn));
+        memcpy(info.cd, g_obi.pi.cd, sizeof(info.cd));
+        info.fw_ver = g_obi.pi.fv;
+        info.hw_ver = (uint8_t)ROTVER_GET_MAJOR(g_obi.pi.hv);
     }
     (void)rotcc_proto_reply(msg, &info, (uint16_t)sizeof(info));
 }
@@ -166,9 +167,10 @@ static void _handle_sys_reset(const rotcc_msg_t *msg)
 
     options = rotutil_get_le32(msg->payload);
     if ((options & ROTCC_RESET_KC) != 0U) {
-        memcpy(s_keymap, keymap, sizeof(s_keymap));
-        s_active_layer = 0U;
-        state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_NOW);
+        state = keymap_reset();
+        if (state == rotsta_success) {
+            state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_NOW);
+        }
     }
     /* RGB / advanced-matrix modules are not present on this device. */
     if ((options & (ROTCC_RESET_RGB | ROTCC_RESET_ADV_MT)) != 0U) {
@@ -345,32 +347,6 @@ static void _handle_upgrade_data(const rotcc_msg_t *msg)
     _reply_status(msg, rotsta_success);
 }
 
-static void _keymap_init(void)
-{
-    bool blank = true;
-    rotsta_t state;
-
-    state = db_register(DB_ITEM_TY_MAP, s_keymap, (uint32_t)sizeof(s_keymap));
-    if (state != rotsta_success) {
-        hal_dt_printf(TAG "keymap load failed: 0x%08x, using defaults\r\n", (unsigned)state);
-        memcpy(s_keymap, keymap, sizeof(s_keymap));
-        return;
-    }
-
-    for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
-        for (uint32_t key = 0U; key < KBD_KEY_MAX; key++) {
-            if (s_keymap[layer][key] != FLASH_INVALID_DAT) {
-                blank = false;
-                break;
-            }
-        }
-    }
-    if (blank) {
-        memcpy(s_keymap, keymap, sizeof(s_keymap));
-        (void)db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
-    }
-}
-
 // reserve: low byte key index, high byte layer.
 static bool _kc_index(const rotcc_msg_t *msg, uint8_t *layer, uint8_t *key)
 {
@@ -391,7 +367,7 @@ static void _handle_kc_get(const rotcc_msg_t *msg)
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
-    rotutil_put_le32(code, s_keymap[layer][key]);
+    rotutil_put_le32(code, keymap_get_key(layer, key));
     (void)rotcc_proto_reply(msg, code, sizeof(code));
 }
 
@@ -406,8 +382,10 @@ static void _handle_kc_set(const rotcc_msg_t *msg)
         return;
     }
 
-    s_keymap[layer][key] = rotutil_get_le32(msg->payload);
-    state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
+    state = keymap_set_key(layer, key, rotutil_get_le32(msg->payload));
+    if (state == rotsta_success) {
+        state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
+    }
     _reply_status(msg, state);
 }
 
@@ -431,25 +409,25 @@ static void _handle_kc_active_layer(const rotcc_msg_t *msg)
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
-    rotutil_put_le32(layer, s_active_layer);
+    rotutil_put_le32(layer, keymap_get_active_layer());
     (void)rotcc_proto_reply(msg, layer, sizeof(layer));
 }
 
 static void _handle_kc_set_active_layer(const rotcc_msg_t *msg)
 {
     uint32_t layer;
+    rotsta_t state;
 
     if (msg->payload_len != sizeof(uint32_t)) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
     layer = rotutil_get_le32(msg->payload);
-    if (layer >= KBD_MAP_MAX) {
-        _reply_status(msg, rotsta_invalid_argument);
-        return;
+    state = keymap_set_active_layer((uint8_t)layer);
+    if (state == rotsta_success) {
+        state = db_update(DB_ITEM_TY_MAP, DB_SAVE_TY_D5S);
     }
-    s_active_layer = (uint8_t)layer;
-    _reply_status(msg, rotsta_success);
+    _reply_status(msg, state);
 }
 
 // External test hooks, only used when no built-in handler matches.
@@ -577,8 +555,6 @@ rotsta_t rotcc_proto_init(void)
     }
 
     s_worker_state = WORKER_STATE_IDLE;
-    s_active_layer = 0U;
-    _keymap_init();
     rotcc_register_frame_cb(_on_frame);
     s_initialized = true;
     return rotsta_success;

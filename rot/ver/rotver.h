@@ -25,7 +25,7 @@ extern "C" {
 // "release", "dev", "alpha", "beta", "rc"
 #define ROTVER_STAGE "release"
 
-#define FW_VER ROTVER_MAKE(ROTVER_MAJOR, ROTVER_MINOR, ROTVER_PATCH, rotver_stage_num(ROTVER_STAGE), ROTVER_GIT_HASH)
+#define FW_VER ROTVER_MAKE(ROTVER_MAJOR, ROTVER_MINOR, ROTVER_PATCH, rotver_get_stage_num(ROTVER_STAGE), ROTVER_GIT_HASH)
 
 enum {
     ROTVER_STAGE_RELEASE = 0,
@@ -38,7 +38,7 @@ enum {
 };
 
 
-// 构建 HASH：由 CMake 构建时注入 -DROTVER_GIT_HASH=0x????????；单独编译时默认为 0x01234567
+// 构建 HASH: 由 CMake 构建时注入 -DROTVER_GIT_HASH=0x????????; 单独编译时默认为 0x01234567
 #ifndef ROTVER_GIT_HASH
 #define ROTVER_GIT_HASH 0x01234567U
 #endif
@@ -47,7 +47,7 @@ enum {
 #define ROTVER_GIT_HASH_STR "01234567"
 #endif
 
-// 构建时间：由 CMake 注入，格式 YYYYMMDDHHMMSS；单独编译时回退为全 0
+// 构建时间: 由 CMake 构建时注入 -DROTVER_BUILD_TIME=...; 格式 YYYYMMDDHHMMSS; 单独编译时回退为全 0
 #ifndef ROTVER_BUILD_TIME
 #define ROTVER_BUILD_TIME "00000000000000"
 #endif
@@ -66,20 +66,9 @@ enum {
 #define ROTVER_GET_STAGE(v) ((unsigned)(((uint64_t)(v) >> 32) & ROTVER_STAGE_MASK))
 #define ROTVER_GET_HASH(v)  ((uint32_t)((uint64_t)(v) & 0xFFFFFFFFULL))
 
-static inline const char *rotver_stage_str(unsigned stage) {
-    const char *const names[ROTVER_STAGE_MAX] = { "release", "dev", "alpha", "beta", "rc" };
-    return (stage < ROTVER_STAGE_MAX ? names[stage] : "unknown");
-}
-
-static inline uint8_t rotver_stage_num(char *name) {
-    const char *const names[ROTVER_STAGE_MAX] = { "release", "dev", "alpha", "beta", "rc" };
-    for (uint8_t i = 0; i < ROTVER_STAGE_MAX; i++) {
-        if (strcmp(names[i], name) == 0) {
-            return i;
-        }
-    }
-    return ROTVER_STAGE_MASK;
-}
+const char *rotver_get_cd(void);
+uint8_t rotver_get_stage_num(char *name);
+const char *rotver_get_stage_str(unsigned stage);
 
 
 #ifdef __cplusplus

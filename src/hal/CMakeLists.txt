@@ -7,7 +7,8 @@
 #   dev_lighting 灯效接口（interface 2）
 #   dev_diagnostic_tracking  诊断追踪接口（interface 3，WinUSB/WebUSB）
 #   dev_gamepad 游戏手柄接口（interface 4，HID / Xbox 两种模式，由 g_gamepad_mode 选择）
-sdk_inc(./)
+sdk_inc(./ gpio)
+
 
 sdk_app_src(
     usb/descriptor/hid_descriptor.c
@@ -20,6 +21,6 @@ sdk_app_src(
     
     hal_flash.c
     hal_chip.c
-    
+    hal_spi.c
     
 )

@@ -7,25 +7,15 @@
 #define KEY_ATTR_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include "rotsta.h"
 
+#include "kbdconfig.h"
+#include "keymagnet.h"
+#include "keyaxis.h"
+#include "keycode.h"
 
-
-
-#define KUNIT_UM                        ( 1 )
-#define UM2MM(um)                       ( (float)(um) * 0.001f )
-#define MM2UM(mm)                       ( (float)(mm) * 1000.0f )
-
-#define BOARD_THICKNESS                 ( 1600 )
-#define BOARD_TO_HALL_DIST              ( 510 )
-
-#define KTYPE_GDL_WHT_STROKE            ( 3950 )
-#define KTYPE_GDL_JADE_STROKE           ( 3350 )
-#define KTYPE_TTC_WCW_STROKE            ( 3350 )
-
-#define KTYPE_GDL_WHT_STROKE_DFT_VAL    ( 12000 )
-#define KTYPE_GDL_JADE_STROKE_DFT_VAL   ( 12000 )
-#define KTYPE_TTC_WCW_STROKE_DFT_VAL    ( 12000 )
-
+#define RT_PULS_EVT_NUM (4)
 
 typedef enum {
     KTRG_TY_NOM = 0,
@@ -34,37 +24,28 @@ typedef enum {
     KTRG_TY_ADV,
 } ktrg_ty;
 
-typedef enum {
-    KATTR_AXIS_GDL = 0,
-    KATTR_AXIS_TTC,
-    KATTR_AXIS_MAX,
-    KATTR_AXIS_DFT = KATTR_AXIS_GDL,
-} kattr_axis_ty;
-
-typedef enum {
-    KTYPE_UDEF0, /* User-defined */
-    KTYPE_UDEF1,
-    KTYPE_UDEF2,
-    KTYPE_UDEF3,
-    KTYPE_UDEF_MAX,
-} kattr_axis_udef_ty;
-
 typedef struct {
     /* NOTE: The premise is that the key shaft is inserted in the pcba surface */
     uint16_t t2h_dst; /* Distance from the top to Hall; Note: The distance from the initial height of the key shaft to Hall. */
     uint16_t b2h_dst; /* Distance from the bottom to Hall; Note: The distance from the positive surface of pcba to Hall. */
     uint16_t t2b_dst; /* Distance from the top to bottom; Note: The distance from the initial height of the key shaft to the pcba positive surface. */
 
-    kcal_lmt_t top;
-    kcal_lmt_t bot;
-    kcal_lmt_t dif;
+    kmag_lmt_t top;
+    kmag_lmt_t bot;
+    kmag_lmt_t dif;
 } __attribute__((aligned(4))) kattr_para_t;
 
 
-typedef struct _key_attribute {
-    ktype_t type;
-    kcal_lmt_t val;
-    kop_type_t type_op;
+// key attribute
+typedef struct {
+    uint32_t magic;
+
+    kaxis_ty axis;
+    kaxis_udef_ty axis_udef;
+
+    ktrg_ty trg_ty;
+    kmag_lmt_t val;
+    // kop_type_t type_op;
 
     struct {
         uint16_t sclt;
@@ -85,27 +66,90 @@ typedef struct _key_attribute {
     } dz;
 
     struct {
-        bool en;
-        bool ctn_en;
-        bool pls_en;
-        krt_pls_type_t pls_type;
+        uint8_t en : 1;
+        uint8_t ctn_en : 1;
+        uint8_t pls_en : 1;
+        uint8_t rsv : 5;
+        uint8_t pls_ty;
         uint16_t ssp_dst;     /* rapid trigger sensitivity press dist */
         uint16_t ssr_dst;     /* rapid trigger sensitivity raise dist */
-        hid_kc_t pls_kc[RT_PULS_EVT_NUM];
+        rotkc_t pls_kc[RT_PULS_EVT_NUM];
     } rt;
 
-    struct {
-        kadv_ty type;
-    } adv;
+    // struct {
+    //     kadv_ty type;
+    // } adv;
 } __attribute__((aligned(4))) kattr_t;
 
 
+// on-board information
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint8_t  name[32];
+
+    // product information
+    struct __attribute__((packed)) {
+        uint64_t fv;     // Firmware Version
+        uint64_t hv;     // Hardware Version
+        uint16_t vid;    // Vendor ID
+        uint16_t pid;    // Product ID
+        uint8_t  cd[16]; // Compile Date
+        uint8_t  mn[16]; // Manufacturer Name
+        uint8_t  pn[16]; // Production Name
+        uint8_t  sn[16]; // Serial Number
+        uint8_t  rsv[14];
+        uint8_t test_cnt;
+        uint8_t crc8;
+    } pi;
+
+    // Keyboard mapping
+    struct {
+        uint8_t max; // max map 
+        uint8_t cur; // cur map
+        uint8_t key_max; // max key number
+        uint8_t rsv[1+16];
+    } km;
+
+    // power management
+    struct {
+        uint8_t en;
+        uint16_t time;
+        uint8_t rsv[1+16];
+    } pm;
+
+    // function selection
+    struct __attribute__((packed)) {
+        uint8_t  nkro : 1;
+        uint8_t  auto_calib : 1;
+        uint8_t  startup_effect : 1; // startup light effect
+        uint8_t  rt_separately : 1;
+        uint8_t  cc_popup : 1; // startup control center popup
+        uint8_t  rsv : 3;
+
+        uint8_t  layout_ty; 
+        uint8_t  sys_mode; // windows or mac or linux
+        uint8_t  gp_mode; // off / xbox / hid
+        uint8_t  link_mode;  // USB, Bluetooth and Radio
+
+        uint16_t scan_rate;
+        uint16_t report_rate;
+
+        uint8_t  dks_tick;
+        uint8_t  input_tick;
+        uint8_t  debounce_tick;
+
+        uint8_t  rsv1[14];
+    } fs;
+    
+    kattr_t g_ka[KBD_KEY_MAX];
+
+} __attribute__ ((aligned (4))) obi_t;
 
 
+extern obi_t g_obi;
 
-
-
-
+rotsta_t keyattr_init(void);
 
 
 #endif  /* KEY_ATTR_H */

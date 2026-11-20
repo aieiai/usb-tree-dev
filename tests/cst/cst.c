@@ -6,6 +6,8 @@
 #include "db.h"
 #include "rotver.h"
 
+#include "keyattr.h"
+
 #include "tx_api.h"
 #include "tx_config.h"
 
@@ -19,25 +21,25 @@
 static TX_THREAD thread_cst;
 static uint8_t thread_cst_stack[CST_TASK_STACK] __attribute__((aligned(8U)));
 
-static void cst_sobi_log(const char *tag)
+static void cst_obi_log(const char *tag)
 {
-    uint64_t fv = g_sobi.pi.fv;
+    uint64_t fv = g_obi.pi.fv;
 
     hal_dt_printf("%s: name=%s, vid=0x%04x, pid=0x%04x, cnt=%u, fw=v%u.%u.%u-%s+%08x\r\n",
-                  tag, (const char *)g_sobi.name, (unsigned)g_sobi.pi.vid, (unsigned)g_sobi.pi.pid,
-                  (unsigned)g_sobi.pi.test_cnt,
+                  tag, (const char *)g_obi.name, (unsigned)g_obi.pi.vid, (unsigned)g_obi.pi.pid,
+                  (unsigned)g_obi.pi.test_cnt,
                   ROTVER_GET_MAJOR(fv), ROTVER_GET_MINOR(fv), ROTVER_GET_PATCH(fv),
-                  rotver_stage_str(ROTVER_GET_STAGE(fv)), (unsigned)ROTVER_GET_HASH(fv));
+                  rotver_get_stage_str(ROTVER_GET_STAGE(fv)), (unsigned)ROTVER_GET_HASH(fv));
 }
 
 static void cst_task(ULONG id)
 {
     (void)id;
 
-    if (db_sobi_init() != rotsta_success) {
-        hal_dt_printf("[sobi] init failed\r\n");
+    if (keyattr_init() != rotsta_success) {
+        hal_dt_printf("[obi] init failed\r\n");
     } else {
-        cst_sobi_log("[sobi] load");
+        cst_obi_log("[obi] load");
     }
 
     uint32_t cnt = 0;
@@ -69,9 +71,9 @@ static void cst_task(ULONG id)
                 // db_data.bif.gp_mode++;
                 // db_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
                 
-                g_sobi.pi.test_cnt++;
-                if (rotsta_success == db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW)) {
-                    cst_sobi_log("[sobi] saved");
+                g_obi.pi.test_cnt++;
+                if (rotsta_success == db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW)) {
+                    cst_obi_log("[obi] saved");
                     // tx_thread_sleep(100);
                     // disable_global_irq(CSR_MSTATUS_MIE_MASK);
                     // (*(volatile uint32_t *)(0xF40D4000UL + 8U)) = 0; // warning: this is rom reset flag,
@@ -81,14 +83,14 @@ static void cst_task(ULONG id)
                     // }
                 }
                 else {
-                    hal_dt_printf("[sobi] save failed\r\n");
+                    hal_dt_printf("[obi] save failed\r\n");
                 }
 
                 hal_dt_printf("btn down (level=%u, gp_mode=%u)\r\n", (unsigned)btn_st, (unsigned)g_gamepad_mode);
             } 
             else {
                 hal_dt_printf("btn up (level=%u)\r\n", (unsigned)btn_st);
-                cst_sobi_log("[sobi] up");
+                cst_obi_log("[obi] up");
                 
             }
         }

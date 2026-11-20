@@ -1,5 +1,5 @@
-#ifndef ROTKC_H
-#define ROTKC_H
+#ifndef KEY_CODE_H
+#define KEY_CODE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -574,4 +574,4 @@ _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 }
 #endif
 
-#endif
+#endif  /* KEY_CODE_H */

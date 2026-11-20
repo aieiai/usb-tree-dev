@@ -34,14 +34,14 @@ typedef struct {
     const msg_t *msg;
 } item_t;
 
-sobi_t g_sobi;
 
 static volatile item_t items[DB_ITEM_TY_MAX];
 static const msg_t msgs[DB_ITEM_TY_MAX] = {
     [DB_ITEM_TY_FAC]    = { .offset = FLASH_FACTORY_ADDR - FLASH_BASE_ADDR,  .cap = FLASH_FACTORY_SIZ, .name = "db_factory", },
     [DB_ITEM_TY_CALIB]  = { .offset = FLASH_CALIB_ADDR - FLASH_BASE_ADDR,    .cap = FLASH_CALIB_SIZ,   .name = "db_calib",   },
     [DB_ITEM_TY_COMMON] = { .offset = FLASH_COMMON_ADDR - FLASH_BASE_ADDR,   .cap = FLASH_COMMON_SIZ,  .name = "db_common",  },
-    [DB_ITEM_TY_SOBI]   = { .offset = FLASH_SOBI_ADDR - FLASH_BASE_ADDR,     .cap = FLASH_SOBI_SIZ,    .name = "db_sobi",    },
+    [DB_ITEM_TY_OBI]    = { .offset = FLASH_OBI_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_OBI_SIZ,     .name = "db_obi",     },
+    [DB_ITEM_TY_ATTR]   = { .offset = FLASH_ATTR_ADDR - FLASH_BASE_ADDR,     .cap = FLASH_ATTR_SIZ,    .name = "db_attr",    },
     [DB_ITEM_TY_MAP]    = { .offset = FLASH_MAP_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_MAP_SIZ,     .name = "db_map",     },
     [DB_ITEM_TY_ADV]    = { .offset = FLASH_ADV_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_ADV_SIZ,     .name = "db_adv",     },
     [DB_ITEM_TY_RGB]    = { .offset = FLASH_RGB_ADDR - FLASH_BASE_ADDR,      .cap = FLASH_RGB_SIZ,     .name = "db_rgb",     },
@@ -394,83 +394,3 @@ rotsta_t db_init(void)
     }
     return rotsta_success;
 }
-
-static void _sobi_set_str(uint8_t *dst, uint32_t size, const char *src)
-{
-    uint32_t i = 0U;
-
-    while (((i + 1U) < size) && (src[i] != '\0')) {
-        dst[i] = (uint8_t)src[i];
-        i++;
-    }
-    dst[i] = 0U;
-}
-
-static void _sobi_load_defaults(void)
-{
-    memset(&g_sobi, 0, sizeof(g_sobi));
-
-    g_sobi.magic   = DB_SOBI_MAGIC;
-    g_sobi.version = DB_SOBI_VER;
-    _sobi_set_str(g_sobi.name, sizeof(g_sobi.name), "Trace40");
-
-    g_sobi.gp_mode = 0U;
-    g_sobi.sys_mode = 0U;
-    g_sobi.en.cc_popup = 0U;
-
-    g_sobi.pi.vid = 0x7989U;
-    g_sobi.pi.pid = 0x0001U;
-    g_sobi.pi.fv  = (uint64_t)FW_VER;
-    g_sobi.pi.hv  = ROTVER_MAKE(0U, 1U, 0U, ROTVER_STAGE_RELEASE, 0U);
-    _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
-    _sobi_set_str(g_sobi.pi.mn, sizeof(g_sobi.pi.mn), "Ray");
-    _sobi_set_str(g_sobi.pi.pn, sizeof(g_sobi.pi.pn), "Trace40");
-    _sobi_set_str(g_sobi.pi.sn, sizeof(g_sobi.pi.sn), "SN000000000001");
-    g_sobi.pi.test_cnt = 0U;
-}
-
-rotsta_t db_sobi_init(void)
-{
-    rotsta_t result = db_register(DB_ITEM_TY_SOBI, &g_sobi, (uint32_t)sizeof(g_sobi));
-    if (result != rotsta_success) {
-        printf(TAG "sobi register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
-    }
-
-    if ((g_sobi.magic != DB_SOBI_MAGIC) || (g_sobi.version != DB_SOBI_VER)) {
-        printf(TAG "sobi blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_sobi.magic, (unsigned)g_sobi.version);
-        _sobi_load_defaults();
-        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
-        if (result != rotsta_success) {
-            printf(TAG "sobi default save failed: 0x%08x\r\n", (unsigned)result);
-        }
-    }
-    else if (g_sobi.pi.fv != (uint64_t)FW_VER) {
-        uint64_t prev_fv = g_sobi.pi.fv;
-
-        /*
-         * Firmware changed: migrate persistent data from prev_fv here before
-         * the stored version is advanced. Keep the checks ordered by version,
-         * e.g. if (prev_fv < ROTVER_MAKE(1, 5, 0, ROTVER_STAGE_RELEASE, 0)).
-         */
-        g_sobi.pi.fv = (uint64_t)FW_VER;
-        _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
-        printf(TAG "sobi fw version 0x%08x%08x -> 0x%08x%08x\r\n",
-               (unsigned)(prev_fv >> 32), (unsigned)prev_fv,
-               (unsigned)(g_sobi.pi.fv >> 32), (unsigned)g_sobi.pi.fv);
-        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
-        if (result != rotsta_success) {
-            printf(TAG "sobi fw version save failed: 0x%08x\r\n", (unsigned)result);
-        }
-    }
-    else if ((g_sobi.pi.fv == (uint64_t)FW_VER) && strcmp((const char *)g_sobi.pi.cd, ROTVER_BUILD_TIME) != 0) {
-        printf(TAG "sobi compile date %s != %s, update\r\n", (const char *)g_sobi.pi.cd, ROTVER_BUILD_TIME);
-        _sobi_set_str(g_sobi.pi.cd, sizeof(g_sobi.pi.cd), ROTVER_BUILD_TIME);
-        result = db_update(DB_ITEM_TY_SOBI, DB_SAVE_TY_NOW);
-        if (result != rotsta_success) {
-            printf(TAG "sobi compile date save failed: 0x%08x\r\n", (unsigned)result);
-        }
-    }
-    return result;
-}
-

@@ -7,5 +7,5 @@ if(NOT KBD_MAP IN_LIST KBD_MAPS)
     message(FATAL_ERROR "KBD_MAP=${KBD_MAP} 不存在，可选：${KBD_MAPS}")
 endif()
 
-sdk_inc(${KBD_MAP})
-sdk_app_src(${KBD_MAP}/keymap.c)
+sdk_inc(./ ${KBD_MAP})
+sdk_app_src(keymap.c ${KBD_MAP}/map.c)
