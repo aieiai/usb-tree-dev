@@ -20,6 +20,7 @@
 #define SENSOR_MATRIX_ADC_SAMPLE_ROUNDS (((SENSOR_MATRIX_ADC_SAMPLES) > 1) ? 2 : 1)
 #define SENSOR_MATRIX_ADC_SAMPLE_CYCLE 2   /* adc sample cycle */
 #define SENSOR_MATRIX_ADC_CONVERT_CYCLE 21 /* 16-bit adc need 21 convert cycle */
+#define SENSOR_MATRIX_ADC_DIV 4
 
 
 #define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */

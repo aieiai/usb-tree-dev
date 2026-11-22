@@ -360,7 +360,7 @@ static void sensor_matrix_init_adc_common(ADC16_Type *ptr, bool clk_src_ahb)
     adc16_get_default_config(&cfg);
     cfg.res          = SENSOR_MATRIX_ADC_CONVERT_CYCLE;
     cfg.conv_mode    = adc16_conv_mode_sequence;
-    cfg.adc_clk_div  = adc16_clock_divider_4;
+    cfg.adc_clk_div  = (adc16_clock_divider_t)SENSOR_MATRIX_ADC_DIV;
 #if !defined(HPM_IP_FEATURE_ADC16_FORCE_SYNC_AHB) || !HPM_IP_FEATURE_ADC16_FORCE_SYNC_AHB
     cfg.sel_sync_ahb = clk_src_ahb;
 #endif
@@ -1063,7 +1063,7 @@ static void sensor_matrix_init_timer(void)
 
     tmr_clock = clock_get_frequency(SENSOR_MATRIX_TMR_CLOCK);
     // adc max clock is 50MHz
-    adc_clock = clock_get_frequency(clock_adc0) / 4;
+    adc_clock = clock_get_frequency(clock_adc0) / SENSOR_MATRIX_ADC_DIV;
 
     gptmr_channel_get_default_config(SENSOR_MATRIX_TMR, &config_sht);
     gptmr_channel_get_default_config(SENSOR_MATRIX_TMR, &config_dma);

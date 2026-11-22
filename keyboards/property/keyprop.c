@@ -1,16 +1,16 @@
-#include "keyattr.h"
+#include "keyprop.h"
 #include <stdio.h>
 
 #include "db.h"
 
 #include "rotver.h"
 
-#define TAG "keyattr: "
+#define TAG "keyprop: "
 
 
 
 obi_t g_obi;
-obkp_t g_obp[KBD_KEY_MAX];
+obkp_t g_obkp[KBD_KEY_MAX];
 
 
 
@@ -93,7 +93,7 @@ static rotsta_t obi_init(void)
 }
 
 
-rotsta_t keyattr_init(void)
+rotsta_t keyprop_init(void)
 {
     return obi_init();
 }

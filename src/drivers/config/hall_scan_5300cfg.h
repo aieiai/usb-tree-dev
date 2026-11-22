@@ -19,12 +19,13 @@
 #define SENSOR_MATRIX_ADC_SAMPLE_ROUNDS (((SENSOR_MATRIX_ADC_SAMPLES) > 1) ? 2 : 1)
 #define SENSOR_MATRIX_ADC_SAMPLE_CYCLE 2   /* adc sample cycle */
 #define SENSOR_MATRIX_ADC_CONVERT_CYCLE 21 /* 16-bit adc need 21 convert cycle */
+#define SENSOR_MATRIX_ADC_DIV 3
 
 
 #define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */
-#define SENSOR_MATRIX_TMR_SEL_FREQ 150000 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
+#define SENSOR_MATRIX_TMR_SEL_FREQ 140000 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
 
-#define SENSOR_MATRIX_SOF_ST_TIME 3500 /* (sof to tmr irq margin time) */
+#define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time) */
 #define SENSOR_MATRIX_TMR_ST_TIME 70 /* tmr soft sync setup time default 350ns, DMA 握手，写 GPIO 切 mux  */
 #define SENSOR_MATRIX_SEL_HT_TIME1 1 
 #define SENSOR_MATRIX_SEL_HT_TIME2 45 // sel 保持时间

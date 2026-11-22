@@ -6,7 +6,7 @@
 #include "db.h"
 
 #include "kbd_config.h"
-#include "keyattr.h"
+#include "keyprop.h"
 #include "keymap.h"
 
 #include "rotcc.h"

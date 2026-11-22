@@ -20,8 +20,8 @@ enum {
 
 typedef enum {
     DB_ITEM_TY_OBF = 0,
-    DB_ITEM_TY_CALIB,
-    DB_ITEM_TY_COMMON,
+    DB_ITEM_TY_OBMAG,
+    DB_ITEM_TY_OBCOM,
     DB_ITEM_TY_OBI,
     DB_ITEM_TY_OBM,
     DB_ITEM_TY_OBA,

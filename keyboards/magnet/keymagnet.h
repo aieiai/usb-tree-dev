@@ -2,6 +2,34 @@
 #define KEY_MAGNET_H
 
 #include <stdint.h>
+#include "rotsta.h"
+#include "kbd_config.h"
+
+// Distance unit: um
+#ifndef DD
+#   ifdef KBD_DD
+#       define DD   (KBD_DD)
+#   else
+#       define DD   (1)
+#   endif
+#endif
+
+#ifndef UM2MM
+#   ifdef KBD_UM2MM
+#       define UM2MM(um)    (KBD_UM2MM(um))
+#   else
+#       define UM2MM(um)    ((float)(um) * 0.001f)
+#   endif
+#endif
+
+#ifndef MM2UM
+#   ifdef KBD_MM2UM
+#       define MM2UM(mm)    (KBD_MM2UM(mm))
+#   else
+#       define MM2UM(mm)    ((float)(mm) * 1000.0f)
+#   endif
+#endif
+
 
 typedef union {
     uint32_t buf;
@@ -13,6 +41,23 @@ typedef union {
         uint16_t max;
         uint16_t min;
     };
-} __attribute__((aligned(4))) kmag_lmt_t;
+} __attribute__((aligned(4))) keymag_lmt_t;
+
+typedef struct {
+    uint32_t magic;
+    uint32_t crc32;
+    uint32_t version;
+    uint8_t  name[32];
+
+    keymag_lmt_t lmt;
+} obmag_t;
+
+extern obmag_t g_obmag[KBD_KEY_MAX];
+
+rotsta_t keymag_init(void);
+void     keymag_update_factor(uint8_t ki);
+int16_t  keymag_pt2du(uint8_t ki, uint16_t point);
+uint16_t keymag_du2pt(uint8_t ki, int16_t dist_um);
+
 
 #endif  /* KEY_MAGNET_H */

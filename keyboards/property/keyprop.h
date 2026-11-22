@@ -23,28 +23,17 @@ typedef enum {
     KTRG_TY_ADV,
 } ktrg_ty;
 
-typedef struct {
-    /* NOTE: The premise is that the key shaft is inserted in the pcba surface */
-    uint16_t t2h_dst; /* Distance from the top to Hall; Note: The distance from the initial height of the key shaft to Hall. */
-    uint16_t b2h_dst; /* Distance from the bottom to Hall; Note: The distance from the positive surface of pcba to Hall. */
-    uint16_t t2b_dst; /* Distance from the top to bottom; Note: The distance from the initial height of the key shaft to the pcba positive surface. */
-
-    kmag_lmt_t top;
-    kmag_lmt_t bot;
-    kmag_lmt_t dif;
-} __attribute__((aligned(4))) kattr_para_t;
-
 
 // on-board key property
 typedef struct {
     uint32_t magic;
     uint32_t crc32;
 
-    kaxis_ty axis;
-    kaxis_udef_ty axis_udef;
+    struct {
+        kaxis_ty ty;
+        kaxis_udef_ty udef_ty;
+    } axis;
 
-    ktrg_ty trg_ty;
-    kmag_lmt_t val;
     // kop_type_t type_op;
 
     struct {
@@ -55,14 +44,16 @@ typedef struct {
         uint16_t dclto;
     } tk; /* tick */
 
+    // normal, rapid trigger, advanced
+    ktrg_ty trg_ty;
     struct {
-        uint16_t p_dst;      /* normal press dist */
-        uint16_t r_dst;      /* normal raise dist */
+        uint16_t dst_p;      /* normal press dist */
+        uint16_t dst_r;      /* normal raise dist */
     } nom;
 
     struct {
-        uint16_t top_dst;     /* top dead zero dist */
-        uint16_t bot_dst;     /* bot dead zero dist */
+        uint16_t dst_t;     /* top dead zero dist */
+        uint16_t dst_b;     /* bot dead zero dist */
     } dz;
 
     struct {
@@ -71,14 +62,15 @@ typedef struct {
         uint8_t pls_en : 1;
         uint8_t rsv : 5;
         uint8_t pls_ty;
-        uint16_t ssp_dst;     /* rapid trigger sensitivity press dist */
-        uint16_t ssr_dst;     /* rapid trigger sensitivity raise dist */
+        uint16_t dst_p;     /* rapid trigger sensitivity press dist */
+        uint16_t dst_r;     /* rapid trigger sensitivity raise dist */
         rotkc_t pls_kc[4];
     } rt;
 
-    // struct {
-    //     kadv_ty type;
-    // } adv;
+    struct {
+        // kadv_ty type;
+        uint8_t tmp;
+    } adv;
 } __attribute__((aligned(4))) obkp_t;
 
 
@@ -136,10 +128,10 @@ typedef struct {
 
 
 extern obi_t g_obi;
-extern obkp_t g_obp[KBD_KEY_MAX];
+extern obkp_t g_obkp[KBD_KEY_MAX];
 
 
-rotsta_t keyattr_init(void);
+rotsta_t keyprop_init(void);
 
 
 #endif  /* KEY_ATTR_H */

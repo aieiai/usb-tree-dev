@@ -15,17 +15,9 @@
 #define KBD_CK_KM(km) ((km) < KBD_MAP_MAX)
 #endif
 
-
-#define KBD_KEY_DU              (1)
-#define KBD_KEY_UM2MM(um)       ((float)(um) * 0.001f)
-#define KBD_KEY_MM2UM(mm)       ((float)(mm) * 1000.0f)
 #define KBD_ADC_BIT             (12)
 #define KBD_ADC_VEF             (3300)
-#define KBD_PCB_THICKNESS       (1600)
+#define KBD_PCB_THICKNESS       (1200)
 #define KBD_PCB_TO_HALL_DIST    (510)
-
-#define KBD_KEY_DT              (125)
-
-
 
 #endif  /* KBD_CONFIG_H */

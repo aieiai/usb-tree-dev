@@ -3,7 +3,11 @@
 
 #include "tx_api.h"
 #include "tx_config.h"
-#include "kbd_config.h"
+
+#include "keymap.h"
+#include "keyevt.h"
+#include "keyprop.h"
+#include "keymagnet.h"
 
 #include "board.h"
 
@@ -37,9 +41,11 @@ static void keycore_process_frame(volatile uint32_t *frame)
 {
     for (uint8_t ki = 0, i = 0; i < SENSOR_TOTAL_SIZE; i++) {
         ki = (ks2ki[i]);
-        if (KBD_CK_KI(ki)) {
-            adc_buf[ki] = GET_ADC_VALUE(frame, i);
+        if (KBD_CK_KI(ki) != true) {
+            continue;
         }
+
+        adc_buf[ki] = GET_ADC_VALUE(frame, i);
 
 #if KI_EN
         sersor_buf[i] = GET_ADC_VALUE(frame, i);
@@ -51,6 +57,14 @@ static void keycore_process_frame(volatile uint32_t *frame)
             view[i] = cnt++;
         }
 #endif
+
+        keyevt_updete(ki, adc_buf[ki]);
+
+
+
+
+
+
     }
 }
 
@@ -76,12 +90,26 @@ static void keycore_recv_cb(uint32_t *p_buf)
 
 rotsta_t keycore_init(void)
 {
-    if (tx_event_flags_create(&core_events, "core_evt") != TX_SUCCESS) {
-        return rotsta_fail;
+    rotsta_t state = rotsta_success;
+    
+    state = keymap_init();
+    if (state != rotsta_success) {
+        printf(TAG "keymap init failed: 0x%08x, using defaults\r\n", (unsigned)state);
     }
+
+    state = keymag_init();
+    if (state != rotsta_success) {
+        printf(TAG "keymag init failed: 0x%08x, using defaults\r\n", (unsigned)state);
+    }
+    
+    keyevt_init();
 
     sensor_matrix_init();
     sensor_matrix_recv_cb(keycore_recv_cb);
+
+    if (tx_event_flags_create(&core_events, "core_evt") != TX_SUCCESS) {
+        return rotsta_fail;
+    }
 
     if (tx_thread_create(&core_thread, "core_thread", core_thread_entry, 0U, core_thread_stack, sizeof(core_thread_stack), CORE_THREAD_PRIORITY, CORE_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START) != TX_SUCCESS) {
         return rotsta_fail;

@@ -6,7 +6,7 @@
 #include "db.h"
 #include "rotver.h"
 
-#include "keyattr.h"
+#include "keyprop.h"
 
 #include "tx_api.h"
 #include "tx_config.h"
@@ -36,7 +36,7 @@ static void cst_thread_entry(ULONG id)
 {
     (void)id;
 
-    if (keyattr_init() != rotsta_success) {
+    if (keyprop_init() != rotsta_success) {
         hal_dt_printf("[obi] init failed\r\n");
     } else {
         cst_obi_log("[obi] load");

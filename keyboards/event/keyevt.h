@@ -7,6 +7,7 @@
 #define KEY_EVENT_H
 
 #include <stdint.h>
+#include "kbd_config.h"
 
 
 
@@ -72,22 +73,22 @@ typedef struct {
     uint16_t act_tk;
     uint16_t val;  /* value */
     uint16_t valp; /* value pre */
-    int16_t vald;  /* value delta */
-    int16_t valdp; /* value delta pre */
+    int16_t  vald;  /* value delta */
+    int16_t  valdp; /* value delta pre */
     uint16_t pv;   /* press value */
     uint16_t rv;   /* release value */
-    int16_t dst;
-    float k;
-    float b;
-} __attribute__((aligned(4))) kevt_t;
+    int16_t  dst;
+} __attribute__((aligned(4))) keyevt_t;
+
+extern keyevt_t g_keyevt[KBD_KEY_MAX];
 
 
-void kevt_deinit(void);
-kevt_t *kevt_init(void);
-int16_t kevt_pt2dst(uint8_t ki, uint16_t pt);
-uint16_t kevt_dst2pt(uint8_t ki, int16_t dst);
-void kevt_updete(uint8_t ki, uint16_t val);
-void kevt_update_factor(uint8_t ki);
+
+void keyevt_init(void);
+void keyevt_updete(uint8_t ki, uint16_t val);
+
+
+
 
 #endif  /* KEY_EVENT_H */
 

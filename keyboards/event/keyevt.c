@@ -4,7 +4,11 @@
  * @Date:   2024/07/02
  */
 #include "keyevt.h"
-#include "kbd_config.h"
+#include "keyaxis.h"
+#include "keyprop.h"
+#include "keymagnet.h"
+
+#include <string.h>
 
 // key action status
 typedef enum {
@@ -18,21 +22,20 @@ typedef enum {
 } kact_sta_ty;
 
 typedef struct {
-    kact_sta_ty sta;
-    uint32_t act_tk;
-    uint32_t t2b_dst;
-} kmsg_t;
-
-typedef struct {
+    uint32_t cnt;
     uint32_t sclt;
     uint32_t sclto;
     uint32_t dclt;
     uint32_t dclto;
 } ktk_t;
 
-kevt_t g_kevt[KBD_KEY_MAX];
-static kmsg_t kmsg[KBD_KEY_MAX];
-static ktk_t ktk[KBD_KEY_MAX];
+typedef struct {
+    kact_sta_ty sta;
+    ktk_t tk;
+} msg_t;
+
+static msg_t msg[KBD_KEY_MAX];
+keyevt_t g_keyevt[KBD_KEY_MAX] = {0};
 
 
 
@@ -54,90 +57,88 @@ static ktk_t ktk[KBD_KEY_MAX];
  */
 static __inline kevt_act_ty _act_detect(uint8_t ki)
 {
-    kevt_t *p_evt = &g_kevt[ki];
-    kmsg_t *p_msg = &kmsg[ki];
-    ktk_t *p_tk   = &ktk[ki];
+    keyevt_t *p_evt = &g_keyevt[ki];
+    msg_t *p_msg = &msg[ki];
 
     switch (p_msg->sta) {
         case KACT_STA_IDLE:
             if (EVT_IS_U(p_evt->trg)) {
                 p_evt->act = KEVT_ACT_IDLE; /* idle */
-                break;
             }
             else {
                 p_msg->sta = KACT_STA_SC;
-                p_msg->act_tk  = 0;
+                p_msg->tk.cnt  = 0;
             }
-        // break;
+        break;
 
         case KACT_STA_SC:
             if (EVT_IS_U(p_evt->trg)) {
-                p_msg->act_tk  = 0;
+                p_msg->tk.cnt  = 0;
                 p_msg->sta = KACT_STA_SCN;
             }
             else {
-                if (p_msg->act_tk >= p_tk->sclt) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.sclt) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_SCL;
                 }
                 else {
-                    p_msg->act_tk++;
+                    p_msg->tk.cnt++;
                 }
             }
         break;
 
         case KACT_STA_SCN:
             if (EVT_IS_D(p_evt->trg)) {
-                p_msg->act_tk  = 0;
+                p_msg->tk.cnt  = 0;
                 p_msg->sta = KACT_STA_DC;
             }
             else {
-                if (p_msg->act_tk >= p_tk->dclt) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.dclt) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_SC; /* click */
                 }
                 else {
-                    p_msg->act_tk++;
+                    p_msg->tk.cnt++;
                 }
             }
         break;
 
         case KACT_STA_DC:
             if (EVT_IS_U(p_evt->trg)) {
-                p_msg->act_tk  = 0;
+                p_msg->tk.cnt  = 0;
                 p_msg->sta = KACT_STA_IDLE;
                 p_evt->act = KEVT_ACT_DC; /* double click */
             }
             else {
-                if (p_msg->act_tk >= p_tk->dclt) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.dclt) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_DCL;
                 }
                 else {
-                    p_msg->act_tk++;
+                    p_msg->tk.cnt++;
                 }
             }
         break;
 
         case KACT_STA_SCL:
             if (EVT_IS_D(p_evt->trg)) {
-                if (p_msg->act_tk >= p_tk->sclto) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.sclto) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_UP;
                     p_evt->act = KEVT_ACT_SCLTO; /* click long timeout */
                 }
                 else {
-                    p_msg->act_tk++;
+                    p_msg->tk.cnt++;
                 }
             }
             else {
-                if (p_msg->act_tk >= p_tk->sclto) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.sclto) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                 }
                 else {
-                    p_msg->act_tk  = 0;
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_SCL; /* click long */
                 }
@@ -146,22 +147,22 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
 
         case KACT_STA_DCL:
             if (EVT_IS_D(p_evt->trg)) {
-                if (p_msg->act_tk >= p_tk->dclto) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.dclto) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_UP;
                     p_evt->act = KEVT_ACT_DCLTO; /* double click long timeout */
                 }
                 else {
-                    p_msg->act_tk++;
+                    p_msg->tk.cnt++;
                 }
             }
             else {
-                if (p_msg->act_tk >= p_tk->dclto) {
-                    p_msg->act_tk  = 0;
+                if (p_msg->tk.cnt >= p_msg->tk.dclto) {
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                 }
                 else {
-                    p_msg->act_tk  = 0;
+                    p_msg->tk.cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_DCL; /* double click long */
                 }
@@ -191,7 +192,7 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
  */
 static __inline kevt_md_ty _md_detect(uint8_t ki)
 {
-    kevt_t *p_evt = &g_kevt[ki];
+    keyevt_t *p_evt = &g_keyevt[ki];
     return ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S);
 }
 
@@ -210,26 +211,10 @@ static __inline kevt_md_ty _md_detect(uint8_t ki)
  */
 static __inline kevt_trg_ty _trg_detect(uint8_t ki)
 {
-    kevt_t *p_evt = &g_kevt[ki];
+    keyevt_t *p_evt = &g_keyevt[ki];
     return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
                                  : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
 }
-
-/**
- * @brief:  Detect the enter event of the key.
- * @param:  The index of the key.
- * @return: The enter event of the key.
- *
- *          Detect the enter event of the key by the trigger event. The enter event
- *          can be one of the following:
- *            - KSTA_EVT_ENT_D2D: The key is pressed from down to down.
- *            - KSTA_EVT_ENT_U2U: The key is pressed from up to up.
- */
-// static __inline kevt_ent_ty kevt_ent_detect(uint8_t ki)
-// {
-//     kevt_t *p_evt = &g_kevt[ki];
-//     return ((EVT_IS_D(p_evt->trg) ? KEVT_ENT_U2U : KEVT_ENT_D2D));
-// }
 
 /**
  * @brief:  Detect the position event of the key.
@@ -244,80 +229,13 @@ static __inline kevt_trg_ty _trg_detect(uint8_t ki)
  */
 static __inline kevt_pos_ty _pos_detect(uint8_t ki)
 {
-    kevt_t *p_evt = &g_kevt[ki];
-    kmsg_t *p_msg = &kmsg[ki];
-    return ((p_evt->dst <= 50) ? KEVT_POS_TOP : (p_evt->dst >= p_msg->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID);
+    keyevt_t *p_evt = &g_keyevt[ki];
+    obkp_t *p_obkp = &g_obkp[ki];
+    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_obkp->axis.ty];
+    return ((p_evt->dst <= 50) ? KEVT_POS_TOP : (p_evt->dst > p_axis->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID);
 }
 
-/**
- * @brief:  Update the coefficient that calculates the distance between key.
- * @param:  The index of the key.
- * @return: None
- */
-void ksta_update_factor(uint8_t ki)
-{
-    float topv  = g_kcfg.attr[ki].val.top;
-    float botv  = g_kcfg.attr[ki].val.bot;
-    float t2hdm = g_kevt[ki].type_para->t2h_dst / 1000.0f;
-    float b2hdm = g_kevt[ki].type_para->b2h_dst / 1000.0f;
-    float t2bv  = topv - botv;
-    float k     = (HAL_ADC_VEF / (float)((0x01 << HAL_ADC_BIT) - 1.0f) * t2bv) / ((1.0f / t2hdm) - (1.0f / b2hdm));
-    float b     = (HAL_ADC_VEF / (float)((0x01 << HAL_ADC_BIT) - 1.0f) * topv) - (k / t2hdm);
-    g_kevt[ki].k  = (1000.0f * 1000.0f / (HAL_ADC_VEF * 1000.0f) * (float)((0x01 << HAL_ADC_BIT) - 1.0f)) * k;
-    g_kevt[ki].b  = (1000.0f * (float)((0x01 << HAL_ADC_BIT) - 1.0f) / (HAL_ADC_VEF * 1000.0f)) * b;
-}
 
-/**
- * @brief:  Convert the point location to the distance from the top of the key to the bottom.
- * @param:  The index of the key.
- * @param:  The point location to convert.
- * @return: The distance from the top of the key to the bottom.
- *
- *          The distance is calculated by the following formula.
- *          distance = (point - b) / k
- *          where b is the y-intercept of the line and k is the slope of the line.
- *          The line is defined by the key's attribute, such as the top and bottom values.
- */
-int16_t ksta_pt2dst(uint8_t ki, uint16_t pt)
-{
-    return (int16_t)((float)ksta[ki].type_para->t2h_dst - (ksta[ki].k / ((float)pt - ksta[ki].b)));
-}
-
-/**
- * @brief:  Convert the distance from the top of the key to the bottom to the point location.
- * @param:  The index of the key.
- * @param:  The distance from the top of the key to the bottom.
- * @return: The point location.
- *
- *          The point location is calculated by the following formula.
- *          point = (distance * k) + b
- *          where b is the y-intercept of the line and k is the slope of the line.
- *          The line is defined by the key's attribute, such as the top and bottom values.
- */
-uint16_t ksta_dst2pt(uint8_t ki, int16_t dst)
-{
-    return (uint16_t)((g_kevt[ki].k / (float)(g_kevt[ki].type_para->t2h_dst - dst)) + g_kevt[ki].b);
-}
-
-/**
- * @brief:
- * @param:  None
- * @return: None
- */
-static __inline int16_t _update_dst(uint8_t ki, uint16_t val)
-{
-    return ksta_pt2dst(ki, val);
-}
-
-/**
- * @brief:  Updete point location
- * @param:  None
- * @return: None
- */
-static __inline uint16_t _update_pt(uint8_t ki, int16_t pdst)
-{
-    return ksta_dst2pt(ki, pdst);
-}
 
 /**
  * @brief:  Update the state of the key.
@@ -329,18 +247,18 @@ static __inline uint16_t _update_pt(uint8_t ki, int16_t pdst)
  *          value change, move direction, trigger event, enter event, action event,
  *          and position event.
  */
-void kevt_updete(uint8_t ki, uint16_t val)
+void keyevt_updete(uint8_t ki, uint16_t val)
 {
-    g_kevt[ki].valp  = g_kevt[ki].val;
-    g_kevt[ki].valdp = g_kevt[ki].vald;
-    g_kevt[ki].val   = val;
-    g_kevt[ki].vald  = g_kevt[ki].val - g_kevt[ki].valp;
+    g_keyevt[ki].valp  = g_keyevt[ki].val;
+    g_keyevt[ki].valdp = g_keyevt[ki].vald;
+    g_keyevt[ki].val   = val;
+    g_keyevt[ki].vald  = g_keyevt[ki].val - g_keyevt[ki].valp;
 
-    g_kevt[ki].md  = kevt_md_detect(ki);
-    g_kevt[ki].trg = kevt_trg_detect(ki);
-    g_kevt[ki].act = kevt_act_detect(ki);
-    g_kevt[ki].dst = kevt_update_dst(ki, g_kevt[ki].val);
-    g_kevt[ki].pos = kevt_pos_detect(ki);
+    g_keyevt[ki].dst = keymag_pt2du(ki, g_keyevt[ki].val);
+    g_keyevt[ki].md  = _md_detect(ki);
+    g_keyevt[ki].trg = _trg_detect(ki);
+    g_keyevt[ki].act = _act_detect(ki);
+    // g_keyevt[ki].pos = _pos_detect(ki);
 }
 
 /**
@@ -348,24 +266,13 @@ void kevt_updete(uint8_t ki, uint16_t val)
  * @param:  None
  * @return: None
  */
-kevt_t *kevt_init(void)
+void keyevt_init(void)
 {
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
-        memset(&g_kevt[ki], 0, sizeof(g_kevt[ki]));
-        g_kevt[ki].type_para = (ktp_para_t *)&g_ktp_para[g_kcfg.attr[ki].type];
-
-        ksta_update_factor(ki);
-        g_kevt[ki].pv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.p_dst);
-        g_kevt[ki].rv = ksta_update_pt(ki, g_kcfg.attr[ki].nom.r_dst);
+        obkp_t *p_obkp = &g_obkp[ki];
+        memset(&g_keyevt[ki], 0, sizeof(g_keyevt[ki]));
+        g_keyevt[ki].pv = keymag_du2pt(ki, p_obkp->nom.dst_p);
+        g_keyevt[ki].rv = keymag_du2pt(ki, p_obkp->nom.dst_r);
     }
-    return g_kevt;
 }
 
-/**
- * @brief:
- * @param:  None
- * @return: None
- */
-void ksta_deinit(void)
-{
-}

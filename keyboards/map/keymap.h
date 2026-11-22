@@ -10,7 +10,9 @@
 typedef struct {
     uint32_t magic;
     uint32_t crc32;
+    uint32_t version;
     uint8_t  name[32];
+    
     uint8_t  sys_max;
     uint8_t  sys_cur;
     uint8_t  map_max;
