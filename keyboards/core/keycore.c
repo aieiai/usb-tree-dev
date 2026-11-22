@@ -6,6 +6,7 @@
 
 #include "keymap.h"
 #include "keyevt.h"
+#include "keyadv.h"
 #include "keyprop.h"
 #include "keymagnet.h"
 
@@ -100,6 +101,11 @@ rotsta_t keycore_init(void)
     state = keymag_init();
     if (state != rotsta_success) {
         printf(TAG "keymag init failed: 0x%08x, using defaults\r\n", (unsigned)state);
+    }
+    
+    state = keyadv_init();
+    if (state != rotsta_success) {
+        printf(TAG "keyadv init failed: 0x%08x\r\n", (unsigned)state);
     }
     
     keyevt_init();

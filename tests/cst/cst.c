@@ -72,7 +72,7 @@ static void cst_thread_entry(ULONG id)
                 // db_data.bif.gp_mode %= HAL_GAMEPAD_MODE_MAX;
                 
                 g_obi.pi.test_cnt++;
-                if (rotsta_success == db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW)) {
+                if (rotsta_success == db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW)) {
                     cst_obi_log("[obi] saved");
                     // tx_thread_sleep(100);
                     // disable_global_irq(CSR_MSTATUS_MIE_MASK);

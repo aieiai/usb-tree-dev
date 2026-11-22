@@ -8,6 +8,7 @@
 #define KEY_ADVANCED_H
 
 #include <stdint.h>
+#include "rotsta.h"
 
 typedef void *(*adv_func_t)(void *user);
 
@@ -32,8 +33,7 @@ typedef struct {
 
 extern oba_t g_oba;
 
-oba_t *kadv_init(void);
-oba_t *kadv_deinit(void);
+rotsta_t keyadv_init(void);
 
 #endif /* KEY_ADVANCED_H */
 

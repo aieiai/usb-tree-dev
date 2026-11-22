@@ -19,15 +19,15 @@ enum {
 };
 
 typedef enum {
-    DB_ITEM_TY_OBF = 0,
-    DB_ITEM_TY_OBMAG,
-    DB_ITEM_TY_OBCOM,
-    DB_ITEM_TY_OBI,
-    DB_ITEM_TY_OBM,
-    DB_ITEM_TY_OBA,
-    DB_ITEM_TY_OBR,
-    DB_ITEM_TY_OBKP,
-    DB_ITEM_TY_MAX,
+    DB_ITEM_OBFAC = 0,
+    DB_ITEM_OBCOM,
+    DB_ITEM_OBMAG,
+    DB_ITEM_OBI,
+    DB_ITEM_OBM,
+    DB_ITEM_OBA,
+    DB_ITEM_OBR,
+    DB_ITEM_OBKP,
+    DB_ITEM_MAX,
 } db_item_ty;
 
 typedef enum {

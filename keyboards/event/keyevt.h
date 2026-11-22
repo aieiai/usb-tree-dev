@@ -77,7 +77,7 @@ typedef struct {
     int16_t  valdp; /* value delta pre */
     uint16_t pv;   /* press value */
     uint16_t rv;   /* release value */
-    int16_t  dst;
+    float  dst;
 } __attribute__((aligned(4))) keyevt_t;
 
 extern keyevt_t g_keyevt[KBD_KEY_MAX];

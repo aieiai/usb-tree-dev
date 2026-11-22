@@ -30,9 +30,9 @@ typedef enum {
 
 typedef struct {
     /* NOTE: The premise is that the key shaft is inserted in the pcba surface */
-    uint16_t t2h_dst; /* Distance from the top to Hall; Note: The distance from the initial height of the key shaft to Hall. */
-    uint16_t b2h_dst; /* Distance from the bottom to Hall; Note: The distance from the positive surface of pcba to Hall. */
-    uint16_t t2b_dst; /* Distance from the top to bottom; Note: The distance from the initial height of the key shaft to the pcba positive surface. */
+    float t2h_dst; /* Distance from the top to Hall; Note: The distance from the initial height of the key shaft to Hall. */
+    float b2h_dst; /* Distance from the bottom to Hall; Note: The distance from the positive surface of pcba to Hall. */
+    float t2b_dst; /* Distance from the top to bottom; Note: The distance from the initial height of the key shaft to the pcba positive surface. */
 
     keymag_lmt_t top;
     keymag_lmt_t bot;

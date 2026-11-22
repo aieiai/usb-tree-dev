@@ -9,6 +9,7 @@
 #include "db.h"
 
 #include "keycore.h"
+#include "rgb.h"
 
 #include "rotcc.h"
 #include "rotcc_proto.h"
@@ -71,6 +72,11 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
     }
 
+    state = rgb_init();
+    if (state != rotsta_success) {
+        printf(TAG "rgb init failed: 0x%08x\r\n", (unsigned)state);
+    }
+    
     state = rotcc_proto_init();
     if (state != rotsta_success) {
         printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);

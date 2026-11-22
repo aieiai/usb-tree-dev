@@ -1,11 +1,12 @@
 #include "keymagnet.h"
 #include "keyaxis.h"
 #include "keyprop.h"
+#include "db.h"
 
-obmag_t g_obmag[KBD_KEY_MAX] = {
-    {
-        .lmt = { .top = 46248, .bot = 9664 },
-    }
+#define TAG "keymagnet: "
+
+obmag_t g_obmag = {
+    .cal = { .lmt[0] = { .top = 46248, .bot = 9664 } },
 };
 
 typedef struct {
@@ -26,12 +27,12 @@ static factor_t factor[KBD_KEY_MAX];
  *          where b is the y-intercept of the line and k is the slope of the line.
  *          The line is defined by the key's attribute, such as the top and bottom values.
  */
-int16_t keymag_pt2du(uint8_t ki, uint16_t point)
+float keymag_pt2du(uint8_t ki, uint16_t point)
 {
     factor_t *p_factor = &factor[ki];
-    obkp_t *p_obkp = &g_obkp[ki];
-    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_obkp->axis.ty];
-    return (int16_t)((float)p_axis->t2h_dst - (p_factor->k / ((float)point - p_factor->b)));
+    keyattr_t *p_attr = &g_obkp.attr[ki];
+    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
+    return (p_axis->t2h_dst - (p_factor->k / ((float)point - p_factor->b)));
 }
 
 /**
@@ -45,12 +46,12 @@ int16_t keymag_pt2du(uint8_t ki, uint16_t point)
  *          where b is the y-intercept of the line and k is the slope of the line.
  *          The line is defined by the key's attribute, such as the top and bottom values.
  */
-uint16_t keymag_du2pt(uint8_t ki, int16_t dist_um)
+uint16_t keymag_du2pt(uint8_t ki, float dist_um)
 {
     factor_t *p_factor = &factor[ki];
-    obkp_t *p_obkp = &g_obkp[ki];
-    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_obkp->axis.ty];
-    return (uint16_t)((p_factor->k / (float)(p_axis->t2h_dst - dist_um)) + p_factor->b);
+    keyattr_t *p_attr = &g_obkp.attr[ki];
+    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
+    return (uint16_t)((p_factor->k / (p_axis->t2h_dst - dist_um)) + p_factor->b);
 }
 
 /**
@@ -61,12 +62,12 @@ uint16_t keymag_du2pt(uint8_t ki, int16_t dist_um)
 void keymag_update_factor(uint8_t ki)
 {
     factor_t *p_factor = &factor[ki];
-    obkp_t *p_obkp = &g_obkp[ki];
-    obmag_t *p_obmag = &g_obmag[ki];
-    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_obkp->axis.ty];
+    keyattr_t *p_attr = &g_obkp.attr[ki];
+    keymag_lmt_t *p_lmt = &g_obmag.cal.lmt[ki];
+    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
 
-    float topv  = p_obmag->lmt.top;
-    float botv  = p_obmag->lmt.bot;
+    float topv  = p_lmt->top;
+    float botv  = p_lmt->bot;
     float t2hdm = p_axis->t2h_dst / 1000.0f;
     float b2hdm = p_axis->b2h_dst / 1000.0f;
     float t2bv  = topv - botv;
@@ -78,8 +79,15 @@ void keymag_update_factor(uint8_t ki)
 
 rotsta_t keymag_init(void)
 {
+    rotsta_t result = rotsta_success;
+    result = db_register(DB_ITEM_OBMAG, &g_obmag, (uint32_t)sizeof(g_obmag));
+    if (result != rotsta_success) {
+        printf(TAG "obmag register failed: 0x%08x\r\n", (unsigned)result);
+        return result;
+    }
+
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
         keymag_update_factor(ki);
     }
-    return rotsta_success;
+    return result;
 }

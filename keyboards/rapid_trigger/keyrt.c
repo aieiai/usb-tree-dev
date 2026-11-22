@@ -61,7 +61,7 @@ static __inline void krt_record_rd_dst(uint8_t ki, int16_t c_dst)
     krt[ki].rnm_dst = 0;
     krt[ki].pd_dst  = S16_MIN;
     krt[ki].rd_dst  = c_dst;
-    uint16_t dst    = c_dst + g_kcfg.attr[ki].rt.ssp_dst;
+    float dst       = c_dst + g_kcfg.attr[ki].rt.ssp_dst;
     krt[ki].pnm_dst = (dst > ksta[ki].type_para->t2b_dst) ? ksta[ki].type_para->t2b_dst : dst;
 }
 

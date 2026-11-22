@@ -1,5 +1,4 @@
 #include "keyprop.h"
-#include <stdio.h>
 
 #include "db.h"
 
@@ -10,7 +9,7 @@
 
 
 obi_t g_obi;
-obkp_t g_obkp[KBD_KEY_MAX];
+obkp_t g_obkp;
 
 
 
@@ -49,18 +48,18 @@ static void _obi_load_defaults(void)
 }
 static rotsta_t obi_init(void)
 {
-    rotsta_t result = db_register(DB_ITEM_TY_OBI, &g_obi, (uint32_t)sizeof(g_obi));
+    rotsta_t result = db_register(DB_ITEM_OBI, &g_obi, (uint32_t)sizeof(g_obi));
     if (result != rotsta_success) {
         printf(TAG "obi register failed: 0x%08x\r\n", (unsigned)result);
         return result;
     }
 
     if ((g_obi.magic != MAGIC_OBI) || (g_obi.version != OBI_VER)) {
-        printf(TAG "kattr blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obi.magic, (unsigned)g_obi.version);
+        printf(TAG "key property blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obi.magic, (unsigned)g_obi.version);
         _obi_load_defaults();
-        result = db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW);
+        result = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
-            printf(TAG "kattr default save failed: 0x%08x\r\n", (unsigned)result);
+            printf(TAG "key property default save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
     else if (g_obi.pi.fv != (uint64_t)FW_VER) {
@@ -73,27 +72,57 @@ static rotsta_t obi_init(void)
          */
         g_obi.pi.fv = (uint64_t)FW_VER;
         _obi_set_str(g_obi.pi.cd, sizeof(g_obi.pi.cd), rotver_get_cd());
-        printf(TAG "kattr fw version 0x%08x%08x -> 0x%08x%08x\r\n",
+        printf(TAG "key property fw version 0x%08x%08x -> 0x%08x%08x\r\n",
                (unsigned)(prev_fv >> 32), (unsigned)prev_fv,
                (unsigned)(g_obi.pi.fv >> 32), (unsigned)g_obi.pi.fv);
-        result = db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW);
+        result = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
-            printf(TAG "kattr fw version save failed: 0x%08x\r\n", (unsigned)result);
+            printf(TAG "key property fw version save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
     else if ((g_obi.pi.fv == (uint64_t)FW_VER) && strcmp((const char *)g_obi.pi.cd, rotver_get_cd()) != 0) {
-        printf(TAG "kattr compile date %s != %s, update\r\n", (const char *)g_obi.pi.cd, rotver_get_cd());
+        printf(TAG "key property compile date %s != %s, update\r\n", (const char *)g_obi.pi.cd, rotver_get_cd());
         _obi_set_str(g_obi.pi.cd, sizeof(g_obi.pi.cd), rotver_get_cd());
-        result = db_update(DB_ITEM_TY_OBI, DB_SAVE_TY_NOW);
+        result = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
-            printf(TAG "kattr compile date save failed: 0x%08x\r\n", (unsigned)result);
+            printf(TAG "key property compile date save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
     return result;
 }
 
+static rotsta_t obkp_init(void)
+{
+    rotsta_t result = db_register(DB_ITEM_OBKP, &g_obkp, (uint32_t)sizeof(g_obkp));
+    if (result != rotsta_success) {
+        printf(TAG "obkp register failed: 0x%08x\r\n", (unsigned)result);
+        return result;
+    }
+
+    if ((g_obkp.magic != MAGIC_OBKP) || (g_obkp.version != OBKP_VER)) {
+        printf(TAG "key property blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obkp.magic, (unsigned)g_obkp.version);
+        // _obkp_load_defaults();
+        result = db_update(DB_ITEM_OBKP, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "key property default save failed: 0x%08x\r\n", (unsigned)result);
+        }
+    }
+
+    return result;
+}
 
 rotsta_t keyprop_init(void)
 {
-    return obi_init();
+    rotsta_t result = rotsta_success;
+    result = obi_init();
+    if (result != rotsta_success) {
+        return result;
+    }
+
+    result = obkp_init();
+    if (result != rotsta_success) {
+        return result;
+    }
+
+    return result;
 }

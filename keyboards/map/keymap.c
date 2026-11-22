@@ -1,12 +1,9 @@
-#include <stdbool.h>
-#include <stddef.h>
-#include <string.h>
-
 #include "db.h"
 #include "flash_layout.h"
 #include "keymap.h"
 #include "keycode.h"
 
+#define TAG "keymap: "
 
 obm_t g_obm;
 
@@ -32,13 +29,14 @@ static void _keymap_load_defaults(void)
 rotsta_t keymap_init(void)
 {
     bool blank = true;
-    rotsta_t state;
+    rotsta_t result = rotsta_success;
     obm_t *p_obm = &g_obm;
 
-    state = db_register(DB_ITEM_TY_OBM, p_obm, (uint32_t)sizeof(g_obm));
-    if (state != rotsta_success) {
+    result = db_register(DB_ITEM_OBM, p_obm, (uint32_t)sizeof(g_obm));
+    if (result != rotsta_success) {
+        printf(TAG "obm register failed: 0x%08x\r\n", (unsigned)result);
         _keymap_load_defaults();
-        return state;
+        return result;
     }
     if (MAGIC_OBKM != p_obm->magic) {
         _keymap_load_defaults();
@@ -47,10 +45,10 @@ rotsta_t keymap_init(void)
 
     if (blank) {
         _keymap_load_defaults();
-        (void)db_update(DB_ITEM_TY_OBM, DB_SAVE_TY_NOW);
+        (void)db_update(DB_ITEM_OBM, DB_SAVE_TY_NOW);
     }
 
-    return rotsta_success;
+    return result;
 }
 
 

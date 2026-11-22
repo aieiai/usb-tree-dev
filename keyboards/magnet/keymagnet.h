@@ -1,6 +1,7 @@
 #ifndef KEY_MAGNET_H
 #define KEY_MAGNET_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include "rotsta.h"
 #include "kbd_config.h"
@@ -33,14 +34,8 @@
 
 typedef union {
     uint32_t buf;
-    struct {
-        uint16_t top;
-        uint16_t bot;
-    };
-    struct {
-        uint16_t max;
-        uint16_t min;
-    };
+    struct { uint16_t top; uint16_t bot; };
+    struct { uint16_t max; uint16_t min; };
 } __attribute__((aligned(4))) keymag_lmt_t;
 
 typedef struct {
@@ -48,16 +43,20 @@ typedef struct {
     uint32_t crc32;
     uint32_t version;
     uint8_t  name[32];
+    keymag_lmt_t lmt[KBD_KEY_MAX];
+} __attribute__((aligned(4))) keymag_cal_t;
 
-    keymag_lmt_t lmt;
+typedef struct {
+    keymag_cal_t cal;
+    keymag_cal_t cal_bak;
 } obmag_t;
 
-extern obmag_t g_obmag[KBD_KEY_MAX];
+extern obmag_t g_obmag;
 
 rotsta_t keymag_init(void);
 void     keymag_update_factor(uint8_t ki);
-int16_t  keymag_pt2du(uint8_t ki, uint16_t point);
-uint16_t keymag_du2pt(uint8_t ki, int16_t dist_um);
+float    keymag_pt2du(uint8_t ki, uint16_t point);
+uint16_t keymag_du2pt(uint8_t ki, float dist_um);
 
 
 #endif  /* KEY_MAGNET_H */

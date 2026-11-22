@@ -1,6 +1,12 @@
 #ifndef KEY_MAP_H
 #define KEY_MAP_H
 
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
+
 #include "kbd_config.h"
 #include "rotsta.h"
 

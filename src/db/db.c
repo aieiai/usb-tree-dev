@@ -18,7 +18,7 @@
 #define DB_NOW_TIMEOUT_MS      (5000U)
 #define DB_ITEM_BIT(item_ty)   (1UL << (uint32_t)(item_ty))
 
-_Static_assert(DB_ITEM_TY_MAX <= 32U, "DB dirty mask supports at most 32 types");
+_Static_assert(DB_ITEM_MAX <= 32U, "DB dirty mask supports at most 32 types");
 
 typedef struct {
     uint32_t offset;
@@ -27,24 +27,24 @@ typedef struct {
 } msg_t;
 
 typedef struct {
+    const msg_t *msg;
     void *buf;
     uint32_t buf_size;
     bool update;
     bool registered;
-    const msg_t *msg;
 } item_t;
 
 
-static volatile item_t items[DB_ITEM_TY_MAX];
-static const msg_t msgs[DB_ITEM_TY_MAX] = {
-    [DB_ITEM_TY_OBF]   = { .offset = FLASH_OBF_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBF_SIZ,   .name = "db_obf, factory"   },
-    [DB_ITEM_TY_OBMAG] = { .offset = FLASH_OBMAG_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBMAG_SIZ, .name = "db_obmag, magnet"  },
-    [DB_ITEM_TY_OBCOM] = { .offset = FLASH_OBCOM_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBCOM_SIZ, .name = "db_obcom, common"  },
-    [DB_ITEM_TY_OBI]   = { .offset = FLASH_OBI_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBI_SIZ,   .name = "db_obi, info"      },
-    [DB_ITEM_TY_OBM]   = { .offset = FLASH_OBM_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBM_SIZ,   .name = "db_obm, mapping"   },
-    [DB_ITEM_TY_OBA]   = { .offset = FLASH_OBA_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBA_SIZ,   .name = "db_oba, advanced"  },
-    [DB_ITEM_TY_OBR]   = { .offset = FLASH_OBR_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBR_SIZ,   .name = "db_obr, rgb"       },
-    [DB_ITEM_TY_OBKP]  = { .offset = FLASH_OBKP_ADDR  - FLASH_BASE_ADDR, .cap = FLASH_OBKP_SIZ,  .name = "db_obkp, property" },
+static volatile item_t items[DB_ITEM_MAX];
+static const msg_t msgs[DB_ITEM_MAX] = {
+    [DB_ITEM_OBFAC] = { .offset = FLASH_OBF_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBF_SIZ,   .name = "db_obf, factory"   },
+    [DB_ITEM_OBMAG] = { .offset = FLASH_OBMAG_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBMAG_SIZ, .name = "db_obmag, magnet"  },
+    [DB_ITEM_OBCOM] = { .offset = FLASH_OBCOM_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBCOM_SIZ, .name = "db_obcom, common"  },
+    [DB_ITEM_OBI]   = { .offset = FLASH_OBI_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBI_SIZ,   .name = "db_obi, info"      },
+    [DB_ITEM_OBM]   = { .offset = FLASH_OBM_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBM_SIZ,   .name = "db_obm, mapping"   },
+    [DB_ITEM_OBA]   = { .offset = FLASH_OBA_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBA_SIZ,   .name = "db_oba, advanced"  },
+    [DB_ITEM_OBR]   = { .offset = FLASH_OBR_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBR_SIZ,   .name = "db_obr, rgb"       },
+    [DB_ITEM_OBKP]  = { .offset = FLASH_OBKP_ADDR  - FLASH_BASE_ADDR, .cap = FLASH_OBKP_SIZ,  .name = "db_obkp, property" },
 };
 
 static TX_THREAD db_thread;
@@ -54,8 +54,8 @@ static TX_SEMAPHORE s_wake_sem;
 static TX_SEMAPHORE s_done_sem;
 static uint8_t db_thread_stack[DB_THREAD_STACK] __attribute__((aligned(8U)));
 
-static uint32_t s_generation[DB_ITEM_TY_MAX];
-static rotsta_t s_save_result[DB_ITEM_TY_MAX];
+static uint32_t s_generation[DB_ITEM_MAX];
+static rotsta_t s_save_result[DB_ITEM_MAX];
 
 static volatile uint32_t s_dirty_mask;
 static volatile uint32_t s_now_mask;
@@ -79,7 +79,7 @@ static void _sem_reset(TX_SEMAPHORE *semaphore) {
 
 static bool _type_valid(db_item_ty type) 
 {
-    return (uint32_t)type < (uint32_t)DB_ITEM_TY_MAX;
+    return (uint32_t)type < (uint32_t)DB_ITEM_MAX;
 }
 
 static void *_registered_record(db_item_ty type)
@@ -241,7 +241,7 @@ static void db_thread_entry(ULONG argument)
             }
 
             saved_now = false;
-            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_TY_MAX; i++) {
+            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
                 if (((dirty & DB_ITEM_BIT(i)) != 0U) &&
                     ((now_mask & DB_ITEM_BIT(i)) != 0U)) {
                     (void)_save_type((db_item_ty)i);
@@ -261,7 +261,7 @@ static void db_thread_entry(ULONG argument)
             if ((dirty & now_mask) != 0U) {
                 continue;
             }
-            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_TY_MAX; i++) {
+            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
                 if ((dirty & DB_ITEM_BIT(i)) != 0U) {
                     (void)_save_type((db_item_ty)i);
                 }

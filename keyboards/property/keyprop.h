@@ -1,11 +1,12 @@
 /**
  * @Author: wj
- * @Brief:  key attribute.
+ * @Brief:  key property.
  * @Date:   2024/07/02
  */
-#ifndef KEY_ATTR_H
-#define KEY_ATTR_H
+#ifndef KEY_PROPERTY_H
+#define KEY_PROPERTY_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "rotsta.h"
@@ -15,62 +16,60 @@
 #include "keyaxis.h"
 #include "keycode.h"
 
+#define MAGIC_OBKP 0x79890001U /* OBKP */
+#define OBKP_VER 0U
+
+
 
 typedef enum {
     KTRG_TY_NOM = 0,
     KTRG_TY_RT,
     KTRG_TY_RT_CTN,
-    KTRG_TY_ADV,
 } ktrg_ty;
 
-
-// on-board key property
 typedef struct {
-    uint32_t magic;
     uint32_t crc32;
-
-    struct {
+    ktrg_ty trg_ty;
+    struct __attribute__((packed)) {
         kaxis_ty ty;
         kaxis_udef_ty udef_ty;
     } axis;
-
-    // kop_type_t type_op;
-
-    struct {
+    struct __attribute__((packed)) {
         uint16_t sclt;
         uint16_t sclto;
         uint16_t dcit;
         uint16_t dclt;
         uint16_t dclto;
     } tk; /* tick */
-
-    // normal, rapid trigger, advanced
-    ktrg_ty trg_ty;
-    struct {
+    struct __attribute__((packed)) {
         uint16_t dst_p;      /* normal press dist */
         uint16_t dst_r;      /* normal raise dist */
     } nom;
-
-    struct {
+    struct __attribute__((packed)) {
         uint16_t dst_t;     /* top dead zero dist */
         uint16_t dst_b;     /* bot dead zero dist */
     } dz;
-
-    struct {
-        uint8_t en : 1;
-        uint8_t ctn_en : 1;
-        uint8_t pls_en : 1;
-        uint8_t rsv : 5;
-        uint8_t pls_ty;
+    struct __attribute__((packed)) {
+        uint16_t en     : 1;
+        uint16_t ctn_en : 1;
+        uint16_t rsv    : 14;
         uint16_t dst_p;     /* rapid trigger sensitivity press dist */
         uint16_t dst_r;     /* rapid trigger sensitivity raise dist */
-        rotkc_t pls_kc[4];
     } rt;
-
-    struct {
+    struct __attribute__((packed)) {
         // kadv_ty type;
         uint8_t tmp;
     } adv;
+} __attribute__((aligned(4))) keyattr_t;
+
+// on-board key property
+typedef struct {
+    uint32_t magic;
+    uint32_t crc32;
+    uint32_t version;
+    uint8_t  name[32];
+
+    keyattr_t attr[KBD_KEY_MAX];
 } __attribute__((aligned(4))) obkp_t;
 
 
@@ -128,10 +127,10 @@ typedef struct {
 
 
 extern obi_t g_obi;
-extern obkp_t g_obkp[KBD_KEY_MAX];
+extern obkp_t g_obkp;
 
 
 rotsta_t keyprop_init(void);
 
 
-#endif  /* KEY_ATTR_H */
+#endif  /* KEY_PROPERTY_H */
