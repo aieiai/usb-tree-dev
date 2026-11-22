@@ -118,10 +118,16 @@
   }
   .view.active { display: flex; }
   #view-debug { overflow: hidden; }
-  /* 改键页上 40%、下 60%，窗口过矮时整页滚动 */
-  #view-remap { overflow-y: auto; }
-  #view-remap > .interface { min-height: 0; }
-  #view-remap > .keyboard-card {
+  /* 改键/按键参数/轴体页：上层键盘 40%，下层操作区 60%，窗口过矮时整页滚动 */
+  #view-remap,
+  #view-param,
+  #view-axis { overflow-y: auto; }
+  #view-remap > .interface,
+  #view-param > .interface,
+  #view-axis > .interface { min-height: 0; }
+  #view-remap > .keyboard-card,
+  #view-param > .keyboard-card,
+  #view-axis > .keyboard-card {
     flex: 4 1 0;
     min-height: 120px;
     padding: 10px;
@@ -129,7 +135,12 @@
     border: 0;
     overflow: visible;
   }
-  #view-remap > .interface:not(.keyboard-card) { flex: 6 1 0; min-height: 200px; }
+  #view-remap > .interface:not(.keyboard-card),
+  #view-param > .interface:not(.keyboard-card),
+  #view-axis > .interface:not(.keyboard-card) {
+    flex: 6 1 0;
+    min-height: 200px;
+  }
   #layout-bottom {
     flex: 1 1 auto;
     min-height: 0;
@@ -490,6 +501,65 @@
   }
   .warn { color: #f6ad55; }
   .err { color: #fc8181; }
+  .param-workspace {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .param-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 0 10px 8px;
+  }
+  .param-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 10px;
+    padding: 0 10px 10px;
+  }
+  .param-tabs {
+    flex: 0 0 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .param-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+  }
+  .param-form {
+    min-height: 86px;
+    padding: 10px;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .param-form > .hint { padding: 0; }
+  .param-form-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .param-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--muted);
+  }
+  .param-field input[type="number"] { width: 120px; }
+  .param-field select { min-width: 160px; }
+  .param-field input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
   @media (max-width: 900px) {
     html, body { height: auto; }
     body { display: block; min-height: 100%; }

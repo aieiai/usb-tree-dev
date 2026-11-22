@@ -18,10 +18,20 @@ extern "C" {
 #define ROTCC_UPGRADE_INFO_LEN      (48U)
 #define ROTCC_UPGRADE_REQUEST_LEN   (14U)
 
+/* Per-key commands: payload starts with {start, end}, followed by one entry per key. */
+#define ROTCC_KC_RANGE_HEADER_LEN   (2U)
+#define ROTCC_KC_CODE_LEN           (4U)
+#define ROTCC_KC_TICK_LEN           (12U)
+#define ROTCC_KC_TRG_LEN            (4U)
+#define ROTCC_KC_DZ_LEN             (4U)
+#define ROTCC_KC_NOM_LEN            (4U)
+#define ROTCC_KC_RT_LEN             (6U)
+
 enum {
     ROTCC_CMD_SYS = 0x00,
     ROTCC_CMD_UPGRADE = 0x01,
     ROTCC_CMD_KC = 0x02,
+    ROTCC_CMD_AXIS = 0x03,
 };
 
 enum {
@@ -44,6 +54,21 @@ enum {
     ROTCC_KC_LAYER_COUNT = 0x02,
     ROTCC_KC_ACTIVE_LAYER = 0x03,
     ROTCC_KC_SET_ACTIVE_LAYER = 0x04,
+    ROTCC_KC_TICK_GET = 0x05,
+    ROTCC_KC_TICK_SET = 0x06,
+    ROTCC_KC_TRG_GET = 0x07,
+    ROTCC_KC_TRG_SET = 0x08,
+    ROTCC_KC_DZ_GET = 0x09,
+    ROTCC_KC_DZ_SET = 0x0A,
+    ROTCC_KC_NOM_GET = 0x0B,
+    ROTCC_KC_NOM_SET = 0x0C,
+    ROTCC_KC_RT_GET = 0x0D,
+    ROTCC_KC_RT_SET = 0x0E,
+};
+
+enum {
+    ROTCC_AXIS_LIST = 0x00,
+    ROTCC_AXIS_SET = 0x01,
 };
 
 /* Request types carried by ROTCC_UPGRADE_REQUEST. */

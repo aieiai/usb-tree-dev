@@ -25,6 +25,64 @@ static void _obi_set_str(uint8_t *dst, uint32_t size, const char *src)
     dst[i] = 0U;
 }
 
+static bool _str_terminated(const uint8_t *str, uint32_t size)
+{
+    return (str != NULL) && (size != 0U) && (memchr(str, 0, size) != NULL);
+}
+
+static bool _obi_valid(void)
+{
+    if ((g_obi.fs.gp_mode >= KPROP_GP_MAX) ||
+        (g_obi.fs.link_mode >= KPROP_LINK_MAX) ||
+        (g_obi.pm.en > 1U) ||
+        (g_obi.pi.vid == 0U) || (g_obi.pi.pid == 0U)) {
+        return false;
+    }
+    return _str_terminated(g_obi.name, sizeof(g_obi.name)) &&
+           _str_terminated(g_obi.pi.cd, sizeof(g_obi.pi.cd)) &&
+           _str_terminated(g_obi.pi.mn, sizeof(g_obi.pi.mn)) &&
+           _str_terminated(g_obi.pi.pn, sizeof(g_obi.pi.pn)) &&
+           _str_terminated(g_obi.pi.sn, sizeof(g_obi.pi.sn));
+}
+
+static bool _obkp_valid(void)
+{
+    if ((g_obkp.magic != MAGIC_OBKP) || (g_obkp.version != OBKP_VER) ||
+        !_str_terminated(g_obkp.name, sizeof(g_obkp.name))) {
+        return false;
+    }
+
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        const keyattr_t *p_attr = &g_obkp.attr[ki];
+        int trg = (int)p_attr->trg_ty;
+
+        if ((trg < (int)KTRG_TY_NOM) || (trg > (int)KTRG_TY_RT_CTN)) {
+            return false;
+        }
+        if (((uint32_t)p_attr->axis.ty >= (uint32_t)KAXIS_MAX) ||
+            ((uint32_t)p_attr->axis.udef_ty >= (uint32_t)KAXIS_UDEF_MAX)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void _obkp_load_defaults(void)
+{
+    memset(&g_obkp, 0, sizeof(g_obkp));
+    g_obkp.magic = MAGIC_OBKP;
+    g_obkp.version = OBKP_VER;
+    _obi_set_str(g_obkp.name, sizeof(g_obkp.name), "Trace40");
+
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        keyattr_t *p_attr = &g_obkp.attr[ki];
+
+        p_attr->trg_ty = KTRG_TY_NOM;
+        p_attr->axis.ty = KAXIS_BB;
+        p_attr->axis.udef_ty = KAXIS_UDEF0;
+    }
+}
+
 static void _obi_load_defaults(void)
 {
     memset(&g_obi, 0, sizeof(g_obi));
@@ -54,12 +112,12 @@ static rotsta_t obi_init(void)
         return result;
     }
 
-    if ((g_obi.magic != MAGIC_OBI) || (g_obi.version != OBI_VER)) {
-        printf(TAG "key property blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obi.magic, (unsigned)g_obi.version);
+    if ((g_obi.magic != MAGIC_OBI) || (g_obi.version != OBI_VER) || !_obi_valid()) {
+        printf(TAG "obi invalid (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obi.magic, (unsigned)g_obi.version);
         _obi_load_defaults();
         result = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
-            printf(TAG "key property default save failed: 0x%08x\r\n", (unsigned)result);
+            printf(TAG "obi default save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
     else if (g_obi.pi.fv != (uint64_t)FW_VER) {
@@ -99,12 +157,12 @@ static rotsta_t obkp_init(void)
         return result;
     }
 
-    if ((g_obkp.magic != MAGIC_OBKP) || (g_obkp.version != OBKP_VER)) {
-        printf(TAG "key property blank (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obkp.magic, (unsigned)g_obkp.version);
-        // _obkp_load_defaults();
+    if (!_obkp_valid()) {
+        printf(TAG "obkp invalid (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obkp.magic, (unsigned)g_obkp.version);
+        _obkp_load_defaults();
         result = db_update(DB_ITEM_OBKP, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
-            printf(TAG "key property default save failed: 0x%08x\r\n", (unsigned)result);
+            printf(TAG "obkp default save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
 

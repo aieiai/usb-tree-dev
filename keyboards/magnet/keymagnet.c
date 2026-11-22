@@ -4,10 +4,11 @@
 #include "db.h"
 
 #define TAG "keymagnet: "
+#define KEYMAG_BOT_DFT  (0)
+#define KEYMAG_TOP_DFT  ((0x01 << KBD_ADC_BIT) - 1)
+#define KEYMAG_DIF_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 500)) /* 500mV */
 
-obmag_t g_obmag = {
-    .cal = { .lmt[0] = { .top = 46248, .bot = 9664 } },
-};
+obmag_t g_obmag;
 
 typedef struct {
     float k;
@@ -77,13 +78,64 @@ void keymag_update_factor(uint8_t ki)
     p_factor->b = (1000.0f * (float)((0x01 << KBD_ADC_BIT) - 1.0f) / (KBD_ADC_VEF * 1000.0f)) * b;
 }
 
+static bool _keymag_cal_valid(const keymag_cal_t *p_cal)
+{
+    if ((p_cal->magic != MAGIC_OBMAG) || (p_cal->version != OBMAG_VER)) {
+        return false;
+    }
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if ((p_cal->lmt[ki].max <= p_cal->lmt[ki].min) || 
+            (p_cal->lmt[ki].max - p_cal->lmt[ki].min) < KEYMAG_DIF_DFT) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void _keymag_cal_defaults(keymag_cal_t *p_cal, const char *name)
+{
+    memset(p_cal, 0, sizeof(*p_cal));
+    p_cal->magic = MAGIC_OBMAG;
+    p_cal->version = OBMAG_VER;
+    (void)strncpy((char *)p_cal->name, name, sizeof(p_cal->name) - 1U);
+
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        p_cal->lmt[ki].top = KEYMAG_TOP_DFT;
+        p_cal->lmt[ki].bot = KEYMAG_BOT_DFT;
+    }
+}
+
+static void _keymag_load_defaults(void)
+{
+    _keymag_cal_defaults(&g_obmag.cal, "Magnet");
+    _keymag_cal_defaults(&g_obmag.cal_bak, "Magnet");
+}
+
 rotsta_t keymag_init(void)
 {
     rotsta_t result = rotsta_success;
+
     result = db_register(DB_ITEM_OBMAG, &g_obmag, (uint32_t)sizeof(g_obmag));
     if (result != rotsta_success) {
         printf(TAG "obmag register failed: 0x%08x\r\n", (unsigned)result);
         return result;
+    }
+
+    if (!_keymag_cal_valid(&g_obmag.cal)) {
+        printf(TAG "cal invalid (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)g_obmag.cal.magic, (unsigned)g_obmag.cal.version);
+        _keymag_load_defaults();
+        result = db_update(DB_ITEM_OBMAG, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "cal default save failed: 0x%08x\r\n", (unsigned)result);
+        }
+    }
+    else if (!_keymag_cal_valid(&g_obmag.cal_bak)) {
+        printf(TAG "backup cal invalid, restore from cal\r\n");
+        g_obmag.cal_bak = g_obmag.cal;
+        result = db_update(DB_ITEM_OBMAG, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "backup cal save failed: 0x%08x\r\n", (unsigned)result);
+        }
     }
 
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {

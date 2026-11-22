@@ -11,6 +11,7 @@
 #include "rotsta.h"
 
 #define MAGIC_OBKM 0x424D4B5F /* OBKM */
+#define OBKM_VER   0U
 
 // on-board mapping
 typedef struct {

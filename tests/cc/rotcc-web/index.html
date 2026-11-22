@@ -35,7 +35,9 @@
 
 <div id="app">
   <nav id="sidebar">
-    <button class="nav-btn active" data-view="remap">改键</button>
+    <button class="nav-btn active" data-view="remap">按键映射</button>
+    <button class="nav-btn" data-view="param">按键参数</button>
+    <button class="nav-btn" data-view="axis">轴体</button>
     <button class="nav-btn" data-view="upgrade">升级</button>
     <button class="nav-btn" data-view="system">系统</button>
     <button class="nav-btn" data-view="debug">Debug</button>
@@ -124,6 +126,73 @@
       </section>
     </section>
 
+    <section id="view-param" class="view">
+      <section class="interface keyboard-card">
+        <div class="kc-panel">
+          <div id="paramKeyboard" class="keyboard"></div>
+        </div>
+      </section>
+      <section class="interface param-workspace">
+        <div class="interface-head">
+          <strong class="grow">按键参数</strong>
+          <span id="paramState" class="muted">未选择</span>
+        </div>
+        <div class="param-toolbar">
+          <span id="paramSelection" class="muted">已选择 0 个键位</span>
+          <button id="btnParamSelectAll" class="secondary" disabled>全选</button>
+          <button id="btnParamClear" class="secondary" disabled>清空</button>
+        </div>
+        <div class="param-body">
+          <div id="paramTabs" class="param-tabs" role="group" aria-label="参数分类"></div>
+          <div class="param-content">
+            <div class="upgrade-row">
+              <button id="btnParamRead" class="secondary" disabled>读取</button>
+              <button id="btnParamWrite" disabled>写入</button>
+            </div>
+            <div id="paramForm" class="param-form">
+              <div class="hint">选择分类后点击“读取”。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-axis" class="view">
+      <section class="interface keyboard-card">
+        <div class="kc-panel">
+          <div id="axisKeyboard" class="keyboard"></div>
+        </div>
+      </section>
+      <section class="interface param-workspace">
+        <div class="interface-head">
+          <strong class="grow">按键轴体</strong>
+          <span id="axisSupport" class="muted">支持列表 --</span>
+        </div>
+        <div class="param-toolbar">
+          <span id="axisSelection" class="muted">已选择 0 个键位</span>
+          <button id="btnAxisSelectAll" class="secondary" disabled>全选</button>
+          <button id="btnAxisClear" class="secondary" disabled>清空</button>
+        </div>
+        <div class="param-body">
+          <div id="axisTabs" class="param-tabs" role="group" aria-label="轴体分类"></div>
+          <div class="param-content">
+            <div id="axisListPanel">
+              <div class="upgrade-row">
+                <button id="btnAxisList" class="secondary" disabled>读取支持列表</button>
+              </div>
+            </div>
+            <div id="axisSetPanel" hidden>
+              <div class="upgrade-row">
+                <label>轴体 <select id="axisValue" disabled></select></label>
+                <button id="btnAxisWrite" disabled>写入轴体</button>
+              </div>
+            </div>
+            <div id="axisState" class="hint">尚未读取支持列表。</div>
+          </div>
+        </div>
+      </section>
+    </section>
+
     <section id="view-debug" class="view">
       <div id="layout-bottom">
         <section id="left">
@@ -157,6 +226,8 @@
   <script src="./js/keymap/data.js"></script>
   <script src="./js/keymap/picker.js"></script>
   <script src="./js/keymap/keyboard.js"></script>
+  <script src="./js/keymap/params.js"></script>
+  <script src="./js/keymap/axis.js"></script>
   <script src="./js/firmware.js"></script>
   <script src="./js/ui.js"></script>
   <script src="./js/interfaces.js"></script>

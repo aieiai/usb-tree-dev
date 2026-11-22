@@ -1,6 +1,18 @@
 #include "keyaxis.h"
 #include "kbd_config.h"
 
+const kaxis_ty g_kbd_axis_support[] = {
+    KAXIS_BB,
+    KAXIS_GDL,
+    KAXIS_MAX, /* sentinel */
+};
+
+const kaxis_udef_ty g_kbd_axis_udef_support[] = {
+    KAXIS_UDEF0,
+    KAXIS_UDEF1,
+    KAXIS_UDEF2,
+    KAXIS_UDEF3,
+};
 
 const keyaxis_para_t g_keyaxis_para[KAXIS_MAX] = {
     {

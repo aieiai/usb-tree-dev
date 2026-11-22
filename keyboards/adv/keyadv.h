@@ -8,7 +8,15 @@
 #define KEY_ADVANCED_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "rotsta.h"
+
+#define MAGIC_OBA 0x41424F5FU /* "_OBA" */
+#define OBA_VER   0U
 
 typedef void *(*adv_func_t)(void *user);
 

@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include "rotsta.h"
 #include "kbd_config.h"
 
@@ -31,6 +32,8 @@
 #   endif
 #endif
 
+#define MAGIC_OBMAG 0x47414D5FU /* "_MAG" */
+#define OBMAG_VER   0U
 
 typedef union {
     uint32_t buf;

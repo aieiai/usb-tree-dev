@@ -9,7 +9,13 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+
 #include "rotsta.h"
+
+#define MAGIC_OBR 0x52424F5FU /* "_OBR" */
+#define OBR_VER   0U
 
 typedef struct {
     uint32_t magic;

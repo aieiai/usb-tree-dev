@@ -119,6 +119,15 @@ class MockDevice {
     this.layerCount = 4;
     this.activeLayer = 0;
     this.keymap = Array.from({ length: 4 }, () => new Array(42).fill(0));
+    this.attributes = Array.from({ length: 42 }, () => ({
+      trg: 0,
+      dz: { dst_t: 0, dst_b: 0 },
+      nom: { dst_p: 0, dst_r: 0 },
+      rt: { en: 0, ctn_en: 0, dst_p: 0, dst_r: 0 },
+      axis: 0
+    }));
+    this.tick = { sclt: 0, sclto: 0, dcit: 0, dclt: 0, dclto: 0 };
+    this.axisSupport = [0, 1]; /* KAXIS_BB, KAXIS_GDL */
     this.resetRequests = [];
     this.rebooted = false;
     this.upgrade = null;
@@ -127,6 +136,17 @@ class MockDevice {
 
   defaults() {
     return Array.from({ length: 4 }, () => new Array(42).fill(0));
+  }
+
+  /* 解析 {start, end} + count * entrySize 的按键范围请求。 */
+  keyRange(payload, entrySize) {
+    if (payload.length < 2) return null;
+    const start = payload[0];
+    const end = payload[1];
+    if (end < start || end >= this.keyCount) return null;
+    const count = end - start + 1;
+    if (payload.length !== 2 + count * entrySize) return null;
+    return { start, end, count };
   }
 
   deviceInfo() {
@@ -219,13 +239,25 @@ class MockDevice {
 
     if (msg.cmd === CC.CMD_KC) {
       const layer = msg.reserve >> 8;
-      const key = msg.reserve & 0xff;
       switch (msg.subcmd) {
-      case CC.KC_GET:
-        return u32(this.keymap[layer][key]);
-      case CC.KC_SET:
-        this.keymap[layer][key] = api.readLe32(msg.payload, 0);
+      case CC.KC_GET: {
+        const range = this.keyRange(msg.payload, 0);
+        if (!range || layer >= this.layerCount) return status(3);
+        const out = new Uint8Array(range.count * 4);
+        for (let i = 0; i < range.count; i++) {
+          api.writeLe32(out, i * 4, this.keymap[layer][range.start + i]);
+        }
+        return reply(out);
+      }
+      case CC.KC_SET: {
+        const range = this.keyRange(msg.payload, 4);
+        if (!range || layer >= this.layerCount) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          this.keymap[layer][range.start + i] =
+            api.readLe32(msg.payload, 2 + i * 4);
+        }
         return status(0);
+      }
       case CC.KC_LAYER_COUNT:
         return u32(this.layerCount);
       case CC.KC_ACTIVE_LAYER:
@@ -234,6 +266,137 @@ class MockDevice {
         const value = api.readLe32(msg.payload, 0);
         if (value >= this.layerCount) return status(3); /* invalid argument */
         this.activeLayer = value;
+        return status(0);
+      }
+      case CC.KC_TICK_GET: {
+        if (msg.payload.length !== 0) return status(3);
+        const out = new Uint8Array(12);
+        const values = [
+          this.tick.sclt, this.tick.sclto, this.tick.dcit,
+          this.tick.dclt, this.tick.dclto, 0
+        ];
+        values.forEach((value, i) => api.writeLe16(out, i * 2, value));
+        return reply(out);
+      }
+      case CC.KC_TICK_SET: {
+        if (msg.payload.length !== 12) return status(3);
+        this.tick = {
+          sclt: api.readLe16(msg.payload, 0),
+          sclto: api.readLe16(msg.payload, 2),
+          dcit: api.readLe16(msg.payload, 4),
+          dclt: api.readLe16(msg.payload, 6),
+          dclto: api.readLe16(msg.payload, 8)
+        };
+        return status(0);
+      }
+      case CC.KC_TRG_GET: {
+        const range = this.keyRange(msg.payload, 0);
+        if (!range) return status(3);
+        const out = new Uint8Array(range.count * 4);
+        for (let i = 0; i < range.count; i++) {
+          api.writeLe32(out, i * 4, this.attributes[range.start + i].trg);
+        }
+        return reply(out);
+      }
+      case CC.KC_TRG_SET: {
+        const range = this.keyRange(msg.payload, 4);
+        if (!range) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          const value = api.readLe32(msg.payload, 2 + i * 4);
+          if (value > 2) return status(3);
+          this.attributes[range.start + i].trg = value;
+        }
+        return status(0);
+      }
+      case CC.KC_DZ_GET: {
+        const range = this.keyRange(msg.payload, 0);
+        if (!range) return status(3);
+        const out = new Uint8Array(range.count * 4);
+        for (let i = 0; i < range.count; i++) {
+          const dz = this.attributes[range.start + i].dz;
+          api.writeLe16(out, i * 4, dz.dst_t);
+          api.writeLe16(out, i * 4 + 2, dz.dst_b);
+        }
+        return reply(out);
+      }
+      case CC.KC_DZ_SET: {
+        const range = this.keyRange(msg.payload, 4);
+        if (!range) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          this.attributes[range.start + i].dz = {
+            dst_t: api.readLe16(msg.payload, 2 + i * 4),
+            dst_b: api.readLe16(msg.payload, 2 + i * 4 + 2)
+          };
+        }
+        return status(0);
+      }
+      case CC.KC_NOM_GET: {
+        const range = this.keyRange(msg.payload, 0);
+        if (!range) return status(3);
+        const out = new Uint8Array(range.count * 4);
+        for (let i = 0; i < range.count; i++) {
+          const nom = this.attributes[range.start + i].nom;
+          api.writeLe16(out, i * 4, nom.dst_p);
+          api.writeLe16(out, i * 4 + 2, nom.dst_r);
+        }
+        return reply(out);
+      }
+      case CC.KC_NOM_SET: {
+        const range = this.keyRange(msg.payload, 4);
+        if (!range) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          this.attributes[range.start + i].nom = {
+            dst_p: api.readLe16(msg.payload, 2 + i * 4),
+            dst_r: api.readLe16(msg.payload, 2 + i * 4 + 2)
+          };
+        }
+        return status(0);
+      }
+      case CC.KC_RT_GET: {
+        const range = this.keyRange(msg.payload, 0);
+        if (!range) return status(3);
+        const out = new Uint8Array(range.count * 6);
+        for (let i = 0; i < range.count; i++) {
+          const rt = this.attributes[range.start + i].rt;
+          const flags = (rt.en & 1) | ((rt.ctn_en & 1) << 1);
+          api.writeLe16(out, i * 6, flags);
+          api.writeLe16(out, i * 6 + 2, rt.dst_p);
+          api.writeLe16(out, i * 6 + 4, rt.dst_r);
+        }
+        return reply(out);
+      }
+      case CC.KC_RT_SET: {
+        const range = this.keyRange(msg.payload, 6);
+        if (!range) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          const flags = api.readLe16(msg.payload, 2 + i * 6);
+          this.attributes[range.start + i].rt = {
+            en: flags & 1,
+            ctn_en: (flags >> 1) & 1,
+            dst_p: api.readLe16(msg.payload, 2 + i * 6 + 2),
+            dst_r: api.readLe16(msg.payload, 2 + i * 6 + 4)
+          };
+        }
+        return status(0);
+      }
+      default:
+        return status(4);
+      }
+    }
+
+    if (msg.cmd === CC.CMD_AXIS) {
+      switch (msg.subcmd) {
+      case CC.AXIS_LIST:
+        if (msg.payload.length !== 0) return status(3);
+        return reply(new Uint8Array(this.axisSupport));
+      case CC.AXIS_SET: {
+        const range = this.keyRange(msg.payload, 1);
+        if (!range) return status(3);
+        for (let i = 0; i < range.count; i++) {
+          const axis = msg.payload[2 + i];
+          if (!this.axisSupport.includes(axis)) return status(3);
+          this.attributes[range.start + i].axis = axis;
+        }
         return status(0);
       }
       default:
@@ -376,7 +539,13 @@ async function main() {
       'ROTCC_UPGRADE_REQ_START', 'ROTCC_UPGRADE_REQ_STOP',
       'ROTCC_UPGRADE_REQ_FINISH',
       'ROTCC_KC_GET', 'ROTCC_KC_SET', 'ROTCC_KC_LAYER_COUNT',
-      'ROTCC_KC_ACTIVE_LAYER', 'ROTCC_KC_SET_ACTIVE_LAYER'
+      'ROTCC_KC_ACTIVE_LAYER', 'ROTCC_KC_SET_ACTIVE_LAYER',
+      'ROTCC_KC_TICK_GET', 'ROTCC_KC_TICK_SET',
+      'ROTCC_KC_TRG_GET', 'ROTCC_KC_TRG_SET',
+      'ROTCC_KC_DZ_GET', 'ROTCC_KC_DZ_SET',
+      'ROTCC_KC_NOM_GET', 'ROTCC_KC_NOM_SET',
+      'ROTCC_KC_RT_GET', 'ROTCC_KC_RT_SET',
+      'ROTCC_AXIS_LIST', 'ROTCC_AXIS_SET'
     ];
     for (const name of handlers) {
       const inTable = new RegExp(`\\{[^\\n]*\\b${name}\\b`).test(source);
@@ -438,20 +607,190 @@ async function main() {
     assert.strictEqual(api.readLe32(payload, 0), 42);
   });
 
-  await test('读取/设置键码与层号', async () => {
-    const reserve = (2 << 8) | 7;
-    const code = new Uint8Array(4);
-    api.writeLe32(code, 0, 0x0f000001);
+  await test('按键范围内读取/设置键码', async () => {
+    const reserve = (2 << 8);
+    const range = Uint8Array.of(6, 8);
+    const write = new Uint8Array(2 + 3 * 4);
+    write.set(range, 0);
+    api.writeLe32(write, 2, 0x0f000001);
+    api.writeLe32(write, 6, 0x0f000001);
+    api.writeLe32(write, 10, 0x04000000);
     await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
       reserve,
-      payload: code,
-      label: '写键码'
+      payload: write,
+      label: '写键码范围'
     });
-    const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, 4, {
+
+    const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, 12, {
       reserve,
-      label: '读键码'
+      payload: range,
+      label: '读键码范围'
     });
     assert.strictEqual(api.readLe32(payload, 0), 0x0f000001);
+    assert.strictEqual(api.readLe32(payload, 4), 0x0f000001);
+    assert.strictEqual(api.readLe32(payload, 8), 0x04000000);
+  });
+
+  await test('键码范围非法时返回参数错误', async () => {
+    const reserve = (2 << 8);
+    await assert.rejects(
+      client.readPayload(CC.CMD_KC, CC.KC_GET, 8, {
+        reserve,
+        payload: Uint8Array.of(8, 6),
+        label: '非法范围'
+      }),
+      /参数错误/
+    );
+    await assert.rejects(
+      client.readPayload(CC.CMD_KC, CC.KC_GET, 8, {
+        reserve,
+        payload: Uint8Array.of(40, 50),
+        label: '越界范围'
+      }),
+      /参数错误/
+    );
+    await assert.rejects(
+      client.statusRequest(CC.CMD_KC, CC.KC_SET, {
+        reserve,
+        payload: Uint8Array.of(6, 8, 1, 2, 3, 4),
+        label: '键码条目不足'
+      }),
+      /参数错误/
+    );
+  });
+
+  await test('按键 tick 参数读写', async () => {
+    const values = [100, 200, 300, 400, 500];
+    const payload = new Uint8Array(12);
+    values.forEach((value, i) => api.writeLe16(payload, i * 2, value));
+    await client.statusRequest(CC.CMD_KC, CC.KC_TICK_SET, {
+      payload,
+      label: '写 tick'
+    });
+
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 12, {
+      label: '读 tick'
+    });
+    values.forEach((value, i) => {
+      assert.strictEqual(api.readLe16(got, i * 2), value);
+    });
+    assert.strictEqual(api.readLe16(got, 10), 0);
+  });
+
+  await test('按键触发模式范围读写', async () => {
+    const payload = new Uint8Array(2 + 3 * 4);
+    payload[0] = 10;
+    payload[1] = 12;
+    [1, 2, 0].forEach((value, i) => api.writeLe32(payload, 2 + i * 4, value));
+    await client.statusRequest(CC.CMD_KC, CC.KC_TRG_SET, {
+      payload,
+      label: '写触发模式'
+    });
+
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_TRG_GET, 12, {
+      payload: Uint8Array.of(10, 12),
+      label: '读触发模式'
+    });
+    assert.strictEqual(api.readLe32(got, 0), 1);
+    assert.strictEqual(api.readLe32(got, 4), 2);
+    assert.strictEqual(api.readLe32(got, 8), 0);
+  });
+
+  await test('按键死区参数范围读写', async () => {
+    const payload = new Uint8Array(2 + 2 * 4);
+    payload[0] = 20;
+    payload[1] = 21;
+    api.writeLe16(payload, 2, 300);
+    api.writeLe16(payload, 4, 400);
+    api.writeLe16(payload, 6, 500);
+    api.writeLe16(payload, 8, 600);
+    await client.statusRequest(CC.CMD_KC, CC.KC_DZ_SET, {
+      payload,
+      label: '写死区'
+    });
+
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_DZ_GET, 8, {
+      payload: Uint8Array.of(20, 21),
+      label: '读死区'
+    });
+    assert.strictEqual(api.readLe16(got, 0), 300);
+    assert.strictEqual(api.readLe16(got, 2), 400);
+    assert.strictEqual(api.readLe16(got, 4), 500);
+    assert.strictEqual(api.readLe16(got, 6), 600);
+  });
+
+  await test('按键常规触发参数范围读写', async () => {
+    const payload = new Uint8Array(2 + 2 * 4);
+    payload[0] = 22;
+    payload[1] = 23;
+    api.writeLe16(payload, 2, 1200);
+    api.writeLe16(payload, 4, 1300);
+    api.writeLe16(payload, 6, 1400);
+    api.writeLe16(payload, 8, 1500);
+    await client.statusRequest(CC.CMD_KC, CC.KC_NOM_SET, {
+      payload,
+      label: '写常规触发'
+    });
+
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_NOM_GET, 8, {
+      payload: Uint8Array.of(22, 23),
+      label: '读常规触发'
+    });
+    assert.strictEqual(api.readLe16(got, 0), 1200);
+    assert.strictEqual(api.readLe16(got, 2), 1300);
+    assert.strictEqual(api.readLe16(got, 4), 1400);
+    assert.strictEqual(api.readLe16(got, 6), 1500);
+  });
+
+  await test('按键快速触发参数范围读写', async () => {
+    const payload = new Uint8Array(2 + 2 * 6);
+    payload[0] = 24;
+    payload[1] = 25;
+    api.writeLe16(payload, 2, 0x3);
+    api.writeLe16(payload, 4, 150);
+    api.writeLe16(payload, 6, 250);
+    api.writeLe16(payload, 8, 0x1);
+    api.writeLe16(payload, 10, 350);
+    api.writeLe16(payload, 12, 450);
+    await client.statusRequest(CC.CMD_KC, CC.KC_RT_SET, {
+      payload,
+      label: '写快速触发'
+    });
+
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_RT_GET, 12, {
+      payload: Uint8Array.of(24, 25),
+      label: '读快速触发'
+    });
+    assert.strictEqual(api.readLe16(got, 0), 0x3);
+    assert.strictEqual(api.readLe16(got, 2), 150);
+    assert.strictEqual(api.readLe16(got, 4), 250);
+    assert.strictEqual(api.readLe16(got, 6), 0x1);
+    assert.strictEqual(api.readLe16(got, 8), 350);
+    assert.strictEqual(api.readLe16(got, 10), 450);
+  });
+
+  await test('轴体列表与按键轴体设置', async () => {
+    const list = await client.readPayload(CC.CMD_AXIS, CC.AXIS_LIST, 2, {
+      label: '轴体列表'
+    });
+    assert.deepStrictEqual([...list], device.axisSupport);
+
+    const payload = Uint8Array.of(30, 32, 1, 0, 1);
+    await client.statusRequest(CC.CMD_AXIS, CC.AXIS_SET, {
+      payload,
+      label: '设置轴体'
+    });
+    assert.strictEqual(device.attributes[30].axis, 1);
+    assert.strictEqual(device.attributes[31].axis, 0);
+    assert.strictEqual(device.attributes[32].axis, 1);
+
+    await assert.rejects(
+      client.statusRequest(CC.CMD_AXIS, CC.AXIS_SET, {
+        payload: Uint8Array.of(30, 30, 9),
+        label: '设置非法轴体'
+      }),
+      /参数错误/
+    );
   });
 
   await test('层数与活动层读写', async () => {

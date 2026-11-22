@@ -6,9 +6,10 @@ function kcCacheKey(layer, index) {
 }
 
 
-function renderKeyboard() {
-  $keyboard.textContent = '';
-  kcKeyEls.clear();
+/* 渲染 40% 配列键盘，返回 key index -> { root, value }。 */
+function buildKeyboard(container, onKeyClick) {
+  container.textContent = '';
+  const keyEls = new Map();
 
   for (let rowIndex = 0; rowIndex < KEY_ROWS.length; rowIndex++) {
     let column = 0;
@@ -28,23 +29,30 @@ function renderKeyboard() {
       valueEl.textContent = '--';
 
       keyEl.appendChild(valueEl);
-      keyEl.addEventListener('click', () => selectKey(index));
+      keyEl.addEventListener('click', () => onKeyClick(index));
 
-      $keyboard.appendChild(keyEl);
-      kcKeyEls.set(index, { root: keyEl, value: valueEl });
+      container.appendChild(keyEl);
+      keyEls.set(index, { root: keyEl, value: valueEl });
       column += span;
     }
+  }
+  return keyEls;
+}
+
+function renderKeyboard() {
+  kcKeyEls.clear();
+  for (const [index, el] of buildKeyboard($keyboard, selectKey)) {
+    kcKeyEls.set(index, el);
   }
   syncKeycaps();
   syncKeycapSize();
 }
 
 /* 网格总宽 48 列（12U）、4 行；1U 取正方形，按卡片可用宽高收敛。 */
-let keycapUnit = 0;
+const keyboardUnits = new WeakMap();
 
-function syncKeycapSize() {
-  /* 键帽尺寸按 12U x 4U 计算，底色框用伪元素外扩 1U，不参与布局。 */
-  const panel = $keyboard.parentElement;
+function fitKeyboardSize(container) {
+  const panel = container.parentElement;
   if (!panel) return;
   const style = getComputedStyle(panel);
   const width = panel.clientWidth -
@@ -54,9 +62,15 @@ function syncKeycapSize() {
   if (width <= 0 || height <= 0) return;
 
   const unit = Math.min(55, Math.max(30, Math.floor(Math.min(width / 12, height / 4))));
-  if (unit === keycapUnit) return;
-  keycapUnit = unit;
-  $keyboard.style.setProperty('--u', `${unit}px`);
+  if (keyboardUnits.get(container) === unit) return;
+  keyboardUnits.set(container, unit);
+  container.style.setProperty('--u', `${unit}px`);
+}
+
+function syncKeycapSize() {
+  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard]) {
+    if (keyboard) fitKeyboardSize(keyboard);
+  }
 }
 
 /* ------------------------------------------------------------ 快捷多选 */
@@ -126,6 +140,21 @@ function applyQuickGroup(group, indices) {
   if (uncached.length > 0) readKeycodes(uncached);
 }
 
+/* 参数/轴体页的键盘与按键映射共用同一份当前层键码。 */
+function syncSharedKeyboardValues(keyEls) {
+  const layer = kcLayerIndex;
+
+  for (const [index, el] of keyEls) {
+    const code = kcValues.get(kcCacheKey(layer, index));
+    const label = el.root.dataset.label;
+    el.value.textContent = code === undefined ? label : kcDescribe(code);
+    el.value.classList.add('set');
+    el.root.title = code === undefined
+      ? `${label} · 索引 ${index}`
+      : `${label} · 索引 ${index} · 0x${(code >>> 0).toString(16).padStart(8, '0')} · ${kcDescribe(code)}`;
+  }
+}
+
 function syncKeycaps() {
   const layer = kcLayerIndex;
 
@@ -141,6 +170,9 @@ function syncKeycaps() {
       : `${label} · 索引 ${index} · 0x${(code >>> 0).toString(16).padStart(8, '0')} · ${kcDescribe(code)}`;
     el.root.title = selected ? `${base} · 再次点击取消选择` : base;
   }
+
+  syncSharedKeyboardValues(paramKeyEls);
+  syncSharedKeyboardValues(axisKeyEls);
 }
 
 function selectKey(index) {
@@ -155,8 +187,27 @@ function selectKey(index) {
   readKeycode(index);
 }
 
+/* 按设备协议读取 [start, end] 范围内的键码，返回值为每个键 4 字节。 */
+async function readKeycodeRange(client, layer, start, end) {
+  const count = end - start + 1;
+  const range = new Uint8Array(2);
+  range[0] = start & 0xff;
+  range[1] = end & 0xff;
+
+  const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, count * 4, {
+    reserve: (layer & 0xff) << 8,
+    payload: range,
+    label: `读取键码 Fn${layer} K${start}-${end}`,
+    timeoutMs: 3000
+  });
+
+  for (let i = 0; i < count; i++) {
+    kcValues.set(kcCacheKey(layer, start + i), readLe32(payload, i * 4));
+  }
+}
+
 async function readKeycodes(indices) {
-  const unique = [...new Set(indices)];
+  const unique = [...new Set(indices)].sort((a, b) => a - b);
   if ((unique.length === 0) || kcBusy || sysBusy || isFirmwareActive()) return;
   const layer = kcLayerIndex;
   const target = findCcTarget();
@@ -169,14 +220,12 @@ async function readKeycodes(indices) {
   refreshControls();
   try {
     await ccCall(target, async client => {
+      const start = unique[0];
+      const end = unique[unique.length - 1];
+
+      await readKeycodeRange(client, layer, start, end);
       for (const index of unique) {
-        const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, 4, {
-          reserve: ((layer & 0xff) << 8) | (index & 0xff),
-          label: `读取键码 Fn${layer} K${index}`,
-          timeoutMs: 3000
-        });
-        const code = readLe32(payload, 0);
-        kcValues.set(kcCacheKey(layer, index), code);
+        const code = kcValues.get(kcCacheKey(layer, index));
         appendLine(
           `[KC] Fn${layer} K${index} = 0x${code.toString(16).padStart(8, '0')} ` +
           `(${kcDescribe(code)})`
@@ -206,21 +255,17 @@ async function readKeycodeLayer() {
     return;
   }
 
+  const indices = [...kcKeyEls.keys()];
+  if (indices.length === 0) return;
+  const start = Math.min(...indices);
+  const end = Math.max(...indices);
+
   kcBusy = true;
   refreshControls();
   try {
     await ccCall(target, async client => {
-      for (const row of KEY_ROWS) {
-        for (const [, index] of row) {
-          const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, 4, {
-            reserve: ((layer & 0xff) << 8) | (index & 0xff),
-            label: `读取键码 Fn${layer} K${index}`,
-            timeoutMs: 3000
-          });
-          kcValues.set(kcCacheKey(layer, index), readLe32(payload, 0));
-        }
-        syncKeycaps();
-      }
+      await readKeycodeRange(client, layer, start, end);
+      syncKeycaps();
     });
     appendLine(`[KC] 已读取 Fn${layer} 全部键码`);
   } catch (error) {
@@ -240,6 +285,24 @@ function autoReadKeymap() {
   readKeycodeLayer();
 }
 
+/* 按设备协议把同一个键码写入 [start, end] 范围。 */
+async function writeKeycodeRange(client, layer, start, end, code) {
+  const count = end - start + 1;
+  const payload = new Uint8Array(2 + count * 4);
+  payload[0] = start & 0xff;
+  payload[1] = end & 0xff;
+  for (let i = 0; i < count; i++) {
+    writeLe32(payload, 2 + i * 4, code);
+  }
+
+  await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
+    reserve: (layer & 0xff) << 8,
+    payload,
+    label: `写入键码 Fn${layer} K${start}-${end}`,
+    timeoutMs: 3000
+  });
+}
+
 /* 把选中的键码写到当前所有选中的按键上。 */
 async function assignKeycode(code, label) {
   if (kcBusy || sysBusy || isFirmwareActive()) return;
@@ -250,22 +313,25 @@ async function assignKeycode(code, label) {
     return;
   }
 
+  /* 连续按键合并成一帧，未选中的按键不会被覆盖。 */
+  const runs = [];
+  for (const index of indices) {
+    const last = runs[runs.length - 1];
+    if (last && (last.end + 1 === index)) last.end = index;
+    else runs.push({ start: index, end: index });
+  }
+
   kcBusy = true;
   refreshControls();
   try {
     const target = findCcTarget();
     if (!target) throw new Error('没有找到 CC IN/OUT 端点');
 
-    const payload = new Uint8Array(4);
-    writeLe32(payload, 0, code);
     await ccCall(target, async client => {
+      for (const run of runs) {
+        await writeKeycodeRange(client, layer, run.start, run.end, code);
+      }
       for (const index of indices) {
-        await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
-          reserve: ((layer & 0xff) << 8) | (index & 0xff),
-          payload,
-          label: `写入键码 Fn${layer} K${index}`,
-          timeoutMs: 3000
-        });
         kcValues.set(kcCacheKey(layer, index), code);
       }
     });

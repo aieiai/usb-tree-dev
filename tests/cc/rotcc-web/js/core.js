@@ -10,7 +10,7 @@ const CC_RESPONSE_TIMEOUT_MS = 15000;
 const CC_START_TIMEOUT_MS = 60000;
 const CC_END_TIMEOUT_MS = 60000;
 const CC_MAX_RETRIES = 10;
-const CC_UI_VERSION = 7;
+const CC_UI_VERSION = 8;
 
 
 const INTERFACE_HINTS = {
@@ -70,6 +70,27 @@ const $btnSysResetAll = document.getElementById('btnSysResetAll');
 const $chkResetKc = document.getElementById('chkResetKc');
 const $chkResetRgb = document.getElementById('chkResetRgb');
 const $chkResetAdv = document.getElementById('chkResetAdv');
+const $paramKeyboard = document.getElementById('paramKeyboard');
+const $paramTabs = document.getElementById('paramTabs');
+const $paramForm = document.getElementById('paramForm');
+const $paramState = document.getElementById('paramState');
+const $paramSelection = document.getElementById('paramSelection');
+const $btnParamSelectAll = document.getElementById('btnParamSelectAll');
+const $btnParamClear = document.getElementById('btnParamClear');
+const $btnParamRead = document.getElementById('btnParamRead');
+const $btnParamWrite = document.getElementById('btnParamWrite');
+const $axisKeyboard = document.getElementById('axisKeyboard');
+const $axisSupport = document.getElementById('axisSupport');
+const $axisTabs = document.getElementById('axisTabs');
+const $axisListPanel = document.getElementById('axisListPanel');
+const $axisSetPanel = document.getElementById('axisSetPanel');
+const $axisSelection = document.getElementById('axisSelection');
+const $axisValue = document.getElementById('axisValue');
+const $axisState = document.getElementById('axisState');
+const $btnAxisSelectAll = document.getElementById('btnAxisSelectAll');
+const $btnAxisClear = document.getElementById('btnAxisClear');
+const $btnAxisList = document.getElementById('btnAxisList');
+const $btnAxisWrite = document.getElementById('btnAxisWrite');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 
@@ -92,6 +113,7 @@ let kcLayerIndex = 0;
 let kcLayerCount = 4;
 const kcValues = new Map();
 const kcKeyEls = new Map();
+
 
 
 function nowText() {

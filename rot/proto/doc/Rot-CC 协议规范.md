@@ -93,14 +93,14 @@
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x02|0x00|0x0000|||
+|0x02|0x00|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
 |0x02|0x00|0x0000|`kc_t` byte|各类键码结构定义，由4字节组成：<br>```C++<br>// key code type<br>enum { KCT_KBD = 0x00, KCT_SYS, KCT_CSM, KCT_ADV, KCT_MS, KCT_GP, KCT_FN, KCT_MAX };<br>// function customization type<br>enum { FN_UT = 0x00, FN_RGB, FN_BT, FN_RADIO, FN_DISP, FN_SHCT, FN_MAX };<br>// key code<br>union __attribute__((aligned(4))) {<br>    uint32_t code;<br>    struct __attribute__((packed)) {<br>        uint32_t lk: 1; // Lock<br>        uint32_t ty: 6; // Easy to search/query<br>        uint32_t rv: 25;<br>    };<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 10; uint32_t co: 16; } csm; // Consumer<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 13; uint32_t co: 8;  } adv; // Advanced<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } ms;  // Mouse<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } gp;  // Gamepad<br>    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t fy: 5;  uint32_t co: 16; } fn;  // Function customization<br>};<br>```<br>|
 
 ### 设置键码
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
-|0x02|0x01|0x0000|`kc_t` byte|格式见 `rotkc_t`|
+|0x02|0x01|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
 |0x02|0x01|0x0000|0\-3 byte|0x00: succeed|
 
 ### 获取映射层数
@@ -123,6 +123,96 @@
 |---|---|---|---|---|
 |0x02|0x04|0x0000|0\-3 byte|当前活动层|
 |0x02|0x04|0x0000|0\-3 byte|0x00: succeed|
+
+### 获取按键tick参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x05|0x0000|||
+|0x02|0x05|0x0000|0\-11 byte|```C++<br>struct {<br>    uint16_t sclt;<br>    uint16_t sclto;<br>    uint16_t dcit;<br>    uint16_t dclt;<br>    uint16_t dclto;<br>    uint16_t rsv;<br>} tk; /* tick */<br>```|
+
+### 设置按键tick参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x06|0x0000|||
+|0x02|0x06|0x0000|0\-11 byte||
+
+### 获取触发模式
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x07|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x02|0x07|0x0000|0\-3 byte|```C++<br>typedef enum {<br>    KTRG_TY_NOM = 0,<br>    KTRG_TY_RT,<br>    KTRG_TY_RT_CTN,<br>} ktrg_ty;<br>```|
+
+### 设置触发模式
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x08|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x02|0x08|0x0000|0\-3 byte|0x00: succeed|
+
+### 获取死区参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x09|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x02|0x09|0x0000|0\-3 byte|```C++<br>struct {<br>    uint16_t dst_t;     /* top dead zero dist */<br>    uint16_t dst_b;     /* bot dead zero dist */<br>} dz;<br>```|
+
+### 设置死区参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x0a|0x0000|||
+|0x02|0x0a|0x0000|0\-3 byte|0x00: succeed|
+
+### 获取常规触发参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x0b|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x02|0x0b|0x0000|0\-3 byte|```C++<br>struct {<br>    uint16_t dst_p;      /* normal press dist */<br>    uint16_t dst_r;      /* normal raise dist */<br>} nom;<br>```|
+
+### 设置常规触发参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x0c|0x0000|||
+|0x02|0x0c|0x0000|0\-3 byte|0x00: succeed|
+
+### 获取快速触发参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x0d|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x02|0x0d|0x0000|0\-5 byte|```C++<br>struct __attribute__((packed)) {<br>    uint16_t en     : 1;<br>    uint16_t ctn_en : 1;<br>    uint16_t rsv    : 14;<br>    uint16_t dst_p;     /* rapid trigger sensitivity press dist */<br>    uint16_t dst_r;     /* rapid trigger sensitivity raise dist */<br>} rt;<br>```|
+
+### 设置快速触发参数
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x02|0x0e|0x0000|||
+|0x02|0x0e|0x0000|0\-3 byte|0x00: succeed|
+
+
+
+---
+
+# 轴体
+
+### 获取键盘支持的轴体
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x03|0x00|0x0000|||
+|0x03|0x00|0x0000|n byte|返回键盘所支持的轴体|
+
+### 设置按键轴体
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x03|0x01|0x0000|0\-3 byte|byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
+|0x03|0x01|0x0000|0\-3 byte|0x00: succeed|
 
 
 

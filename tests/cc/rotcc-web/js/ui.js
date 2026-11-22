@@ -26,6 +26,7 @@ function refreshControls() {
   refreshFirmwareControls();
   refreshDebugControls();
   refreshSystemControls();
+  refreshParamControls();
 }
 
 function refreshFirmwareControls() {
@@ -54,6 +55,36 @@ function refreshSystemControls() {
   }
   for (const chk of [$chkResetKc, $chkResetRgb, $chkResetAdv]) {
     chk.disabled = busy || !ready;
+  }
+}
+
+function refreshParamControls() {
+  const busy = isFirmwareActive() || kcBusy || sysBusy || ccQueryPromise !== null;
+  const ready = Boolean(device?.opened) && links.length > 0;
+  const tick = paramTab.id === 'tick';
+  const hasParamSelection = paramSelected.size > 0;
+  const hasAxisSelection = axisSelected.size > 0;
+
+  $btnParamSelectAll.disabled =
+    busy || paramSelected.size >= paramKeyEls.size;
+  $btnParamClear.disabled = busy || !hasParamSelection;
+  $btnParamRead.disabled =
+    busy || !ready || (!tick && !hasParamSelection);
+  $btnParamWrite.disabled =
+    busy || !ready || !paramLoaded || (!tick && !hasParamSelection);
+  $btnAxisSelectAll.disabled =
+    busy || axisSelected.size >= axisKeyEls.size;
+  $btnAxisClear.disabled = busy || !hasAxisSelection;
+  $btnAxisList.disabled = busy || !ready;
+  $btnAxisWrite.disabled =
+    busy || !ready || !hasAxisSelection || axisSupport.length === 0;
+  $axisValue.disabled = busy || !ready || axisSupport.length === 0;
+
+  for (const btn of $paramTabs.children) {
+    btn.disabled = busy;
+  }
+  for (const btn of $axisTabs.children) {
+    btn.disabled = busy;
   }
 }
 

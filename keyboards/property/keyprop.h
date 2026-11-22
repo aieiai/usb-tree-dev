@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "rotsta.h"
 
 #include "kbd_config.h"
@@ -20,6 +21,19 @@
 #define OBKP_VER 0U
 
 
+typedef enum {
+    KPROP_LINK_USB = 0,
+    KPROP_LINK_BT,
+    KPROP_LINK_RADIO,
+    KPROP_LINK_MAX,
+} kprop_link_ty;
+
+typedef enum {
+    KPROP_GP_OFF = 0,
+    KPROP_GP_HID,
+    KPROP_GP_XBOX,
+    KPROP_GP_MAX,
+} kprop_gp_ty;
 
 typedef enum {
     KTRG_TY_NOM = 0,
@@ -111,8 +125,8 @@ typedef struct {
         uint8_t  cc_popup : 1; // startup control center popup
         uint8_t  rsv : 3;
 
-        uint8_t  gp_mode; // off / xbox / hid
-        uint8_t  link_mode;  // USB, Bluetooth and Radio
+        kprop_gp_ty   gp_mode;
+        kprop_link_ty link_mode;
 
         uint16_t scan_rate;
         uint16_t report_rate;

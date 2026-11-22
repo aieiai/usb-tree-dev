@@ -39,6 +39,8 @@ typedef struct {
     keymag_lmt_t dif;
 } __attribute__((aligned(4))) keyaxis_para_t;
 
+extern const kaxis_ty g_kbd_axis_support[];
+extern const kaxis_udef_ty g_kbd_axis_udef_support[];
 extern const keyaxis_para_t g_keyaxis_para[KAXIS_MAX];
 
 #endif  /* AXIS_CONFIG_H */

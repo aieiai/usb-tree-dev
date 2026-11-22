@@ -4,8 +4,16 @@ renderLayers();
 renderKeyboard();
 renderQuickSelect();
 renderPicker();
+renderParamKeyboard();
+renderParamTabs();
+renderParamForm(null);
+renderAxisKeyboard();
+renderAxisTabs();
 if (globalThis.ResizeObserver) {
-  new ResizeObserver(syncKeycapSize).observe($keyboard.closest('.keyboard-card'));
+  const keyboardObserver = new ResizeObserver(syncKeycapSize);
+  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard]) {
+    keyboardObserver.observe(keyboard.closest('.keyboard-card'));
+  }
   new ResizeObserver(syncBoardSize).observe($pickerGroups);
 }
 
@@ -14,7 +22,7 @@ function selectView(name) {
   for (const btn of navButtons) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  for (const view of ['remap', 'upgrade', 'system', 'debug']) {
+  for (const view of ['remap', 'param', 'axis', 'upgrade', 'system', 'debug']) {
     document.getElementById(`view-${view}`)
       .classList.toggle('active', view === name);
   }
@@ -63,6 +71,14 @@ $btnSysReset.addEventListener('click', () => {
 $btnSysResetAll.addEventListener('click', () => {
   resetDevice(SYS_RESET_ALL, '恢复出厂');
 });
+$btnParamSelectAll.addEventListener('click', selectAllParamKeys);
+$btnParamClear.addEventListener('click', clearParamSelection);
+$btnParamRead.addEventListener('click', readParamValues);
+$btnParamWrite.addEventListener('click', writeParamValues);
+$btnAxisSelectAll.addEventListener('click', selectAllAxisKeys);
+$btnAxisClear.addEventListener('click', clearAxisSelection);
+$btnAxisList.addEventListener('click', readAxisSupportList);
+$btnAxisWrite.addEventListener('click', writeAxisToSelection);
 btnConnect.addEventListener('click', connect);
 btnDisconnect.addEventListener('click', disconnect);
 document.getElementById('btnClear').addEventListener('click', () => {

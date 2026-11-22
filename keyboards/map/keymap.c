@@ -10,25 +10,61 @@ obm_t g_obm;
 static void _keymap_load_defaults(void)
 {
     obm_t *p_obm = &g_obm;
+
+    memset(p_obm, 0, sizeof(*p_obm));
     p_obm->magic   = MAGIC_OBKM;
+    p_obm->version = OBKM_VER;
     p_obm->sys_max = KBD_SYS_MAX;
     p_obm->map_max = KBD_MAP_MAX;
     p_obm->key_max = KBD_KEY_MAX;
     p_obm->sys_cur = 0;
     p_obm->map_cur = 0;
-    p_obm->crc32   = 0;
 
     for (uint32_t sys = 0U; sys < KBD_SYS_MAX; sys++) {
         for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
-            memcpy(p_obm->keymap[sys][layer], keymap_get_default(sys, layer), sizeof(g_obm.keymap[sys][layer]));
+            const uint32_t *p_default = keymap_get_default((uint8_t)sys, (uint8_t)layer);
+
+            if (p_default != NULL) {
+                memcpy(p_obm->keymap[sys][layer], p_default, sizeof(p_obm->keymap[sys][layer]));
+            }
         }
     }
+}
+
+static bool _keymap_codes_valid(const obm_t *p_obm)
+{
+    for (uint32_t sys = 0U; sys < KBD_SYS_MAX; sys++) {
+        for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
+            for (uint32_t key = 0U; key < KBD_KEY_MAX; key++) {
+                uint32_t type = (p_obm->keymap[sys][layer][key] >> 1) & 0x3FU;
+
+                if (type >= (uint32_t)KCT_MAX) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static bool _keymap_valid(const obm_t *p_obm)
+{
+    bool layout_ok;
+
+    if ((p_obm->magic != MAGIC_OBKM) || (p_obm->version != OBKM_VER) ||
+        (p_obm->sys_max != KBD_SYS_MAX) || (p_obm->sys_cur >= KBD_SYS_MAX) || 
+        (p_obm->map_max != KBD_MAP_MAX) || (p_obm->map_cur >= KBD_MAP_MAX) ||
+        (p_obm->key_max != KBD_KEY_MAX)) {
+        return false;
+    }
+
+    layout_ok = (p_obm->layout_max == 0U) ? (p_obm->layout_cur == 0U) : (p_obm->layout_cur < p_obm->layout_max);
+    return layout_ok && _keymap_codes_valid(p_obm);
 }
 
 
 rotsta_t keymap_init(void)
 {
-    bool blank = true;
     rotsta_t result = rotsta_success;
     obm_t *p_obm = &g_obm;
 
@@ -38,14 +74,14 @@ rotsta_t keymap_init(void)
         _keymap_load_defaults();
         return result;
     }
-    if (MAGIC_OBKM != p_obm->magic) {
-        _keymap_load_defaults();
-        blank = false;
-    }
 
-    if (blank) {
+    if (!_keymap_valid(p_obm)) {
+        printf(TAG "obm invalid (magic=0x%08x ver=%u), write defaults\r\n", (unsigned)p_obm->magic, (unsigned)p_obm->version);
         _keymap_load_defaults();
-        (void)db_update(DB_ITEM_OBM, DB_SAVE_TY_NOW);
+        result = db_update(DB_ITEM_OBM, DB_SAVE_TY_NOW);
+        if (result != rotsta_success) {
+            printf(TAG "obm default save failed: 0x%08x\r\n", (unsigned)result);
+        }
     }
 
     return result;
