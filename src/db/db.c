@@ -21,16 +21,16 @@
 _Static_assert(DB_ITEM_TY_MAX <= 32U, "DB dirty mask supports at most 32 types");
 
 typedef struct {
-    uint32_t    offset;
-    uint32_t    cap;
+    uint32_t offset;
+    uint32_t cap;
     const char *name;
 } msg_t;
 
 typedef struct {
-    void    *buf;
+    void *buf;
     uint32_t buf_size;
-    bool     update;
-    bool     registered;
+    bool update;
+    bool registered;
     const msg_t *msg;
 } item_t;
 
@@ -52,8 +52,7 @@ static TX_MUTEX s_api_mutex;
 static TX_MUTEX s_data_mutex;
 static TX_SEMAPHORE s_wake_sem;
 static TX_SEMAPHORE s_done_sem;
-static uint8_t db_thread_stack[DB_TASK_STACK] __attribute__((aligned(8U)));
-
+static uint8_t db_thread_stack[DB_THREAD_STACK] __attribute__((aligned(8U)));
 
 static uint32_t s_generation[DB_ITEM_TY_MAX];
 static rotsta_t s_save_result[DB_ITEM_TY_MAX];
@@ -383,7 +382,7 @@ rotsta_t db_init(void)
     s_dirty_mask = 0U;
     s_now_mask = 0U;
 
-    if (TX_SUCCESS != tx_thread_create(&db_thread, "thread_db", db_thread_entry, 0U, db_thread_stack, sizeof(db_thread_stack), DB_TASK_PRIORITY, DB_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
+    if (TX_SUCCESS != tx_thread_create(&db_thread, "db_thread", db_thread_entry, 0U, db_thread_stack, sizeof(db_thread_stack), DB_THREAD_PRIORITY, DB_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
         return rotsta_db_init_fail;
     }
     s_initialized = true;

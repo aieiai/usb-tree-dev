@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include "rotsta.h"
 
-#include "kbdconfig.h"
+#include "kbd_config.h"
 #include "keymagnet.h"
 #include "keyaxis.h"
 #include "keycode.h"

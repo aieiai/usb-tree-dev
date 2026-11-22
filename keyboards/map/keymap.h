@@ -1,7 +1,7 @@
 #ifndef KEY_MAP_H
 #define KEY_MAP_H
 
-#include "kbdconfig.h"
+#include "kbd_config.h"
 #include "rotsta.h"
 
 #define MAGIC_OBKM 0x424D4B5F /* OBKM */

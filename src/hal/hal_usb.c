@@ -1,4 +1,5 @@
 #include "hal_usb.h"
+#include "drv_hall.h"
 
 #include "usbd_core.h"
 
@@ -35,6 +36,9 @@ static void hal_usb_event_dispatch(uint8_t busid, uint8_t event)
     uint32_t i;
 
     switch (event) {
+    case USBD_EVENT_SOF:
+        g_sensor_matrix_timing.sof_start_tick = hpm_csr_get_core_mcycle();
+        break;
     case USBD_EVENT_RESET:
         USB_LOG_RAW("[usb] reset, port speed=%u (2=full 3=high)\r\n", usbd_get_port_speed(busid));
         break;

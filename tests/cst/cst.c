@@ -18,8 +18,8 @@
 
 #define TAG "cst"
 
-static TX_THREAD thread_cst;
-static uint8_t thread_cst_stack[CST_TASK_STACK] __attribute__((aligned(8U)));
+static TX_THREAD cst_thread;
+static uint8_t cst_thread_stack[CST_THREAD_STACK] __attribute__((aligned(8U)));
 
 static void cst_obi_log(const char *tag)
 {
@@ -32,7 +32,7 @@ static void cst_obi_log(const char *tag)
                   rotver_get_stage_str(ROTVER_GET_STAGE(fv)), (unsigned)ROTVER_GET_HASH(fv));
 }
 
-static void cst_task(ULONG id)
+static void cst_thread_entry(ULONG id)
 {
     (void)id;
 
@@ -102,7 +102,7 @@ static void cst_task(ULONG id)
 
 rotsta_t cst_init(void)
 {
-    rotsta_t ret = tx_thread_create(&thread_cst, "thread_cst", cst_task, 0U, thread_cst_stack, sizeof(thread_cst_stack), CST_TASK_PRIORITY, CST_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+    rotsta_t ret = tx_thread_create(&cst_thread, "cst_thread", cst_thread_entry, 0U, cst_thread_stack, sizeof(cst_thread_stack), CST_THREAD_PRIORITY, CST_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
     if (ret != TX_SUCCESS) {
         printf(TAG "thread create failed, ret=%u\r\n", ret);
         return rotsta_fail;

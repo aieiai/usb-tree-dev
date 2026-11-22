@@ -3,8 +3,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
 
+#if defined(CHIP_SERIES_HPM5300)
+#include "config/hall_scan_5300cfg.h"
+#elif defined(CHIP_SERIES_HPM5100)
+#include "config/hall_scan_5100cfg.h"
+#endif
 
 #define _INST_CONCAT(x, y) x##_##y
 #define INST_CONCAT(x, y) _INST_CONCAT(x, y)
@@ -16,30 +20,6 @@
 #define INST_RCONCAT3(x, y, z) _INST_RCONCAT3(x, y, z)
 
 
-
-#if !defined(CEILING)
-/**
- * @brief Computes the rounded up result of a division of two integers at
- * compile time.
- */
-#    define CEILING(dividend, divisor) (((dividend) + (divisor)-1) / (divisor))
-#endif
-
-#define SENSOR_MATRIX_ADC_SAMPLES 2        /* sample 1 in once sel */
-#define SENSOR_MATRIX_ADC_SAMPLE_ROUNDS (((SENSOR_MATRIX_ADC_SAMPLES) > 1) ? 2 : 1)
-#define SENSOR_MATRIX_ADC_SAMPLE_CYCLE 2   /* adc sample cycle */
-#define SENSOR_MATRIX_ADC_CONVERT_CYCLE 21 /* 16-bit adc need 21 convert cycle */
-
-#define SENSOR_MATRIX_ROUND_SELS_MAX 8 /* scan 40 sel in once shot */
-
-#define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */
-#define SENSOR_MATRIX_TMR_SEL_FREQ 250000 /* sel freq，与 50MHz ADC + 2 次采样配套 */
-
-#define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time) */
-#define SENSOR_MATRIX_TMR_ST_TIME 70 /* tmr soft sync setup time default 350ns, DMA 握手，写 GPIO 切 mux  */
-#define SENSOR_MATRIX_SEL_HT_TIME1 1 
-#define SENSOR_MATRIX_SEL_HT_TIME2 45 // sel 保持时间
-#define SENSOR_MATRIX_ADC_ST_TIME 100 /* sample setup time is 1.0us,  模拟通路建立 */
 
 
 #define SENSOR_MATRIX_TMR_INST GPTMR1
@@ -58,6 +38,7 @@
 /* GPTMR 200MHz 换算：1 tick = 5ns */
 #define SENSOR_MATRIX_TMR_TICKS_TO_NS(t)    ((uint32_t)(((uint64_t)(t)) * 5ULL))
 
+#define SENSOR_TOTAL_SIZE                   (SENSOR_MATRIX_ROUND_SELS_MAX * SENSOR_MATRIX_ADC_TOTAL_CHANNELS)
 #if ((SENSOR_MATRIX_ADC_SAMPLE_ROUNDS) == 1)
 #    define GET_ADC_VALUE(p, i) ((uint16_t)((p)[(i)] & 0xFFFFU))
 #else
@@ -109,14 +90,9 @@ typedef struct {
     float    adjust;
 } sensor_matrix_set_config_t;
 
-/*
- * One raw ADC sample from the scan matrix.
- * Override this weak function in the application to feed the keyboard's
- * logical key mapping.
- */
-extern void sensor_matrix_on_sample(uint8_t row, uint8_t col, uint16_t value);
 
-extern void sensor_matrix_init(hall_recv_cb_t recv_cb);
+extern void sensor_matrix_init(void);
+extern void sensor_matrix_recv_cb(hall_recv_cb_t recv_cb);
 extern void sensor_matrix_set_sof_timer(uint32_t interval, float adjust);
 extern void sensor_matrix_set_sof_src(uint8_t sof_src);
 extern void sensor_matrix_restart_sof_timer(void);

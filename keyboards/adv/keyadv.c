@@ -3,9 +3,11 @@
  * @Brief:  key advanced.
  * @Date:   2024/07/02
  */
-#include "key_adv.h"
+#include <stddef.h>
 
-adv_func_t adv_func[KADV_TYPE_MAX] = {NULL};
+#include "keyadv.h"
+
+adv_func_t adv_func[KADV_TY_MAX] = {NULL};
 oba_t g_oba;
 
 /**

@@ -4,10 +4,8 @@
  * @Date:   2024/10/02
  */
 
-#ifndef _LAMP_ARRAY_H_
-#define _LAMP_ARRAY_H_
-#include "utils.h"
-#include "hal.h"
+#ifndef LAMP_ARRAY_H
+#define LAMP_ARRAY_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -164,5 +162,5 @@ void lamp_array_set_report(uint8_t report_id, uint8_t *report, uint32_t report_l
 
 
 
-#endif /* _LAMP_ARRAY_H_ */
+#endif  /* LAMP_ARRAY_H */
 

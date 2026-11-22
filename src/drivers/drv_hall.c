@@ -2,7 +2,6 @@
 
 #include "board.h"
 
-#include "config/hall_scan_cfg.h"
 
 #include "hpm_soc.h"
 #include "hpm_trgm_drv.h"
@@ -243,35 +242,27 @@ static uint32_t mux_addr_mask;
 #endif
 
 
-__attribute__((weak))
-void sensor_matrix_on_sample(uint8_t row, uint8_t col, uint16_t value) {
-    (void)row;
-    (void)col;
-    (void)value;
-}
-
 static void isr_hdma(void)
 {
     // uint64_t now = mchtmr_get_count(HPM_MCHTMR);
     uint64_t cycle = hpm_csr_get_core_mcycle();
 
+    /* clear isr status */
+    dma_clear_transfer_status(MMX_HDMA, SENSOR_MATRIX_DMA_SEL_CHANNEL);
+    uint8_t bufidx = STATUS_REG[status_reg_active_beg] == STATUS_MAGIC_ACT1;
+
+    if (hall_recv_cb) {
+        hall_recv_cb(raw_buff[bufidx]);
+    }
+
     // 时间戳记录：与上一帧的间隔（帧周期）+ SOF 沿到本帧扫描完成
-    if (g_sensor_matrix_timing.isr_count != 0U)
-    {
-        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) / 400;
-        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / 400;
+    if (g_sensor_matrix_timing.isr_count != 0U) {
+        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) /  480;
+        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / 480;
     }
     g_sensor_matrix_timing.isr_tick = cycle;
     g_sensor_matrix_timing.sof_tick = gptmr_channel_get_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL, gptmr_counter_type_normal);
     g_sensor_matrix_timing.isr_count++;
-
-    /* clear isr status */
-    dma_clear_transfer_status(MMX_HDMA, SENSOR_MATRIX_DMA_SEL_CHANNEL);
-    uint8_t bufidx = STATUS_REG[status_reg_active_beg] == STATUS_MAGIC_ACT1;
-    if (hall_recv_cb)
-    {
-        hall_recv_cb(raw_buff[bufidx]);
-    }
 }
 SDK_DECLARE_EXT_ISR_M(MMX_HDMA_IRQ, isr_hdma)
 
@@ -279,15 +270,13 @@ static void sensor_matrix_init_pins(void)
 {
     uint32_t fast_padctrl = IOC_PAD_PAD_CTL_SPD_SET(3) | IOC_PAD_PAD_CTL_DS_SET(3);
     /* mux addr gpio init */
-    for (uint32_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) 
-    {
+    for (uint32_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) {
         gpio_write_pin_low(mux_pins[i]);
         gpio_set_pin_output(mux_pins[i]);
         gpio_set_pin_alternate(mux_pins[i], IOC_FUNC_CTL_GPIO, fast_padctrl);
     }
     /* adc gpio init */
-    for (uint32_t i = 0; i < SENSOR_MATRIX_ANAS; i++) 
-    {
+    for (uint32_t i = 0; i < SENSOR_MATRIX_ANAS; i++) {
         gpio_set_pin_alternate(ana_pins[i], IOC_PAD_FUNC_CTL_ANALOG_MASK, 0);
     }
 
@@ -329,14 +318,11 @@ static void sensor_matrix_set_mux(uint8_t val)
     uint32_t set = 0;
     uint32_t clr = 0;
 
-    for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) 
-	{
-        if (val & 1) 
-		{
+    for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) {
+        if (val & 1) {
             set |= 1 << mux_pins[i].npin;
         } 
-        else 
-		{
+        else {
             clr |= 1 << mux_pins[i].npin;
         }
         val >>= 1;
@@ -354,8 +340,7 @@ static void sensor_matrix_init_mux(void)
     mux_addr_mask = 0;
   
     /* check port */
-    for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) 
-    {
+    for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) {
         mux_addr_mask |= 1 << mux_pins[i].npin;
     }
 
@@ -395,14 +380,12 @@ static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx)
     uint32_t               channel_offset = 0U;
     uint8_t                index = 0U;
 
-    if ((adc_index >= SENSOR_MATRIX_ADC_INSTANCES) || (channel_count == 0U)) 
-	{
+    if ((adc_index >= SENSOR_MATRIX_ADC_INSTANCES) || (channel_count == 0U)) {
         return;
     }
 
     /* 前面几路 ADC 的通道数（含采样轮数）之和，就是本路在 seq_buff 中的起始偏移 */
-    for (uint8_t i = 0; i < adc_index; i++) 
-	{
+    for (uint8_t i = 0; i < adc_index; i++) {
         channel_offset += (uint32_t)adc_channel_counts[i] * SENSOR_MATRIX_ADC_SAMPLE_ROUNDS;
     }
 
@@ -416,18 +399,15 @@ static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx)
      * ch0 r0, ch0 r1, ch1 r0, ch1 r1, ...，这样 raw_buff 的线性下标就是
      * (sel * 通道数 + ch) * 轮数 + 采样序号，矩阵侧不需要额外的通道偏移表。
      */
-    for (uint32_t i = 0; i < SENSOR_MATRIX_ANAS; i++) 
-	{
+    for (uint32_t i = 0; i < SENSOR_MATRIX_ANAS; i++) {
         const uint8_t inst = ana_func[i] / 16U;
         const uint8_t channel = ana_func[i] % 16U;
 
-        if ((inst == adc_index) && (index < (channel_count * SENSOR_MATRIX_ADC_SAMPLE_ROUNDS)))
-		{
+        if ((inst == adc_index) && (index < (channel_count * SENSOR_MATRIX_ADC_SAMPLE_ROUNDS))) {
             ch_cfg.ch = channel;
             adc16_init_channel(ptr, &ch_cfg);
 
-            for (uint8_t s = 0; s < SENSOR_MATRIX_ADC_SAMPLE_ROUNDS; s++) 
-			{
+            for (uint8_t s = 0; s < SENSOR_MATRIX_ADC_SAMPLE_ROUNDS; s++) {
                 seq_cfg.queue[index].seq_int_en = false;
                 seq_cfg.queue[index].ch = channel;
                 index++;
@@ -435,16 +415,14 @@ static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx)
         }
     }
 
-    if (index == 0U) 
-	{
+    if (index == 0U) {
         return;
     }
 
     /* 序列长度 = 通道数 × 采样轮数，各 ADC 的 seq_buff 首尾相接 */
     seq_cfg.seq_len    = index;
 
-    if (index > g_sensor_matrix_timing.adc_seq_len)
-    {
+    if (index > g_sensor_matrix_timing.adc_seq_len) {
         g_sensor_matrix_timing.adc_seq_len = index;
     }
     seq_cfg.restart_en = false;
@@ -468,8 +446,7 @@ static void sensor_matrix_init_adc(void)
     (void)freq;
     ADC16_Type *const adc_instances[SENSOR_MATRIX_ADC_INSTANCES] = SENSOR_MATRIX_ADC_PORT;
 
-    for (uint8_t i = 0; i < SENSOR_MATRIX_ADC_INSTANCES; i++) 
-	{
+    for (uint8_t i = 0; i < SENSOR_MATRIX_ADC_INSTANCES; i++) {
         freq = sensor_matrix_init_adc_clock(adc_instances[i], true);
         sensor_matrix_init_adc_common(adc_instances[i], true);
         sensor_matrix_init_adc_config(adc_instances[i], i);
@@ -1093,18 +1070,16 @@ static void sensor_matrix_init_timer(void)
     gptmr_channel_get_default_config(SENSOR_MATRIX_TMR, &config_adc);
     gptmr_channel_get_default_config(SENSOR_MATRIX_TMR, &config_sof);
 
-    if (sensor_sof_src == sensor_matrix_sof_usb) 
-    {
+    if (sensor_sof_src == sensor_matrix_sof_usb) {
         config_sht.synci_edge = gptmr_synci_edge_both;
     } 
-    else 
-    {
+    else {
         config_sht.synci_edge = gptmr_synci_edge_rising;
     }
 
     /* shot channel */
-    config_sht.cmp[0]                    = 10 + SENSOR_MATRIX_SOF_ST_TIME;
-    config_sht.cmp[1]                    = 10 + SENSOR_MATRIX_SOF_ST_TIME + 50; /* keep 500ns high */
+    config_sht.cmp[0]                    = 1 + SENSOR_MATRIX_SOF_ST_TIME;
+    config_sht.cmp[1]                    = 1 + SENSOR_MATRIX_SOF_ST_TIME + 5; /* keep 50ns high */
     config_sht.reload                    = SENSOR_MATRIX_TMR_RLD_MAX;
     config_sht.enable_cmp_output         = true;
     config_sht.cmp_initial_polarity_high = false;
@@ -1168,8 +1143,8 @@ static void sensor_matrix_init_timer(void)
 
     /* sof channel */
     ssof_freq                            = ((SENSOR_MATRIX_TMR_SHOT_FREQ) / sensor_scan_interval) + sensor_scan_adjust;
-    config_sof.cmp[0]                    = 10;
-    config_sof.cmp[1]                    = 10 + 50; /* keep 500ns high */
+    config_sof.cmp[0]                    = 1;
+    config_sof.cmp[1]                    = 1 + 5; /* keep 500ns high */
     config_sof.reload                    = (uint32_t)(tmr_clock / ssof_freq);
     ssof_freq                            = (tmr_clock / (float)config_sof.reload);
     config_sof.enable_cmp_output         = true;
@@ -1201,10 +1176,14 @@ __attribute__((weak)) void sensor_matrix_post_init(void)
     sensor_matrix_set_config(config);
 }
 
-void sensor_matrix_init(hall_recv_cb_t recv_cb) 
+void sensor_matrix_recv_cb(hall_recv_cb_t recv_cb) 
+{
+    hall_recv_cb = recv_cb;
+}
+
+void sensor_matrix_init(void) 
 {
     (void)sensor_sof_src_saved;
-    hall_recv_cb = recv_cb;
     sensor_sof_src = sensor_matrix_sof_usb;
 
     /* clear buffer */
@@ -1239,8 +1218,7 @@ bool sensor_matrix_scan_is_busy(void)
     uint32_t beg1 = STATUS_REG[status_reg_active_beg];
     uint32_t end1 = STATUS_REG[status_reg_active_end];
 
-    if ((beg0 == beg1) && (end0 == end1) && (beg0 == end0)) 
-    {
+    if ((beg0 == beg1) && (end0 == end1) && (beg0 == end0)) {
         return false;
     }
 
@@ -1270,8 +1248,7 @@ void sensor_matrix_set_sof_src(uint8_t sof_src)
     trgm_sof_cfg.invert = false;
     trgm_sof_cfg.type   = trgm_output_same_as_input;
 
-    switch (sof_src) 
-    {
+    switch (sof_src) {
         case sensor_matrix_sof_usb:
             config_sht.synci_edge = gptmr_synci_edge_both;
             sensor_sof_src        = sensor_matrix_sof_usb;
@@ -1403,28 +1380,24 @@ void sensor_matrix_set_config(sensor_matrix_set_config_t config)
     sensor_matrix_stop_sel_timer();
 
     /* step.1 set scan mode  */
-    if (config.valid_mode) 
-    {
+    if (config.valid_mode) {
         sensor_matrix_init_timer();
         printf("sensor matrix update to [%s] mode\n", config.mode ? "low-power" : "high-performance");
     }
 
     /* step.2 set scan count */
-    if (config.valid_scan) 
-    {
+    if (config.valid_scan) {
         sensor_matrix_set_next_scan(config.count, config.list);
         printf("sensor matrix update scan count [%d]\n", config.count);
         printf("sensor matrix update default scan list ");
-        for (uint8_t i = 0; i < config.count; i++) 
-        {
+        for (uint8_t i = 0; i < config.count; i++) {
             printf("[%d] ", config.list[i]);
         }
         printf("\n");
     }
 
     /* step.3 set timer*/
-    if (config.valid_timer) 
-    {
+    if (config.valid_timer) {
         sensor_matrix_set_sof_timer(config.interval, config.adjust);
     }
 

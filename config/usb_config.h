@@ -66,6 +66,9 @@
 #define CONFIG_USBDEV_REQUEST_BUFFER_LEN 512
 #endif
 
+/* Enable USB SOF */
+#define CONFIG_USBDEV_SOF_ENABLE
+
 /* Setup packet log for debug */
 /* #define CONFIG_USBDEV_SETUP_LOG_PRINT */
 

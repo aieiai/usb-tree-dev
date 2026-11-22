@@ -11,10 +11,9 @@
 #include "usbd_hid.h"
 
 #include "tx_api.h"
+#include "tx_config.h"
 
 
-#define HAL_DT_THREAD_STACK     (1024U)
-#define HAL_DT_THREAD_PRIO      (TX_MAX_PRIORITIES - 2) /* 数值越大优先级越低，低于业务线程 */
 
 #if !HAL_USB_DT_WINUSB_ENABLE
 extern const usb_descriptor_t g_desc_rpt_dt;
@@ -52,8 +51,8 @@ static uint8_t s_rx_buf[HAL_DT_RX_PACKET_SIZE] __attribute__((aligned(4)));
 
 static struct usbd_interface s_dt_intf;
 
-static TX_THREAD thread_dt;
-static uint8_t thread_dt_stack[HAL_DT_THREAD_STACK] __attribute__((aligned(8U)));
+static TX_THREAD dt_thread;
+static uint8_t dt_thread_stack[DT_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_SEMAPHORE s_tx_pending_sem; /* 环形缓冲有待发送数据 / 主机已配置 */
 static TX_SEMAPHORE s_tx_done_sem;    /* 批量 IN 传输完成 */
 static TX_SEMAPHORE s_rx_ready_sem;   /* OUT 环形缓冲有新数据 */
@@ -159,7 +158,7 @@ static void ep_dt_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 /* 发送线程：把环形缓冲里的诊断数据按 HAL_DT_PACKET_SIZE 一包搬到批量 IN 端点。
  * 业务侧只往环形缓冲写，不会因为主机不读数据而被卡住。 */
-static void hal_dt_thread(ULONG entry_input)
+static void dt_thread_entry(ULONG entry_input)
 {
     (void)entry_input;
 
@@ -220,9 +219,9 @@ void hal_dt_usb_init(uint8_t busid)
     usbd_add_endpoint(busid, &(struct usbd_endpoint){ .ep_addr = INTF_DT_EPO, .ep_cb = ep_dt_out_callback });
 
     if (!s_thread_created) {
-        uint32_t ret = tx_thread_create(&thread_dt, "thread_dt", hal_dt_thread, 0, thread_dt_stack, sizeof(thread_dt_stack), HAL_DT_THREAD_PRIO, HAL_DT_THREAD_PRIO, TX_NO_TIME_SLICE, TX_AUTO_START);
+        uint32_t ret = tx_thread_create(&dt_thread, "dt_thread", dt_thread_entry, 0, dt_thread_stack, sizeof(dt_thread_stack), DT_THREAD_PRIORITY, DT_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
         if (ret != TX_SUCCESS) {
-            perror("thread_dt creation failed!.\n");
+            perror("dt_thread creation failed!.\n");
             for (;;) {
                 ;
             }

@@ -4,7 +4,7 @@
  * @Date:   2024/07/02
  */
 #include "keyevt.h"
-#include "kbdconfig.h"
+#include "kbd_config.h"
 
 // key action status
 typedef enum {

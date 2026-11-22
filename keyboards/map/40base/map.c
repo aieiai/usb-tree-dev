@@ -1,7 +1,7 @@
 
 #include <stddef.h>
 #include "keycode.h"
-#include "kbdconfig.h"
+#include "kbd_config.h"
 
 /** 40% keyboard layout
  * ,------------------------------------------------------------------------------------.

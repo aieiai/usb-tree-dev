@@ -44,8 +44,8 @@ typedef struct {
 static TX_EVENT_FLAGS_GROUP rx_events;
 static TX_EVENT_FLAGS_GROUP tx_events;
 static TX_MUTEX tx_mutex;
-static TX_THREAD thread_rotcc;
-static uint8_t thread_rotcc_stack[ROTCC_TASK_STACK] __attribute__((aligned(8U)));
+static TX_THREAD rotcc_thread;
+static uint8_t rotcc_thread_stack[ROTCC_THREAD_STACK] __attribute__((aligned(8U)));
 
 static rotcc_msg_t cc_msg;
 static rotgen_frame_fn_t frame_cb = NULL;
@@ -155,7 +155,7 @@ static rotsta_t rotcc_send(const uint8_t *data, uint16_t len, void *ctx)
     return state;
 }
 
-static void rotcc_task(ULONG id)
+static void rotcc_thread_entry(ULONG id)
 {
     uint8_t chunk[ROTCC_RX_CHUNK_SIZE];
 
@@ -222,7 +222,7 @@ rotsta_t rotcc_init(void)
         return rotsta_fail;
     }
 
-    ret = tx_thread_create(&thread_rotcc, "thread_rot_cc", rotcc_task, 0U, thread_rotcc_stack, sizeof(thread_rotcc_stack), ROTCC_TASK_PRIORITY, ROTCC_TASK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+    ret = tx_thread_create(&rotcc_thread, "rotcc_thread", rotcc_thread_entry, 0U, rotcc_thread_stack, sizeof(rotcc_thread_stack), ROTCC_THREAD_PRIORITY, ROTCC_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
     if (ret != TX_SUCCESS) {
         (void)hal_cc_register_callbacks(NULL, NULL, NULL, NULL);
         printf(TAG "thread create failed, ret=%u\r\n", (unsigned)ret);

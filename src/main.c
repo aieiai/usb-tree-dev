@@ -7,7 +7,10 @@
 
 #include "cst.h"
 #include "db.h"
+
 #include "keymap.h"
+#include "keycore.h"
+
 #include "rotcc.h"
 #include "rotcc_proto.h"
 #include "upgrade.h"
@@ -54,6 +57,12 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "keymap init failed: 0x%08x, using defaults\r\n", (unsigned)state);
     }
 
+    state = keycore_init();
+    if (state != rotsta_success) {
+        printf(TAG "keycore nit failed: 0x%08x, using defaults\r\n", (unsigned)state);
+    }
+
+
     if (hal_chip_get_info(&chip) == rotsta_success) {
         printf(TAG "OTP chip id 0x%08x, flash %u KB\r\n", (unsigned)chip.otp_chip_id, (unsigned)(chip.flash_size / 1024U));
     }
@@ -73,19 +82,20 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);
     }
 
+    cst_init();
+
     hal_usb_init();
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
     // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
 
-    cst_init();
 }
 
 int main(void)
 {
     board_init();
-    board_init_led_pins();
-    board_init_gpio_pins();
-    gpio_set_pin_input(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
+    // board_init_led_pins();
+    // board_init_gpio_pins();
+    // gpio_set_pin_input(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
     printf("cherry usb threadx hid_keyboard device sample.\n");
     /* Enter the ThreadX kernel.  */
     tx_kernel_enter();
