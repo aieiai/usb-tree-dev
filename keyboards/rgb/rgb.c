@@ -30,7 +30,7 @@ static void _obr_load_defaults(void)
  * @param:  None
  * @return: None
  */
-rotsta_t rgb_init(void)
+rotsta_t obr_db_register(void)
 {
     rotsta_t result = rotsta_success;
     result = db_register(DB_ITEM_OBR, &g_obr, (uint32_t)sizeof(g_obr));
@@ -51,3 +51,7 @@ rotsta_t rgb_init(void)
     return result;
 }
 
+rotsta_t rgb_init(void)
+{
+    return rotsta_success;
+}

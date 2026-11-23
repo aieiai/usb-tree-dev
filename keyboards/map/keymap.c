@@ -23,7 +23,6 @@ static void _keymap_load_defaults(void)
     for (uint32_t sys = 0U; sys < KBD_SYS_MAX; sys++) {
         for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
             const uint32_t *p_default = keymap_get_default((uint8_t)sys, (uint8_t)layer);
-
             if (p_default != NULL) {
                 memcpy(p_obm->keymap[sys][layer], p_default, sizeof(p_obm->keymap[sys][layer]));
             }
@@ -36,9 +35,8 @@ static bool _keymap_codes_valid(const obm_t *p_obm)
     for (uint32_t sys = 0U; sys < KBD_SYS_MAX; sys++) {
         for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
             for (uint32_t key = 0U; key < KBD_KEY_MAX; key++) {
-                uint32_t type = (p_obm->keymap[sys][layer][key] >> 1) & 0x3FU;
-
-                if (type >= (uint32_t)KCT_MAX) {
+                rotkc_t *pkc = (rotkc_t *)&p_obm->keymap[sys][layer][key];
+                if (pkc->ty >= (uint32_t)KCT_MAX) {
                     return false;
                 }
             }
@@ -63,7 +61,7 @@ static bool _keymap_valid(const obm_t *p_obm)
 }
 
 
-rotsta_t keymap_init(void)
+rotsta_t obm_db_register(void)
 {
     rotsta_t result = rotsta_success;
     obm_t *p_obm = &g_obm;
@@ -85,6 +83,11 @@ rotsta_t keymap_init(void)
     }
 
     return result;
+}
+
+rotsta_t keymap_init(void)
+{
+    return rotsta_success;
 }
 
 

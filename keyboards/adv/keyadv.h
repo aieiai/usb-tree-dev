@@ -41,6 +41,7 @@ typedef struct {
 
 extern oba_t g_oba;
 
+rotsta_t oba_db_register(void);
 rotsta_t keyadv_init(void);
 
 #endif /* KEY_ADVANCED_H */

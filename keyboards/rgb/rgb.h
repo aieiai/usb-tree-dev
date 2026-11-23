@@ -28,6 +28,7 @@ typedef struct {
 extern obr_t g_obr;
 
 rotsta_t rgb_init(void);
+rotsta_t obr_db_register(void);
 
 #endif  /* RGB_H */
 

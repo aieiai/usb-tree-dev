@@ -81,6 +81,23 @@ enum {
     LIGHTING_REPORT_ID_CONTROL       = 0x06,
 };
 
+/**
+ * @brief Common USB 2.0 control request structure
+ */
+typedef struct {
+    uint8_t bmRequestType; // [0] (Bitmask)
+    uint8_t bRequest;      // [1]
+    union {
+        struct {
+            uint8_t lbyte; // [2] (LSB)
+            uint8_t hbyte; // [3] (MSB)
+        };
+        uint16_t word; // [2,3] (LSB,MSB)
+    } wValue;
+    uint16_t wIndex;  // [4,5] (LSB,MSB)
+    uint16_t wLength; // [6,7] (LSB,MSB)
+} __attribute__((packed)) usb_ctrl_req_t;
+
 
 
 #define USBD_INTERVAL_MS(ms)            ((uint16_t)((ms) * (1000 / 125)))

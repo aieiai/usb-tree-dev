@@ -56,6 +56,7 @@ typedef struct {
 
 extern obmag_t g_obmag;
 
+rotsta_t obmag_db_register(void);
 rotsta_t keymag_init(void);
 void     keymag_update_factor(uint8_t ki);
 float    keymag_pt2du(uint8_t ki, uint16_t point);

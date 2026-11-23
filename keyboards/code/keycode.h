@@ -483,7 +483,7 @@ typedef enum {
 } cc_ty;
 
 /**
- * @cite:   HID Usage Tables, https://www.usb.org/sites/default/files/hut1_7.pdf#page=33
+ * @cite:   HID Usage Tables, https://www.usb.org/sites/default/files/hut1_7.pdf#page=37
  * @brief:  GenericDesktopPage(0x01), Usage: Mouse, 0x02
  *          Mouse button bits for the supplied report format
  */
@@ -496,6 +496,17 @@ enum {
     MS_BTN6 = (1u << 5),
     MS_BTN7 = (1u << 6),
     MS_BTN8 = (1u << 7)
+};
+
+/**
+ * @cite:   HID Usage Tables, https://www.usb.org/sites/default/files/hut1_7.pdf#page=98
+ * @brief:  LED Usage, 0x08
+ *          LED bits for the supplied report format
+ */
+enum {
+    KC_LED_NUM    = (1u << 0),
+    KC_LED_CAPS   = (1u << 1),
+    KC_LED_SCROLL = (1u << 2),
 };
 
 /* Modifier usages E0..E7 map directly to the 8-bit modifier field. */

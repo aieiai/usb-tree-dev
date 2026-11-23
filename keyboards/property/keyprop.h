@@ -143,8 +143,11 @@ typedef struct {
 extern obi_t g_obi;
 extern obkp_t g_obkp;
 
-
+rotsta_t obi_db_register(void);
+rotsta_t obkp_db_register(void);
 rotsta_t keyprop_init(void);
+
+bool keyprop_cc_popup_enabled(void);
 
 
 #endif  /* KEY_PROPERTY_H */

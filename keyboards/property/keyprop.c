@@ -104,7 +104,7 @@ static void _obi_load_defaults(void)
     _obi_set_str(g_obi.pi.sn, sizeof(g_obi.pi.sn), "SN000000000001");
     g_obi.pi.test_cnt = 0U;
 }
-static rotsta_t obi_init(void)
+rotsta_t obi_db_register(void)
 {
     rotsta_t result = db_register(DB_ITEM_OBI, &g_obi, (uint32_t)sizeof(g_obi));
     if (result != rotsta_success) {
@@ -122,7 +122,6 @@ static rotsta_t obi_init(void)
     }
     else if (g_obi.pi.fv != (uint64_t)FW_VER) {
         uint64_t prev_fv = g_obi.pi.fv;
-
         /*
          * Firmware changed: migrate persistent data from prev_fv here before
          * the stored version is advanced. Keep the checks ordered by version,
@@ -130,9 +129,7 @@ static rotsta_t obi_init(void)
          */
         g_obi.pi.fv = (uint64_t)FW_VER;
         _obi_set_str(g_obi.pi.cd, sizeof(g_obi.pi.cd), rotver_get_cd());
-        printf(TAG "key property fw version 0x%08x%08x -> 0x%08x%08x\r\n",
-               (unsigned)(prev_fv >> 32), (unsigned)prev_fv,
-               (unsigned)(g_obi.pi.fv >> 32), (unsigned)g_obi.pi.fv);
+        printf(TAG "key property fw version 0x%08x%08x -> 0x%08x%08x\r\n", (unsigned)(prev_fv >> 32), (unsigned)prev_fv, (unsigned)(g_obi.pi.fv >> 32), (unsigned)g_obi.pi.fv);
         result = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
         if (result != rotsta_success) {
             printf(TAG "key property fw version save failed: 0x%08x\r\n", (unsigned)result);
@@ -149,7 +146,7 @@ static rotsta_t obi_init(void)
     return result;
 }
 
-static rotsta_t obkp_init(void)
+rotsta_t obkp_db_register(void)
 {
     rotsta_t result = db_register(DB_ITEM_OBKP, &g_obkp, (uint32_t)sizeof(g_obkp));
     if (result != rotsta_success) {
@@ -169,18 +166,12 @@ static rotsta_t obkp_init(void)
     return result;
 }
 
+bool keyprop_cc_popup_enabled(void)
+{
+    return (g_obi.magic == MAGIC_OBI) && (g_obi.version == OBI_VER) && _obi_valid() && (g_obi.fs.cc_popup != 0U);
+}
+
 rotsta_t keyprop_init(void)
 {
-    rotsta_t result = rotsta_success;
-    result = obi_init();
-    if (result != rotsta_success) {
-        return result;
-    }
-
-    result = obkp_init();
-    if (result != rotsta_success) {
-        return result;
-    }
-
-    return result;
+    return rotsta_success;
 }

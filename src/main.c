@@ -57,7 +57,6 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "keycore nit failed: 0x%08x, using defaults\r\n", (unsigned)state);
     }
 
-
     if (hal_chip_get_info(&chip) == rotsta_success) {
         printf(TAG "OTP chip id 0x%08x, flash %u KB\r\n", (unsigned)chip.otp_chip_id, (unsigned)(chip.flash_size / 1024U));
     }
@@ -83,7 +82,6 @@ void tx_application_define(void *first_unused_memory)
     }
 
     cst_init();
-
     hal_usb_init();
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
     // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);

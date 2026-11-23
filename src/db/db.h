@@ -16,6 +16,7 @@ enum {
     rotsta_db_invalid_save_type,
     rotsta_db_save_fail,
     rotsta_db_lock_fail,
+    rotsta_db_register_fail,
 };
 
 typedef enum {
@@ -40,6 +41,7 @@ typedef enum {
 
 rotsta_t db_init(void);
 rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size);
+rotsta_t db_register_kbd(void);
 rotsta_t db_update(db_item_ty type, db_save_ty save_type);
 
 

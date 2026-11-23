@@ -29,7 +29,7 @@ static void _oba_load_defaults(void)
  * @param:  None
  * @return: None
  */
-rotsta_t keyadv_init(void)
+rotsta_t oba_db_register(void)
 {
     rotsta_t result = rotsta_success;
     result = db_register(DB_ITEM_OBA, &g_oba, (uint32_t)sizeof(g_oba));
@@ -48,5 +48,10 @@ rotsta_t keyadv_init(void)
     }
 
     return result;
+}
+
+rotsta_t keyadv_init(void)
+{
+    return rotsta_success;
 }
 

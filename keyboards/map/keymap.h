@@ -33,6 +33,7 @@ typedef struct {
 
 extern obm_t g_obm;
 
+rotsta_t obm_db_register(void);
 rotsta_t keymap_init(void);
 rotsta_t keymap_reset(void);
 const uint32_t *keymap_get_default(uint8_t sys, uint8_t map);

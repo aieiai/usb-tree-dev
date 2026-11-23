@@ -111,7 +111,7 @@ static void _keymag_load_defaults(void)
     _keymag_cal_defaults(&g_obmag.cal_bak, "Magnet");
 }
 
-rotsta_t keymag_init(void)
+rotsta_t obmag_db_register(void)
 {
     rotsta_t result = rotsta_success;
 
@@ -137,7 +137,12 @@ rotsta_t keymag_init(void)
             printf(TAG "backup cal save failed: 0x%08x\r\n", (unsigned)result);
         }
     }
+    return result;
+}
 
+rotsta_t keymag_init(void)
+{
+    rotsta_t result = rotsta_success;
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
         keymag_update_factor(ki);
     }

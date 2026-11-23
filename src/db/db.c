@@ -372,6 +372,12 @@ rotsta_t db_init(void)
     if (result != rotsta_success) {
         return rotsta_db_init_fail;
     }
+
+    result = db_register_kbd();
+    if (result != rotsta_success) {
+        return rotsta_db_register_fail;
+    }
+
     if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "db_api", TX_INHERIT)) ||
         (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "db_data", TX_INHERIT)) ||
         (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "db_wake", 0U)) ||
