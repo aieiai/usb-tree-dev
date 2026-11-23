@@ -221,12 +221,15 @@ static void db_thread_entry(ULONG argument)
             }
 
             if (now_mask != 0U) {
+                printf(TAG "now: \r\n");
                 _flush_dirty();
                 continue;
             }
 
             /* Delayed save: every new request restarts the 5s window. */
-            if (TX_SUCCESS == tx_semaphore_get(&s_wake_sem, DB_SAVE_DELAY_TICKS)) {
+            ULONG delay_start = tx_time_get();
+            UINT delay_ret = tx_semaphore_get(&s_wake_sem, DB_SAVE_DELAY_TICKS);
+            if (TX_SUCCESS == delay_ret) {
                 continue;
             }
 
@@ -234,6 +237,7 @@ static void db_thread_entry(ULONG argument)
             if (now_mask != 0U) {
                 continue;
             }
+            printf(TAG "d5s: ret=%u elapsed=%u tick\r\n", (unsigned)delay_ret, (unsigned)(tx_time_get() - delay_start));
             _flush_dirty();
         }
     }
@@ -262,6 +266,7 @@ rotsta_t db_update(db_item_ty type, db_save_ty save_type)
     if (TX_NULL == tx_thread_identify()) {
         /* Kernel not started yet (e.g. tx_application_define): db_thread cannot run,
          * so flush here to make boot-time updates durable before continuing. */
+        // printf(TAG "db_update %s %u\r\n", items[type].msg.name, (unsigned)save_type);
         uint32_t dirty;
         TX_INTERRUPT_SAVE_AREA
 
