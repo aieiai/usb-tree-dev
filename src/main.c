@@ -81,7 +81,7 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);
     }
 
-    cst_init();
+    //cst_init();
     hal_usb_init();
     // webusb_hid_keyboard_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);
     // gamepad_init(CONFIG_USBD_BUSID, CONFIG_USBD_REG_BASE);

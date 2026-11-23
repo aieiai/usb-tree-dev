@@ -149,7 +149,7 @@ static rotsta_t _item_write(db_item_ty type)
         printf(TAG "%s write failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
     }
-    printf(TAG "%s written %u byte\r\n", item->msg.name, (unsigned)item->buf_size);
+    printf(TAG "%s written %u byte\r\n\r\n", item->msg.name, (unsigned)item->buf_size);
     return result;
 }
 
@@ -221,7 +221,7 @@ static void db_thread_entry(ULONG argument)
             }
 
             if (now_mask != 0U) {
-                printf(TAG "now: \r\n");
+                printf(TAG "save successfully immediately\r\n");
                 _flush_dirty();
                 continue;
             }
@@ -237,7 +237,7 @@ static void db_thread_entry(ULONG argument)
             if (now_mask != 0U) {
                 continue;
             }
-            printf(TAG "d5s: ret=%u elapsed=%u tick\r\n", (unsigned)delay_ret, (unsigned)(tx_time_get() - delay_start));
+            printf(TAG "save successfully after a 5-second delay, elapsed=%u tick\r\n", (uint32_t)(tx_time_get() - delay_start));
             _flush_dirty();
         }
     }
@@ -262,16 +262,13 @@ rotsta_t db_update(db_item_ty type, db_save_ty save_type)
     if (result != rotsta_success) {
         return result;
     }
-
+    printf(TAG "save type %s\r\n", (save_type == DB_SAVE_TY_NOW) ? "now" : "5-second delay");
     if (TX_NULL == tx_thread_identify()) {
         /* Kernel not started yet (e.g. tx_application_define): db_thread cannot run,
          * so flush here to make boot-time updates durable before continuing. */
-        // printf(TAG "db_update %s %u\r\n", items[type].msg.name, (unsigned)save_type);
         uint32_t dirty;
         TX_INTERRUPT_SAVE_AREA
-
         _flush_dirty();
-
         TX_DISABLE
         dirty = s_dirty_mask;
         TX_RESTORE
