@@ -230,8 +230,7 @@ static __inline kevt_trg_ty _trg_detect(uint8_t ki)
 static __inline kevt_pos_ty _pos_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
-    keyattr_t *p_attr = &g_obkp.attr[ki];
-    const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
+    const keyaxis_para_t *p_axis = p_evt->axis_para;
     return ((p_evt->dst <= 50.0f) ? KEVT_POS_TOP : (p_evt->dst > p_axis->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID);
 }
 
@@ -269,10 +268,13 @@ void keyevt_updete(uint8_t ki, uint16_t val)
 void keyevt_init(void)
 {
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
+        keyevt_t *p_evt = &g_keyevt[ki];
         keyattr_t *p_attr = &g_obkp.attr[ki];
-        memset(&g_keyevt[ki], 0, sizeof(g_keyevt[ki]));
-        g_keyevt[ki].pv = keymag_du2pt(ki, p_attr->nom.dst_p);
-        g_keyevt[ki].rv = keymag_du2pt(ki, p_attr->nom.dst_r);
+        
+        memset(p_evt, 0, sizeof(keyevt_t));
+        p_evt->pv = keymag_du2pt(ki, p_attr->nom.dst_p);
+        p_evt->rv = keymag_du2pt(ki, p_attr->nom.dst_r);
+        p_evt->axis_para = &g_keyaxis_para[p_attr->axis.ty];
     }
 }
 

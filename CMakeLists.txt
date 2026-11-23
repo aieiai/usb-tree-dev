@@ -58,6 +58,8 @@ sdk_inc(config)
 sdk_compile_definitions(-DUSE_NONVECTOR_MODE=1)
 sdk_compile_definitions(-DDISABLE_IRQ_PREEMPTIVE=1)
 sdk_compile_definitions(-DCONFIG_NDEBUG_CONSOLE=1)
+sdk_compile_definitions(-DBOARD_SHOW_CLOCK=0)
+sdk_compile_definitions(-DBOARD_SHOW_BANNER=0)
 
 # Automatic injection
 if(GIT_HASH)

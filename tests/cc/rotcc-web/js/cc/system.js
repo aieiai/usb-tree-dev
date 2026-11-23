@@ -80,6 +80,89 @@ async function queryKeyCount({ silent = false } = {}) {
   }
 }
 
+async function queryPopupSupport() {
+  sysBegin();
+  try {
+    const payload = await sysCall(client =>
+      client.readPayload(CC.CMD_SYS, CC.SYS_POPUP_SUPPORT, 4, {
+        label: '驱动弹窗支持',
+        timeoutMs: 3000
+      })
+    );
+    const supported = readLe32(payload, 0) !== 0;
+    ccPopupSupported = supported;
+    $sysPopup.textContent = supported ? '驱动弹窗 支持' : '驱动弹窗 不支持';
+    setSysState(supported ? '设备支持驱动弹窗。' : '设备不支持驱动弹窗。',
+      supported ? '' : 'warn');
+    appendLine(`[SYS] 驱动弹窗支持：${supported ? '是' : '否'}`,
+      supported ? '' : 'warn');
+    return supported;
+  } catch (error) {
+    ccPopupSupported = null;
+    $sysPopup.textContent = '驱动弹窗 --';
+    setSysState(`查询驱动弹窗支持失败：${error.message || error}`, 'err');
+    throw error;
+  } finally {
+    sysEnd();
+  }
+}
+
+async function queryPopupState() {
+  sysBegin();
+  try {
+    const payload = await sysCall(client =>
+      client.readPayload(CC.CMD_SYS, CC.SYS_POPUP_GET, 4, {
+        label: '驱动弹窗状态',
+        timeoutMs: 3000
+      })
+    );
+    const enabled = readLe32(payload, 0) !== 0;
+    $chkPopup.checked = enabled;
+    $sysPopup.textContent = `驱动弹窗 ${enabled ? '开启' : '关闭'}`;
+    setSysState(`驱动弹窗当前${enabled ? '开启' : '关闭'}。`);
+    appendLine(`[SYS] 驱动弹窗状态：${enabled ? '开启' : '关闭'}`);
+    return enabled;
+  } catch (error) {
+    setSysState(`读取驱动弹窗失败：${error.message || error}`, 'err');
+    throw error;
+  } finally {
+    sysEnd();
+  }
+}
+
+async function writePopupState() {
+  if (sysBusy || kcBusy || isFirmwareActive()) return;
+
+  if (ccPopupSupported !== true) {
+    setSysState('请先检查设备是否支持驱动弹窗。', 'warn');
+    return;
+  }
+
+  const enabled = $chkPopup.checked;
+  const payload = new Uint8Array(4);
+  writeLe32(payload, 0, enabled ? 1 : 0);
+
+  sysBegin();
+  try {
+    await sysCall(client =>
+      client.statusRequest(CC.CMD_SYS, CC.SYS_POPUP_SET, {
+        payload,
+        label: '设置驱动弹窗',
+        timeoutMs: 5000
+      })
+    );
+    $sysPopup.textContent = `驱动弹窗 ${enabled ? '开启' : '关闭'}`;
+    setSysState(
+      `驱动弹窗已${enabled ? '开启' : '关闭'}，重新枚举后生效。`
+    );
+    appendLine(`[SYS] 驱动弹窗设置为${enabled ? '开启' : '关闭'}`);
+  } catch (error) {
+    setSysState(`设置驱动弹窗失败：${error.message || error}`, 'err');
+  } finally {
+    sysEnd();
+  }
+}
+
 async function rebootDevice() {
   if (sysBusy || kcBusy || isFirmwareActive()) return;
 

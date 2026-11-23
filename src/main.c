@@ -66,16 +66,16 @@ void tx_application_define(void *first_unused_memory)
         printf(TAG "upgrade init failed: 0x%08x\r\n", (unsigned)state);
     }
 
-    state = rotcc_init();
-    if (state != rotsta_success) {
-        printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
-    }
-
     state = rgb_init();
     if (state != rotsta_success) {
         printf(TAG "rgb init failed: 0x%08x\r\n", (unsigned)state);
     }
     
+    state = rotcc_init();
+    if (state != rotsta_success) {
+        printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
+    }
+
     state = rotcc_proto_init();
     if (state != rotsta_success) {
         printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);
@@ -94,7 +94,7 @@ int main(void)
     // board_init_led_pins();
     // board_init_gpio_pins();
     // gpio_set_pin_input(BOARD_APP_GPIO_CTRL, BOARD_APP_GPIO_INDEX, BOARD_APP_GPIO_PIN);
-    printf("cherry usb threadx hid_keyboard device sample.\n");
+    // printf("cherry usb threadx hid_keyboard device sample.\n");
     /* Enter the ThreadX kernel.  */
     tx_kernel_enter();
     for (;;) {

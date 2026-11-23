@@ -6,6 +6,8 @@
 
 #include "tu_hid_device.h"
 
+#include "keyprop.h"
+
 
 #define USE_MSOS_VERSION 1
 
@@ -120,6 +122,14 @@ static uint8_t _msos_v2_0_xbox_buf[MSOS20_SET_LEN_XBOX];
 
 
 
+static const uint8_t _desc_bos_no_webusb[] = {
+    BOS_DESC_NO_WEBUSB
+};
+static const uint8_t _desc_bos_xbox_no_webusb[] = {
+    BOS_XBOX_DESC_NO_WEBUSB
+};
+/* 带 WebUSB 平台能力的 BOS；cc_popup = 1 时才会用到。
+ * HAL_USB_WEBUSB_ENABLE = 0 时内容与上面的 no_webusb 版本一致。 */
 static const uint8_t _desc_bos[] = {
     BOS_DESC
 };
@@ -128,8 +138,8 @@ static const uint8_t _desc_bos_xbox[] = {
     BOS_XBOX_DESC
 };
 static struct usb_bos_descriptor bos_desc = {
-    .string = _desc_bos,
-    .string_len = sizeof(_desc_bos), 
+    .string = _desc_bos_no_webusb,
+    .string_len = sizeof(_desc_bos_no_webusb), 
 };
 
 
@@ -189,8 +199,14 @@ static void webusb_url_descriptor_init(void) {
  * Xbox 模式多挂一个 XUSB10 函数子集，Windows 才会给手柄接口加载 xusb22.sys（与 VID/PID 无关）。
  * 必须在 usbd_desc_register() 之前调用；hal_usb_init() 每次重新注册描述符前都会调一次。 */
 void hid_descriptor_init(void) {
+    bool webusb = false;
+
 #if HAL_USB_WEBUSB_ENABLE
-    webusb_url_descriptor_init();
+    webusb = keyprop_cc_popup_enabled();
+    if (webusb) {
+        webusb_url_descriptor_init();
+    }
+    g_hid_descriptor.webusb_url_descriptor = webusb ? &webusb_url_desc : NULL;
 #endif
 
     if (g_gamepad_mode == HAL_GAMEPAD_MODE_XBOX) {
@@ -210,14 +226,14 @@ void hid_descriptor_init(void) {
 
         msosv2_desc.compat_id = _msos_v2_0_xbox_buf;
         msosv2_desc.compat_id_len = len;
-        bos_desc.string = _desc_bos_xbox;
-        bos_desc.string_len = sizeof(_desc_bos_xbox);
+        bos_desc.string = webusb ? _desc_bos_xbox : _desc_bos_xbox_no_webusb;
+        bos_desc.string_len = webusb ? sizeof(_desc_bos_xbox) : sizeof(_desc_bos_xbox_no_webusb);
     } 
     else {
         msosv2_desc.compat_id = _msos_v2_0;
         msosv2_desc.compat_id_len = sizeof(_msos_v2_0);
-        bos_desc.string = _desc_bos;
-        bos_desc.string_len = sizeof(_desc_bos);
+        bos_desc.string = webusb ? _desc_bos : _desc_bos_no_webusb;
+        bos_desc.string_len = webusb ? sizeof(_desc_bos) : sizeof(_desc_bos_no_webusb);
     }
 }
 
@@ -344,7 +360,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index) {
     return string_descriptors[index];
 }
 
-const struct usb_descriptor g_hid_descriptor = {
+struct usb_descriptor g_hid_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
     .device_quality_descriptor_callback = device_quality_descriptor_callback,
@@ -353,9 +369,7 @@ const struct usb_descriptor g_hid_descriptor = {
 
     // .msosv1_descriptor = &msosv1_desc,
     .msosv2_descriptor = &msosv2_desc,
-#if HAL_USB_WEBUSB_ENABLE
-    .webusb_url_descriptor = &webusb_url_desc,
-#endif
+    .webusb_url_descriptor = NULL, // cc_popup
     .bos_descriptor = &bos_desc,
 };
 

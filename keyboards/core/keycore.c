@@ -47,7 +47,6 @@ static void keycore_process_frame(volatile uint32_t *frame)
         }
 
         adc_buf[ki] = GET_ADC_VALUE(frame, i);
-
 #if KI_EN
         sersor_buf[i] = GET_ADC_VALUE(frame, i);
         if (cnt == 0) {
@@ -60,9 +59,6 @@ static void keycore_process_frame(volatile uint32_t *frame)
 #endif
 
         keyevt_updete(ki, adc_buf[ki]);
-
-
-
 
 
 

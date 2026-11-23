@@ -13,7 +13,7 @@
 #include "rotver.h"
 #include "upgrade.h"
 #include "usb_config.h"
-#include "usb/diagnostic_tracking/hal_dt.h"
+#include "hal_usb.h"
 
 
 #define TAG "rotcc_proto: "
@@ -123,6 +123,66 @@ static void _handle_sys_key_count(const rotcc_msg_t *msg)
     }
     rotutil_put_le32(count, KBD_KEY_MAX);
     (void)rotcc_proto_reply(msg, count, sizeof(count));
+}
+
+static void _handle_sys_popup_support(const rotcc_msg_t *msg)
+{
+    uint8_t supported[sizeof(uint32_t)];
+
+    if (msg->payload_len != 0U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+    rotutil_put_le32(supported, (HAL_USB_WEBUSB_ENABLE != 0) ? 1U : 0U);
+    (void)rotcc_proto_reply(msg, supported, sizeof(supported));
+}
+
+static void _handle_sys_popup_get(const rotcc_msg_t *msg)
+{
+    uint8_t enabled[sizeof(uint32_t)];
+
+    if (msg->payload_len != 0U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+    
+    rotutil_put_le32(enabled, (HAL_USB_WEBUSB_ENABLE != 0) ? (uint32_t)g_obi.fs.cc_popup : 0U);
+    (void)rotcc_proto_reply(msg, enabled, sizeof(enabled));
+}
+
+static void _handle_sys_popup_set(const rotcc_msg_t *msg)
+{
+    uint8_t prev;
+    uint32_t value;
+    rotsta_t state;
+
+    if (msg->payload_len != sizeof(uint32_t)) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+    if (HAL_USB_WEBUSB_ENABLE == 0) {
+        _reply_status(msg, rotsta_not_supported);
+        return;
+    }
+
+    value = rotutil_get_le32(msg->payload);
+    if (value > 1U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+    if (g_obi.fs.cc_popup == value) {
+        _reply_status(msg, rotsta_success);
+        return;
+    }
+
+    prev = g_obi.fs.cc_popup;
+    g_obi.fs.cc_popup = value ? 1U : 0U;
+    state = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
+    if (state != rotsta_success) {
+        g_obi.fs.cc_popup = prev;
+        hal_dt_printf(TAG "popup save failed: 0x%08x\r\n", (unsigned)state);
+    }
+    _reply_status(msg, state);
 }
 
 static void _handle_sys_info(const rotcc_msg_t *msg)
@@ -762,6 +822,9 @@ static const rotcc_cmd_entry_t cmd_table[] = {
     { ROTCC_CMD_SYS,     ROTCC_SYS_REBOOT,          _handle_sys_reboot           },
     { ROTCC_CMD_SYS,     ROTCC_SYS_RESET,           _handle_sys_reset            },
     { ROTCC_CMD_SYS,     ROTCC_SYS_KEY_COUNT,       _handle_sys_key_count        },
+    { ROTCC_CMD_SYS,     ROTCC_SYS_POPUP_SUPPORT,   _handle_sys_popup_support    },
+    { ROTCC_CMD_SYS,     ROTCC_SYS_POPUP_GET,       _handle_sys_popup_get        },
+    { ROTCC_CMD_SYS,     ROTCC_SYS_POPUP_SET,       _handle_sys_popup_set        },
     
     { ROTCC_CMD_KC,      ROTCC_KC_GET,              _handle_kc_get               },
     { ROTCC_CMD_KC,      ROTCC_KC_SET,              _handle_kc_set               },

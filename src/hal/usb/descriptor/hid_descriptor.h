@@ -17,7 +17,7 @@
  * Windows 上 WebUSB 靠 WinUSB 才能打开接口，所以依赖 DT 的 WinUSB 开关；
  * Linux/macOS 不需要 WinUSB（接口无内核驱动即可），但也只有 DT 接口存在才有意义。 */
 #ifndef HAL_USB_WEBUSB_ENABLE
-#define HAL_USB_WEBUSB_ENABLE       (0)
+#define HAL_USB_WEBUSB_ENABLE       (1)
 /**
  * WebUSB 跳转地址，填写完整 URL 如:
  *      https://example.com/webusb
@@ -198,7 +198,7 @@ typedef struct {
 #define HAL_USB_DT_GUID                 "{6B1D7C3E-4A2F-4E8B-9C5D-1F0A2B3C4D5E}"
 
 
-extern const struct usb_descriptor g_hid_descriptor;
+extern struct usb_descriptor g_hid_descriptor;
 extern const usb_descriptor_t g_desc_rpt_kbd;
 extern const usb_descriptor_t g_desc_rpt_lighting;
 extern const usb_descriptor_t g_desc_rpt_gamepad;

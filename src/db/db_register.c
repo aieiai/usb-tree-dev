@@ -16,37 +16,31 @@ rotsta_t db_register_kbd(void)
     result = obi_db_register();
     if (result != rotsta_success) {
         printf(TAG "obi_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     result = obm_db_register();
     if (result != rotsta_success) {
         printf(TAG "obm_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     result = obkp_db_register();
     if (result != rotsta_success) {
         printf(TAG "obkp_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     result = obmag_db_register();
     if (result != rotsta_success) {
         printf(TAG "obmag_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     result = oba_db_register();
     if (result != rotsta_success) {
         printf(TAG "oba_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     result = obr_db_register();
     if (result != rotsta_success) {
         printf(TAG "obr_db_register failed: 0x%08x\r\n", (unsigned)result);
-        return result;
     }
 
     return result;

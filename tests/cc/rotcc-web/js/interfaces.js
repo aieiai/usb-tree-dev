@@ -364,6 +364,9 @@ async function disconnect() {
     await device.close().catch(() => {});
   }
   device = null;
+  ccPopupSupported = null;
+  $chkPopup.checked = false;
+  $sysPopup.textContent = '驱动弹窗 --';
   destroyLinks();
   $status.textContent = '已断开。';
   btnConnect.disabled = false;

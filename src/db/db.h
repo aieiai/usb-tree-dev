@@ -1,6 +1,10 @@
 #ifndef DB_H
 #define DB_H
 
+
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include "rotsta.h"
 

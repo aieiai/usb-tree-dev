@@ -49,13 +49,17 @@ function refreshDebugControls() {
 function refreshSystemControls() {
   const busy = isFirmwareActive() || kcBusy || sysBusy || ccQueryPromise !== null;
   const ready = Boolean(device?.opened) && links.length > 0;
+  const popupSupported = ccPopupSupported === true;
   for (const btn of [$btnHandshake, $btnKeyCount, $btnSysReboot,
-                     $btnSysReset, $btnSysResetAll]) {
+                     $btnSysReset, $btnSysResetAll,
+                     $btnPopupSupport, $btnPopupRead]) {
     btn.disabled = busy || !ready;
   }
   for (const chk of [$chkResetKc, $chkResetRgb, $chkResetAdv]) {
     chk.disabled = busy || !ready;
   }
+  $btnPopupWrite.disabled = busy || !ready || !popupSupported;
+  $chkPopup.disabled = busy || !ready || !popupSupported;
 }
 
 function refreshParamControls() {

@@ -1,9 +1,4 @@
 #include "db.h"
-
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-
 #include "flash_layout.h"
 #include "hal_flash.h"
 #include "rotver.h"
@@ -27,24 +22,23 @@ typedef struct {
 } msg_t;
 
 typedef struct {
-    const msg_t *msg;
     void *buf;
     uint32_t buf_size;
     bool update;
     bool registered;
+    const msg_t msg;
 } item_t;
 
 
-static volatile item_t items[DB_ITEM_MAX];
-static const msg_t msgs[DB_ITEM_MAX] = {
-    [DB_ITEM_OBFAC] = { .offset = FLASH_OBF_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBF_SIZ,   .name = "db_obf, factory"   },
-    [DB_ITEM_OBMAG] = { .offset = FLASH_OBMAG_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBMAG_SIZ, .name = "db_obmag, magnet"  },
-    [DB_ITEM_OBCOM] = { .offset = FLASH_OBCOM_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBCOM_SIZ, .name = "db_obcom, common"  },
-    [DB_ITEM_OBI]   = { .offset = FLASH_OBI_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBI_SIZ,   .name = "db_obi, info"      },
-    [DB_ITEM_OBM]   = { .offset = FLASH_OBM_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBM_SIZ,   .name = "db_obm, mapping"   },
-    [DB_ITEM_OBA]   = { .offset = FLASH_OBA_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBA_SIZ,   .name = "db_oba, advanced"  },
-    [DB_ITEM_OBR]   = { .offset = FLASH_OBR_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBR_SIZ,   .name = "db_obr, rgb"       },
-    [DB_ITEM_OBKP]  = { .offset = FLASH_OBKP_ADDR  - FLASH_BASE_ADDR, .cap = FLASH_OBKP_SIZ,  .name = "db_obkp, property" },
+static volatile item_t items[DB_ITEM_MAX] = {
+    [DB_ITEM_OBFAC] = { .msg = { .offset = FLASH_OBF_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBF_SIZ,   .name = "db_obf   - factory"  } },
+    [DB_ITEM_OBMAG] = { .msg = { .offset = FLASH_OBMAG_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBMAG_SIZ, .name = "db_obmag - magnet"   } },
+    [DB_ITEM_OBCOM] = { .msg = { .offset = FLASH_OBCOM_ADDR - FLASH_BASE_ADDR, .cap = FLASH_OBCOM_SIZ, .name = "db_obcom - common"   } },
+    [DB_ITEM_OBI]   = { .msg = { .offset = FLASH_OBI_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBI_SIZ,   .name = "db_obi   - info"     } },
+    [DB_ITEM_OBM]   = { .msg = { .offset = FLASH_OBM_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBM_SIZ,   .name = "db_obm   - mapping"  } },
+    [DB_ITEM_OBA]   = { .msg = { .offset = FLASH_OBA_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBA_SIZ,   .name = "db_oba   - advanced" } },
+    [DB_ITEM_OBR]   = { .msg = { .offset = FLASH_OBR_ADDR   - FLASH_BASE_ADDR, .cap = FLASH_OBR_SIZ,   .name = "db_obr   - rgb"      } },
+    [DB_ITEM_OBKP]  = { .msg = { .offset = FLASH_OBKP_ADDR  - FLASH_BASE_ADDR, .cap = FLASH_OBKP_SIZ,  .name = "db_obkp  - property" } },
 };
 
 static TX_THREAD db_thread;
@@ -145,20 +139,19 @@ static rotsta_t _item_read(db_item_ty type)
     const volatile item_t *item = &items[type];
 
     memset(item->buf, 0, item->buf_size);
-    result = hal_flash_read(item->msg->offset, item->buf, item->buf_size);
+    result = hal_flash_read(item->msg.offset, item->buf, item->buf_size);
     if (result != rotsta_success) {
-        printf(TAG "read %s failed: 0x%08x\r\n", item->msg->name, (unsigned)result);
+        printf(TAG "read %s failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
     }
 
-    printf(TAG "%s loaded %u byte(s)\r\n", item->msg->name, (unsigned)item->buf_size);
+    printf(TAG "%s loaded %u byte\r\n", item->msg.name, (unsigned)item->buf_size);
     return rotsta_success;
 }
 
 static rotsta_t _item_write(db_item_ty type)
 {
     const volatile item_t *item;
-    const msg_t *msg;
     rotsta_t result;
     bool equal = false;
 
@@ -166,25 +159,33 @@ static rotsta_t _item_write(db_item_ty type)
         return rotsta_db_invalid_type;
     }
     item = &items[type];
-    msg = item->msg;
-    if ((!item->registered) || (item->buf == NULL) || (msg == NULL) || (item->buf_size == 0U) ||
-        ((item->buf_size & 3U) != 0U) || (item->buf_size > msg->cap)) {
+    if ((!item->registered) || (item->buf == NULL) || (item->buf_size == 0U) || ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg.cap)) {
         return rotsta_invalid_argument;
     }
 
     uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FLASH_SECTOR_SIZ);
-    result = hal_flash_compare(msg->offset, item->buf, item->buf_size, &equal);
+    result = hal_flash_compare(item->msg.offset, item->buf, item->buf_size, &equal);
     if (result != rotsta_success) {
+        printf(TAG "%s compare failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
     }
     if (equal) {
+        printf(TAG "%s not changed\r\n", item->msg.name);
         return rotsta_success;
     }
 
-    result = hal_flash_erase(msg->offset, erase_size);
-    if (result == rotsta_success) {
-        result = hal_flash_write(msg->offset, item->buf, item->buf_size);
+    result = hal_flash_erase(item->msg.offset, erase_size);
+    if (result != rotsta_success) {
+        printf(TAG "%s erase failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
+        return result;
     }
+
+    result = hal_flash_write(item->msg.offset, item->buf, item->buf_size);
+    if (result != rotsta_success) {
+        printf(TAG "%s write failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
+        return result;
+    }
+    printf(TAG "%s written %u byte\r\n", item->msg.name, (unsigned)item->buf_size);
     return result;
 }
 
@@ -195,8 +196,7 @@ static rotsta_t _save_type(db_item_ty type)
     uint32_t generation;
     rotsta_t result;
 
-    if ((!item->registered) || (item->buf == NULL) || (item->msg == NULL) || (item->buf_size == 0U) || 
-        ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg->cap)) {
+    if ((!item->registered) || (item->buf == NULL) || (item->buf_size == 0U) || ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg.cap)) {
         return rotsta_db_save_fail;
     }
     if (!_mutex_lock(&s_data_mutex)) {
@@ -218,7 +218,7 @@ static rotsta_t _save_type(db_item_ty type)
     _mutex_unlock(&s_data_mutex);
 
     if (result != rotsta_success) {
-        printf(TAG "save %s failed: 0x%08x\r\n", item->msg->name, (unsigned)result);
+        printf(TAG "save %s failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
     }
     return result;
 }
@@ -242,8 +242,7 @@ static void db_thread_entry(ULONG argument)
 
             saved_now = false;
             for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
-                if (((dirty & DB_ITEM_BIT(i)) != 0U) &&
-                    ((now_mask & DB_ITEM_BIT(i)) != 0U)) {
+                if (((dirty & DB_ITEM_BIT(i)) != 0U) && ((now_mask & DB_ITEM_BIT(i)) != 0U)) {
                     (void)_save_type((db_item_ty)i);
                     saved_now = true;
                 }
@@ -282,7 +281,7 @@ rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
     if (!_type_valid(type)) {
         return rotsta_db_invalid_type;
     }
-    if ((buf == NULL) || (buf_size == 0U) || ((buf_size & 3U) != 0U) || (buf_size > msgs[type].cap)) {
+    if ((buf == NULL) || (buf_size == 0U) || ((buf_size & 3U) != 0U) || (buf_size > items[type].msg.cap)) {
         return rotsta_invalid_argument;
     }
 
@@ -295,7 +294,6 @@ rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
     item->buf_size   = buf_size;
     item->update     = false;
     item->registered = true;
-    item->msg        = &msgs[type];
 
     s_generation[type]  = 0U;
     s_save_result[type] = rotsta_success;
@@ -306,7 +304,6 @@ rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
         item->buf_size = 0U;
         item->update = false;
         item->registered = false;
-        item->msg = NULL;
     }
     return result;
 }
@@ -339,7 +336,7 @@ rotsta_t db_update(db_item_ty type, db_save_ty save_type)
         _sem_post(&s_wake_sem);
     }
 
-    if ((result == rotsta_success) && now) {
+    if ((result == rotsta_success) && now && (tx_thread_identify() != TX_NULL)) {
         while (_type_is_dirty(type)) {
             if (!_sem_wait(&s_done_sem, DB_NOW_TIMEOUT_MS)) {
                 result = rotsta_timeout;
@@ -373,11 +370,6 @@ rotsta_t db_init(void)
         return rotsta_db_init_fail;
     }
 
-    result = db_register_kbd();
-    if (result != rotsta_success) {
-        return rotsta_db_register_fail;
-    }
-
     if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "db_api", TX_INHERIT)) ||
         (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "db_data", TX_INHERIT)) ||
         (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "db_wake", 0U)) ||
@@ -391,10 +383,12 @@ rotsta_t db_init(void)
     if (TX_SUCCESS != tx_thread_create(&db_thread, "db_thread", db_thread_entry, 0U, db_thread_stack, sizeof(db_thread_stack), DB_THREAD_PRIORITY, DB_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START)) {
         return rotsta_db_init_fail;
     }
-    s_initialized = true;
 
-    if (s_dirty_mask != 0U) {
-        _sem_post(&s_wake_sem);
+    s_initialized = true;
+    result = db_register_kbd();
+    if (result != rotsta_success) {
+        return rotsta_db_register_fail;
     }
+
     return rotsta_success;
 }

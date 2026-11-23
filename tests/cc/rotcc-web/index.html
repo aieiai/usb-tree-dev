@@ -104,8 +104,9 @@
           <span id="sysProtocol" class="muted">协议版本 --</span>
         </div>
         <div class="hint">
-          系统命令：握手读取协议版本，按键数量用于校验当前键盘，重置可分别恢复改键、
-          灯光与高级键模块，恢复出厂等价于下发 0xFFFFFFFF。
+          系统命令：握手读取协议版本，按键数量用于校验当前键盘，驱动弹窗控制重新枚举时
+          是否声明 WebUSB 跳转能力，重置可分别恢复改键、灯光与高级键模块，
+          恢复出厂等价于下发 0xFFFFFFFF。
         </div>
         <div class="upgrade-body">
           <div class="upgrade-row">
@@ -113,6 +114,13 @@
             <button id="btnKeyCount" class="secondary" disabled>按键数量</button>
             <span id="sysKeyCount" class="muted">--</span>
             <button id="btnSysReboot" class="secondary" disabled>重启设备</button>
+          </div>
+          <div class="upgrade-row">
+            <button id="btnPopupSupport" class="secondary" disabled>检查弹窗支持</button>
+            <button id="btnPopupRead" class="secondary" disabled>读取弹窗</button>
+            <label><input id="chkPopup" type="checkbox" disabled> 驱动弹窗</label>
+            <button id="btnPopupWrite" class="secondary" disabled>写入弹窗</button>
+            <span id="sysPopup" class="muted">驱动弹窗 --</span>
           </div>
           <div class="upgrade-row">
             <label><input id="chkResetKc" type="checkbox" checked> 改键</label>

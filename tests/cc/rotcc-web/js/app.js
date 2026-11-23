@@ -57,6 +57,13 @@ $btnKeyCount.addEventListener('click', () => {
   queryKeyCount().catch(() => {});
 });
 $btnSysReboot.addEventListener('click', rebootDevice);
+$btnPopupSupport.addEventListener('click', () => {
+  queryPopupSupport().catch(() => {});
+});
+$btnPopupRead.addEventListener('click', () => {
+  queryPopupState().catch(() => {});
+});
+$btnPopupWrite.addEventListener('click', writePopupState);
 $btnSysReset.addEventListener('click', () => {
   let options = 0;
   if ($chkResetKc.checked) options |= SYS_RESET_KC;

@@ -69,7 +69,7 @@ typedef struct {
     kevt_pos_ty pos;
     kevt_act_ty act;
 
-    // ktp_para_t *type_para;
+    const void *axis_para;
     uint16_t act_tk;
     uint16_t val;  /* value */
     uint16_t valp; /* value pre */
