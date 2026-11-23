@@ -9,9 +9,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+bool keyrt_enabled(uint8_t ki);
 void keyrt_init(void);
 void keyrt_reset(uint8_t ki);
-void keyrt_reset_force(uint8_t ki);
 void keyrt_process(uint8_t ki);
 
 #endif  /* KEY_RAPID_TRIGGER_H */

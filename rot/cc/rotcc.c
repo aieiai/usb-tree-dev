@@ -253,8 +253,7 @@ bool rotcc_is_busy(void)
 bool rotcc_wait_idle(uint32_t timeout_ms)
 {
     ULONG start = tx_time_get();
-    ULONG timeout_ticks =
-        (timeout_ms * TX_TIMER_TICKS_PER_SECOND + 999U) / 1000U;
+    ULONG timeout_ticks = (timeout_ms * TX_TIMER_TICKS_PER_SECOND + 999U) / 1000U;
 
     while (rotcc_is_busy()) {
         if ((ULONG)(tx_time_get() - start) >= timeout_ticks) {

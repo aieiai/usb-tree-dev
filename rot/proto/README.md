@@ -52,11 +52,11 @@
 | 0x02/0x07 触发模式 | 4 | `u32 ktrg_ty` |
 | 0x02/0x09 死区 | 4 | `{u16 dst_t; u16 dst_b}` |
 | 0x02/0x0b 常规触发 | 4 | `{u16 dst_p; u16 dst_r}` |
-| 0x02/0x0d 快速触发 | 6 | `{u16 flags(en:1, ctn_en:1); u16 dst_p; u16 dst_r}` |
+| 0x02/0x0d 快速触发 | 4 | `{u16 dst_p; u16 dst_r}` |
 | 0x03/0x01 按键轴体 | 1 | `u8 kaxis_ty`，必须是支持列表中的值 |
 
-tick 参数（0x02/0x05、0x06）没有按键范围，payload 为 12 字节
-`{u16 sclt; u16 sclto; u16 dcit; u16 dclt; u16 dclto; u16 rsv}`，
+tick 参数（0x02/0x05、0x06）没有按键范围，payload 为 8 字节
+`{u16 sclt; u16 sclto; u16 dclt; u16 dclto}`（单位 ms），
 设置时应用到全部按键。轴体支持列表（0x03/0x00）响应为每个支持轴体 1 字节。
 
 升级命令：

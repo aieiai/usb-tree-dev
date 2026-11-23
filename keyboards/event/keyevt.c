@@ -23,15 +23,7 @@ typedef enum {
 
 typedef struct {
     uint32_t cnt;
-    uint32_t sclt;
-    uint32_t sclto;
-    uint32_t dclt;
-    uint32_t dclto;
-} ktk_t;
-
-typedef struct {
     kact_sta_ty sta;
-    ktk_t tk;
 } msg_t;
 
 static msg_t msg[KBD_KEY_MAX];
@@ -58,6 +50,7 @@ keyevt_t g_keyevt[KBD_KEY_MAX] = {0};
 static __inline kevt_act_ty _act_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
+    keyattr_t *p_attr = &g_obkp.attr[ki];
     msg_t *p_msg = &msg[ki];
 
     switch (p_msg->sta) {
@@ -67,78 +60,78 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
             }
             else {
                 p_msg->sta = KACT_STA_SC;
-                p_msg->tk.cnt  = 0;
+                p_msg->cnt  = 0;
             }
         break;
 
         case KACT_STA_SC:
             if (EVT_IS_U(p_evt->trg)) {
-                p_msg->tk.cnt  = 0;
+                p_msg->cnt  = 0;
                 p_msg->sta = KACT_STA_SCN;
             }
             else {
-                if (p_msg->tk.cnt >= p_msg->tk.sclt) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.sclt)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_SCL;
                 }
                 else {
-                    p_msg->tk.cnt++;
+                    p_msg->cnt++;
                 }
             }
         break;
 
         case KACT_STA_SCN:
             if (EVT_IS_D(p_evt->trg)) {
-                p_msg->tk.cnt  = 0;
+                p_msg->cnt  = 0;
                 p_msg->sta = KACT_STA_DC;
             }
             else {
-                if (p_msg->tk.cnt >= p_msg->tk.dclt) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.dclt)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_SC; /* click */
                 }
                 else {
-                    p_msg->tk.cnt++;
+                    p_msg->cnt++;
                 }
             }
         break;
 
         case KACT_STA_DC:
             if (EVT_IS_U(p_evt->trg)) {
-                p_msg->tk.cnt  = 0;
+                p_msg->cnt  = 0;
                 p_msg->sta = KACT_STA_IDLE;
                 p_evt->act = KEVT_ACT_DC; /* double click */
             }
             else {
-                if (p_msg->tk.cnt >= p_msg->tk.dclt) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.dclt)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_DCL;
                 }
                 else {
-                    p_msg->tk.cnt++;
+                    p_msg->cnt++;
                 }
             }
         break;
 
         case KACT_STA_SCL:
             if (EVT_IS_D(p_evt->trg)) {
-                if (p_msg->tk.cnt >= p_msg->tk.sclto) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.sclto)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_UP;
                     p_evt->act = KEVT_ACT_SCLTO; /* click long timeout */
                 }
                 else {
-                    p_msg->tk.cnt++;
+                    p_msg->cnt++;
                 }
             }
             else {
-                if (p_msg->tk.cnt >= p_msg->tk.sclto) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.sclto)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                 }
                 else {
-                    p_msg->tk.cnt  = 0;
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_SCL; /* click long */
                 }
@@ -147,22 +140,22 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
 
         case KACT_STA_DCL:
             if (EVT_IS_D(p_evt->trg)) {
-                if (p_msg->tk.cnt >= p_msg->tk.dclto) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.dclto)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_UP;
                     p_evt->act = KEVT_ACT_DCLTO; /* double click long timeout */
                 }
                 else {
-                    p_msg->tk.cnt++;
+                    p_msg->cnt++;
                 }
             }
             else {
-                if (p_msg->tk.cnt >= p_msg->tk.dclto) {
-                    p_msg->tk.cnt  = 0;
+                if (p_msg->cnt >= MS2TK(p_attr->act.dclto)) {
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                 }
                 else {
-                    p_msg->tk.cnt  = 0;
+                    p_msg->cnt  = 0;
                     p_msg->sta = KACT_STA_IDLE;
                     p_evt->act = KEVT_ACT_DCL; /* double click long */
                 }

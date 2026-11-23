@@ -21,11 +21,11 @@ extern "C" {
 /* Per-key commands: payload starts with {start, end}, followed by one entry per key. */
 #define ROTCC_KC_RANGE_HEADER_LEN   (2U)
 #define ROTCC_KC_CODE_LEN           (4U)
-#define ROTCC_KC_TICK_LEN           (12U)
+#define ROTCC_KC_TICK_LEN           (8U)
 #define ROTCC_KC_TRG_LEN            (4U)
 #define ROTCC_KC_DZ_LEN             (4U)
 #define ROTCC_KC_NOM_LEN            (4U)
-#define ROTCC_KC_RT_LEN             (6U)
+#define ROTCC_KC_RT_LEN             (4U)
 
 enum {
     ROTCC_CMD_SYS = 0x00,

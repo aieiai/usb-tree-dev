@@ -32,10 +32,10 @@ static bool _str_terminated(const uint8_t *str, uint32_t size)
 
 static bool _obi_valid(void)
 {
-    if ((g_obi.fs.gp_mode >= KPROP_GP_MAX) ||
+    if ((g_obi.pi.vid == 0U) || (g_obi.pi.pid == 0U) || 
+        (g_obi.fs.gp_mode >= KPROP_GP_MAX) || 
         (g_obi.fs.link_mode >= KPROP_LINK_MAX) ||
-        (g_obi.pm.en > 1U) ||
-        (g_obi.pi.vid == 0U) || (g_obi.pi.pid == 0U)) {
+        (g_obi.pm.en > 1U)) {
         return false;
     }
     return _str_terminated(g_obi.name, sizeof(g_obi.name)) &&
@@ -48,7 +48,7 @@ static bool _obi_valid(void)
 static bool _obkp_valid(void)
 {
     if ((g_obkp.magic != MAGIC_OBKP) || (g_obkp.version != OBKP_VER) ||
-        !_str_terminated(g_obkp.name, sizeof(g_obkp.name))) {
+        (!_str_terminated(g_obkp.name, sizeof(g_obkp.name)))) {
         return false;
     }
 
@@ -56,7 +56,7 @@ static bool _obkp_valid(void)
         const keyattr_t *p_attr = &g_obkp.attr[ki];
         int trg = (int)p_attr->trg_ty;
 
-        if ((trg < (int)KTRG_TY_NOM) || (trg > (int)KTRG_TY_RT_CTN)) {
+        if ((trg < (int)KTRG_TY_NOM) || (trg >= (int)KTRG_TY_MAX)) {
             return false;
         }
         if (((uint32_t)p_attr->axis.ty >= (uint32_t)KAXIS_MAX) ||
@@ -67,6 +67,28 @@ static bool _obkp_valid(void)
     return true;
 }
 
+static void _obkp_load_single_defaults(uint8_t ki)
+{
+    keyattr_t *p_attr = &g_obkp.attr[ki];
+
+    p_attr->trg_ty = KTRG_TY_NOM;
+    p_attr->axis.ty = KAXIS_BB;
+    p_attr->axis.udef_ty = KAXIS_UDEF0;
+    
+    p_attr->act.sclt  = OBKP_DFT_ACT_SCLT;
+    p_attr->act.sclto = OBKP_DFT_ACT_SCLTO;
+    p_attr->act.dclt  = OBKP_DFT_ACT_DCLT;
+    p_attr->act.dclto = OBKP_DFT_ACT_DCLTO;
+    
+    p_attr->nom.dst_p = OBKP_DFT_NOM_DST_P;
+    p_attr->nom.dst_r = OBKP_DFT_NOM_DST_R;
+    
+    p_attr->dz.dst_t = OBKP_DFT_DZ_DST_T;
+    p_attr->dz.dst_b = OBKP_DFT_DZ_DST_B;
+    
+    p_attr->rt.dst_p = OBKP_DFT_RT_DST_P;
+    p_attr->rt.dst_r = OBKP_DFT_RT_DST_R;
+}
 static void _obkp_load_defaults(void)
 {
     memset(&g_obkp, 0, sizeof(g_obkp));
@@ -75,11 +97,7 @@ static void _obkp_load_defaults(void)
     _obi_set_str(g_obkp.name, sizeof(g_obkp.name), "Trace40");
 
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        keyattr_t *p_attr = &g_obkp.attr[ki];
-
-        p_attr->trg_ty = KTRG_TY_NOM;
-        p_attr->axis.ty = KAXIS_BB;
-        p_attr->axis.udef_ty = KAXIS_UDEF0;
+        _obkp_load_single_defaults(ki);
     }
 }
 

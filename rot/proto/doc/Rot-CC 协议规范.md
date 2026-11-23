@@ -144,14 +144,14 @@
 |0x02|0x04|0x0000|0\-3 byte|当前活动层|
 |0x02|0x04|0x0000|0\-3 byte|0x00: succeed|
 
-### 获取按键tick参数
+### 获取按键tick参数(unit:ms)
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
 |0x02|0x05|0x0000|||
-|0x02|0x05|0x0000|0\-11 byte|```C++<br>struct {<br>    uint16_t sclt;<br>    uint16_t sclto;<br>    uint16_t dcit;<br>    uint16_t dclt;<br>    uint16_t dclto;<br>    uint16_t rsv;<br>} tk; /* tick */<br>```|
+|0x02|0x05|0x0000|0\-11 byte|```C++<br>struct {<br>    uint16_t sclt;<br>    uint16_t sclto;<br>    uint16_t dclt;<br>    uint16_t dclto;<br>} tk; /* tick */<br>```|
 
-### 设置按键tick参数
+### 设置按键tick参数(unit:ms)
 
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
@@ -205,7 +205,7 @@
 |cmd|subcmd|reserve|payload|explain|
 |---|---|---|---|---|
 |0x02|0x0d|0x0000||byte0: start key id<br>byte1: end key id<br>byte2: 各按键id参数|
-|0x02|0x0d|0x0000|0\-5 byte|```C++<br>struct __attribute__((packed)) {<br>    uint16_t en     : 1;<br>    uint16_t ctn_en : 1;<br>    uint16_t rsv    : 14;<br>    uint16_t dst_p;     /* rapid trigger sensitivity press dist */<br>    uint16_t dst_r;     /* rapid trigger sensitivity raise dist */<br>} rt;<br>```|
+|0x02|0x0d|0x0000|0\-5 byte|```C++<br>struct __attribute__((packed)) {<br>    uint16_t dst_p;     /* rapid trigger sensitivity press dist */<br>    uint16_t dst_r;     /* rapid trigger sensitivity raise dist */<br>} rt;<br>```|
 
 ### 设置快速触发参数
 

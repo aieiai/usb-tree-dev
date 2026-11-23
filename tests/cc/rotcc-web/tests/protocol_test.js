@@ -123,10 +123,10 @@ class MockDevice {
       trg: 0,
       dz: { dst_t: 0, dst_b: 0 },
       nom: { dst_p: 0, dst_r: 0 },
-      rt: { en: 0, ctn_en: 0, dst_p: 0, dst_r: 0 },
+      rt: { dst_p: 0, dst_r: 0 },
       axis: 0
     }));
-    this.tick = { sclt: 0, sclto: 0, dcit: 0, dclt: 0, dclto: 0 };
+    this.tick = { sclt: 0, sclto: 0, dclt: 0, dclto: 0 };
     this.axisSupport = [0, 1]; /* KAXIS_BB, KAXIS_GDL */
     this.resetRequests = [];
     this.rebooted = false;
@@ -270,22 +270,20 @@ class MockDevice {
       }
       case CC.KC_TICK_GET: {
         if (msg.payload.length !== 0) return status(3);
-        const out = new Uint8Array(12);
+        const out = new Uint8Array(8);
         const values = [
-          this.tick.sclt, this.tick.sclto, this.tick.dcit,
-          this.tick.dclt, this.tick.dclto, 0
+          this.tick.sclt, this.tick.sclto, this.tick.dclt, this.tick.dclto
         ];
         values.forEach((value, i) => api.writeLe16(out, i * 2, value));
         return reply(out);
       }
       case CC.KC_TICK_SET: {
-        if (msg.payload.length !== 12) return status(3);
+        if (msg.payload.length !== 8) return status(3);
         this.tick = {
           sclt: api.readLe16(msg.payload, 0),
           sclto: api.readLe16(msg.payload, 2),
-          dcit: api.readLe16(msg.payload, 4),
-          dclt: api.readLe16(msg.payload, 6),
-          dclto: api.readLe16(msg.payload, 8)
+          dclt: api.readLe16(msg.payload, 4),
+          dclto: api.readLe16(msg.payload, 6)
         };
         return status(0);
       }
@@ -355,26 +353,21 @@ class MockDevice {
       case CC.KC_RT_GET: {
         const range = this.keyRange(msg.payload, 0);
         if (!range) return status(3);
-        const out = new Uint8Array(range.count * 6);
+        const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
           const rt = this.attributes[range.start + i].rt;
-          const flags = (rt.en & 1) | ((rt.ctn_en & 1) << 1);
-          api.writeLe16(out, i * 6, flags);
-          api.writeLe16(out, i * 6 + 2, rt.dst_p);
-          api.writeLe16(out, i * 6 + 4, rt.dst_r);
+          api.writeLe16(out, i * 4, rt.dst_p);
+          api.writeLe16(out, i * 4 + 2, rt.dst_r);
         }
         return reply(out);
       }
       case CC.KC_RT_SET: {
-        const range = this.keyRange(msg.payload, 6);
+        const range = this.keyRange(msg.payload, 4);
         if (!range) return status(3);
         for (let i = 0; i < range.count; i++) {
-          const flags = api.readLe16(msg.payload, 2 + i * 6);
           this.attributes[range.start + i].rt = {
-            en: flags & 1,
-            ctn_en: (flags >> 1) & 1,
-            dst_p: api.readLe16(msg.payload, 2 + i * 6 + 2),
-            dst_r: api.readLe16(msg.payload, 2 + i * 6 + 4)
+            dst_p: api.readLe16(msg.payload, 2 + i * 4),
+            dst_r: api.readLe16(msg.payload, 2 + i * 4 + 2)
           };
         }
         return status(0);
@@ -661,21 +654,20 @@ async function main() {
   });
 
   await test('按键 tick 参数读写', async () => {
-    const values = [100, 200, 300, 400, 500];
-    const payload = new Uint8Array(12);
+    const values = [100, 200, 300, 400];
+    const payload = new Uint8Array(8);
     values.forEach((value, i) => api.writeLe16(payload, i * 2, value));
     await client.statusRequest(CC.CMD_KC, CC.KC_TICK_SET, {
       payload,
       label: '写 tick'
     });
 
-    const got = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 12, {
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 8, {
       label: '读 tick'
     });
     values.forEach((value, i) => {
       assert.strictEqual(api.readLe16(got, i * 2), value);
     });
-    assert.strictEqual(api.readLe16(got, 10), 0);
   });
 
   await test('按键触发模式范围读写', async () => {
@@ -744,30 +736,26 @@ async function main() {
   });
 
   await test('按键快速触发参数范围读写', async () => {
-    const payload = new Uint8Array(2 + 2 * 6);
+    const payload = new Uint8Array(2 + 2 * 4);
     payload[0] = 24;
     payload[1] = 25;
-    api.writeLe16(payload, 2, 0x3);
-    api.writeLe16(payload, 4, 150);
-    api.writeLe16(payload, 6, 250);
-    api.writeLe16(payload, 8, 0x1);
-    api.writeLe16(payload, 10, 350);
-    api.writeLe16(payload, 12, 450);
+    api.writeLe16(payload, 2, 150);
+    api.writeLe16(payload, 4, 250);
+    api.writeLe16(payload, 6, 350);
+    api.writeLe16(payload, 8, 450);
     await client.statusRequest(CC.CMD_KC, CC.KC_RT_SET, {
       payload,
       label: '写快速触发'
     });
 
-    const got = await client.readPayload(CC.CMD_KC, CC.KC_RT_GET, 12, {
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_RT_GET, 8, {
       payload: Uint8Array.of(24, 25),
       label: '读快速触发'
     });
-    assert.strictEqual(api.readLe16(got, 0), 0x3);
-    assert.strictEqual(api.readLe16(got, 2), 150);
-    assert.strictEqual(api.readLe16(got, 4), 250);
-    assert.strictEqual(api.readLe16(got, 6), 0x1);
-    assert.strictEqual(api.readLe16(got, 8), 350);
-    assert.strictEqual(api.readLe16(got, 10), 450);
+    assert.strictEqual(api.readLe16(got, 0), 150);
+    assert.strictEqual(api.readLe16(got, 2), 250);
+    assert.strictEqual(api.readLe16(got, 4), 350);
+    assert.strictEqual(api.readLe16(got, 6), 450);
   });
 
   await test('轴体列表与按键轴体设置', async () => {

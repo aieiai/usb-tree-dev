@@ -6,12 +6,12 @@ const PARAM_TABS = [
   { id: 'trg', name: '触发模式', get: CC.KC_TRG_GET, set: CC.KC_TRG_SET, size: 4 },
   { id: 'dz', name: '死区', get: CC.KC_DZ_GET, set: CC.KC_DZ_SET, size: 4 },
   { id: 'nom', name: '常规触发', get: CC.KC_NOM_GET, set: CC.KC_NOM_SET, size: 4 },
-  { id: 'rt', name: '快速触发', get: CC.KC_RT_GET, set: CC.KC_RT_SET, size: 6 },
-  { id: 'tick', name: 'tick 参数', get: CC.KC_TICK_GET, set: CC.KC_TICK_SET, size: 12 }
+  { id: 'rt', name: '快速触发', get: CC.KC_RT_GET, set: CC.KC_RT_SET, size: 4 },
+  { id: 'tick', name: 'tick 参数', get: CC.KC_TICK_GET, set: CC.KC_TICK_SET, size: 8 }
 ];
 
 const KTRG_LABELS = ['常规', '快速触发', '快速触发(持续)'];
-const TICK_LABELS = ['sclt', 'sclto', 'dcit', 'dclt', 'dclto'];
+const TICK_LABELS = ['sclt', 'sclto', 'dclt', 'dclto'];
 
 let paramTab = PARAM_TABS[0];
 let paramKeyEls = new Map();
@@ -194,13 +194,6 @@ function formNumberInput(value) {
   return input;
 }
 
-function formCheckbox(checked) {
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.checked = Boolean(checked);
-  return input;
-}
-
 function formSelect(labels, value) {
   const select = document.createElement('select');
   labels.forEach((label, index) => {
@@ -245,13 +238,9 @@ function renderParamForm(values) {
     grid.appendChild(formField(labels[0], a));
     grid.appendChild(formField(labels[1], b));
   } else {
-    const en = formCheckbox(values ? values.en : false);
-    const ctn = formCheckbox(values ? values.ctn : false);
     const a = formNumberInput(values ? values.a : 0);
     const b = formNumberInput(values ? values.b : 0);
-    paramFormRefs = { en, ctn, a, b };
-    grid.appendChild(formField('启用', en));
-    grid.appendChild(formField('持续触发', ctn));
+    paramFormRefs = { a, b };
     grid.appendChild(formField('按下灵敏度', a));
     grid.appendChild(formField('抬起灵敏度', b));
   }
@@ -265,19 +254,13 @@ function parseParamEntry(tab, payload, index) {
       return { trg: readLe32(payload, index * 4) };
     case 'dz':
     case 'nom':
+    case 'rt':
       return {
         a: readLe16(payload, index * 4),
         b: readLe16(payload, index * 4 + 2)
       };
-    default: {
-      const flags = readLe16(payload, index * 6);
-      return {
-        en: (flags & 0x1) !== 0,
-        ctn: (flags & 0x2) !== 0,
-        a: readLe16(payload, index * 6 + 2),
-        b: readLe16(payload, index * 6 + 4)
-      };
-    }
+    default:
+      return null;
   }
 }
 
@@ -285,15 +268,7 @@ function readParamForm() {
   if (paramTab.id === 'trg') {
     return { trg: Number(paramFormRefs.trg.value) || 0 };
   }
-  if ((paramTab.id === 'dz') || (paramTab.id === 'nom')) {
-    return {
-      a: paramNumber(paramFormRefs.a.value),
-      b: paramNumber(paramFormRefs.b.value)
-    };
-  }
   return {
-    en: paramFormRefs.en.checked,
-    ctn: paramFormRefs.ctn.checked,
     a: paramNumber(paramFormRefs.a.value),
     b: paramNumber(paramFormRefs.b.value)
   };
@@ -302,14 +277,9 @@ function readParamForm() {
 function writeParamEntry(tab, payload, offset, values) {
   if (tab.id === 'trg') {
     writeLe32(payload, offset, values.trg);
-  } else if ((tab.id === 'dz') || (tab.id === 'nom')) {
+  } else {
     writeLe16(payload, offset, values.a);
     writeLe16(payload, offset + 2, values.b);
-  } else {
-    const flags = (values.en ? 0x1 : 0) | (values.ctn ? 0x2 : 0);
-    writeLe16(payload, offset, flags);
-    writeLe16(payload, offset + 2, values.a);
-    writeLe16(payload, offset + 4, values.b);
   }
 }
 
@@ -350,7 +320,7 @@ async function readParamValues() {
     if (tick) {
       setParamState('读取 tick...');
       await ccCall(target, async client => {
-        const payload = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 12, {
+        const payload = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 8, {
           label: '读取 tick',
           timeoutMs: 3000
         });
@@ -433,7 +403,7 @@ async function writeParamValues() {
   refreshControls();
   try {
     if (tick) {
-      const payload = new Uint8Array(12);
+      const payload = new Uint8Array(8);
       tickValues.forEach((value, i) => {
         writeLe16(payload, i * 2, value);
       });

@@ -16,34 +16,55 @@
 #include "keymagnet.h"
 #include "keyaxis.h"
 #include "keycode.h"
+#include "keycore.h"
 
 #define MAGIC_OBKP 0x79890001U /* OBKP */
 #define OBKP_VER 0U
+
+
+#define OBKP_DFT_TRG_TY             (KTRG_TY_NOM)
+#define OBKP_DFT_AXIS_TY            (KAXIS_BB)
+#define OBKP_DFT_AXIS_UDEF_TY       (KAXIS_UDEF0)
+
+#define OBKP_DFT_ACT_SCLT           1
+#define OBKP_DFT_ACT_SCLTO          2
+#define OBKP_DFT_ACT_DCLT           3
+#define OBKP_DFT_ACT_DCLTO          4
+
+#define OBKP_DFT_DZ_DST_T           MM2UM(0.0f)
+#define OBKP_DFT_DZ_DST_B           MM2UM(0.0f)
+#define OBKP_DFT_NOM_DST_P          MM2UM(1.0f)
+#define OBKP_DFT_NOM_DST_R_OFFSET   MM2UM(-0.1f)
+#define OBKP_DFT_NOM_DST_R          (OBKP_DFT_NOM_DST_P + OBKP_DFT_NOM_DST_R_OFFSET)
+#define OBKP_DFT_RT_DST_P           MM2UM(0.2f)
+#define OBKP_DFT_RT_DST_R           MM2UM(0.2f)
 
 
 typedef enum {
     KPROP_LINK_USB = 0,
     KPROP_LINK_BT,
     KPROP_LINK_RADIO,
-    KPROP_LINK_MAX,
+    KPROP_LINK_MAX
 } kprop_link_ty;
 
 typedef enum {
     KPROP_GP_OFF = 0,
     KPROP_GP_HID,
     KPROP_GP_XBOX,
-    KPROP_GP_MAX,
+    KPROP_GP_MAX
 } kprop_gp_ty;
 
 typedef enum {
     KTRG_TY_NOM = 0,
     KTRG_TY_RT,
     KTRG_TY_RT_CTN,
+    KTRG_TY_MAX
 } ktrg_ty;
 
 typedef struct {
     uint32_t crc32;
     ktrg_ty trg_ty;
+
     struct __attribute__((packed)) {
         kaxis_ty ty;
         kaxis_udef_ty udef_ty;
@@ -51,22 +72,18 @@ typedef struct {
     struct __attribute__((packed)) {
         uint16_t sclt;
         uint16_t sclto;
-        uint16_t dcit;
         uint16_t dclt;
         uint16_t dclto;
-    } tk; /* tick */
-    struct __attribute__((packed)) {
-        uint16_t dst_p;      /* normal press dist */
-        uint16_t dst_r;      /* normal raise dist */
-    } nom;
+    } act;
     struct __attribute__((packed)) {
         uint16_t dst_t;     /* top dead zero dist */
         uint16_t dst_b;     /* bot dead zero dist */
     } dz;
     struct __attribute__((packed)) {
-        uint16_t en     : 1;
-        uint16_t ctn_en : 1;
-        uint16_t rsv    : 14;
+        uint16_t dst_p;      /* normal press dist */
+        uint16_t dst_r;      /* normal raise dist */
+    } nom;
+    struct __attribute__((packed)) {
         uint16_t dst_p;     /* rapid trigger sensitivity press dist */
         uint16_t dst_r;     /* rapid trigger sensitivity raise dist */
     } rt;

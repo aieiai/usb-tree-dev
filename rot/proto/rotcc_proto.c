@@ -536,12 +536,10 @@ static void _handle_kc_tick_get(const rotcc_msg_t *msg)
         return;
     }
 
-    rotutil_put_le16(&s_key_payload[0], p_attr->tk.sclt);
-    rotutil_put_le16(&s_key_payload[2], p_attr->tk.sclto);
-    rotutil_put_le16(&s_key_payload[4], p_attr->tk.dcit);
-    rotutil_put_le16(&s_key_payload[6], p_attr->tk.dclt);
-    rotutil_put_le16(&s_key_payload[8], p_attr->tk.dclto);
-    rotutil_put_le16(&s_key_payload[10], 0U);
+    rotutil_put_le16(&s_key_payload[0], p_attr->act.sclt);
+    rotutil_put_le16(&s_key_payload[2], p_attr->act.sclto);
+    rotutil_put_le16(&s_key_payload[4], p_attr->act.dclt);
+    rotutil_put_le16(&s_key_payload[6], p_attr->act.dclto);
     (void)rotcc_proto_reply(msg, s_key_payload, ROTCC_KC_TICK_LEN);
 }
 
@@ -558,11 +556,10 @@ static void _handle_kc_tick_set(const rotcc_msg_t *msg)
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         keyattr_t *p_attr = &g_obkp.attr[ki];
 
-        p_attr->tk.sclt = rotutil_get_le16(&msg->payload[0]);
-        p_attr->tk.sclto = rotutil_get_le16(&msg->payload[2]);
-        p_attr->tk.dcit = rotutil_get_le16(&msg->payload[4]);
-        p_attr->tk.dclt = rotutil_get_le16(&msg->payload[6]);
-        p_attr->tk.dclto = rotutil_get_le16(&msg->payload[8]);
+        p_attr->act.sclt = rotutil_get_le16(&msg->payload[0]);
+        p_attr->act.sclto = rotutil_get_le16(&msg->payload[2]);
+        p_attr->act.dclt = rotutil_get_le16(&msg->payload[4]);
+        p_attr->act.dclto = rotutil_get_le16(&msg->payload[6]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -720,11 +717,9 @@ static void _handle_kc_rt_get(const rotcc_msg_t *msg)
 
     for (uint32_t i = 0U; i < count; i++) {
         const keyattr_t *p_attr = &g_obkp.attr[start + i];
-        uint16_t flags = (uint16_t)((p_attr->rt.en & 0x1U) | ((p_attr->rt.ctn_en & 0x1U) << 1));
 
-        rotutil_put_le16(&s_key_payload[offset], flags);
-        rotutil_put_le16(&s_key_payload[offset + 2U], p_attr->rt.dst_p);
-        rotutil_put_le16(&s_key_payload[offset + 4U], p_attr->rt.dst_r);
+        rotutil_put_le16(&s_key_payload[offset + 0U], p_attr->rt.dst_p);
+        rotutil_put_le16(&s_key_payload[offset + 2U], p_attr->rt.dst_r);
         offset += ROTCC_KC_RT_LEN;
     }
     (void)rotcc_proto_reply(msg, s_key_payload, (uint16_t)offset);
@@ -745,13 +740,9 @@ static void _handle_kc_rt_set(const rotcc_msg_t *msg)
     for (uint32_t i = 0U; i < count; i++) {
         keyattr_t *p_attr = &g_obkp.attr[start + i];
         uint32_t offset = ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_RT_LEN);
-        uint16_t flags = rotutil_get_le16(&msg->payload[offset]);
 
-        p_attr->rt.en = (uint16_t)(flags & 0x1U);
-        p_attr->rt.ctn_en = (uint16_t)((flags >> 1) & 0x1U);
-        p_attr->rt.rsv = 0U;
-        p_attr->rt.dst_p = rotutil_get_le16(&msg->payload[offset + 2U]);
-        p_attr->rt.dst_r = rotutil_get_le16(&msg->payload[offset + 4U]);
+        p_attr->rt.dst_p = rotutil_get_le16(&msg->payload[offset + 0U]);
+        p_attr->rt.dst_r = rotutil_get_le16(&msg->payload[offset + 2U]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
