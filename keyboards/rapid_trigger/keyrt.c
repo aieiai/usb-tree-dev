@@ -89,7 +89,7 @@ static inline void _record_depth_press_dst(uint8_t ki, int16_t cur_dst)
     p_rt->dst_rd  = cur_dst;
     p_rt->dst_pd  = S16_MAX;
     p_rt->dst_rnm = (dst < 0) ? 0 : dst;
-    p_rt->dst_rnm = 0;
+    p_rt->dst_pnm = 0;
 }
 
 
@@ -111,12 +111,13 @@ static inline void _record_depth_press_dst(uint8_t ki, int16_t cur_dst)
 void keyrt_process(uint8_t ki)
 {
     keyrt_t *p_rt = &keyrt[ki];
+    int16_t cur_dst = g_keyevt[ki].dst;
+    
     if (p_rt->evt_ent == KRT_EVT_ENT_U2U) {
         keyrt_reset(ki);
         return;
     }
 
-    int16_t cur_dst = g_keyevt[ki].dst;
     if (p_rt->evt_ent == KRT_EVT_ENT_U2U) {
         p_rt->rst     = true;
         p_rt->evt_ent = KRT_EVT_ENT_D2D;
