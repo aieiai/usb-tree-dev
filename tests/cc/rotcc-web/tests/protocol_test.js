@@ -124,10 +124,12 @@ class MockDevice {
       dz: { dst_t: 0, dst_b: 0 },
       nom: { dst_p: 0, dst_r: 0 },
       rt: { dst_p: 0, dst_r: 0 },
+      tick: { sclt: 0, sclto: 0, dclt: 0, dclto: 0 },
       axis: 0
     }));
-    this.tick = { sclt: 0, sclto: 0, dclt: 0, dclto: 0 };
     this.axisSupport = [0, 1]; /* KAXIS_BB, KAXIS_GDL */
+    this.calibSta = CC.CALIB_STA_STOP;
+    this.autoCalib = 0;
     this.resetRequests = [];
     this.rebooted = false;
     this.upgrade = null;
@@ -138,15 +140,22 @@ class MockDevice {
     return Array.from({ length: 4 }, () => new Array(42).fill(0));
   }
 
-  /* 解析 {start, end} + count * entrySize 的按键范围请求。 */
-  keyRange(payload, entrySize) {
-    if (payload.length < 2) return null;
+  /* 查询帧固定 4 字节：{start, end, rsv, rsv}。 */
+  keyQuery(payload) {
+    if (payload.length !== 4) return null;
     const start = payload[0];
     const end = payload[1];
     if (end < start || end >= this.keyCount) return null;
-    const count = end - start + 1;
-    if (payload.length !== 2 + count * entrySize) return null;
-    return { start, end, count };
+    return { start, end, count: end - start + 1 };
+  }
+
+  /* 设置帧为 {start, end, entry}，同一个参数应用到整个区间。 */
+  keySet(payload, entrySize) {
+    if (payload.length !== 2 + entrySize) return null;
+    const start = payload[0];
+    const end = payload[1];
+    if (end < start || end >= this.keyCount) return null;
+    return { start, end, count: end - start + 1 };
   }
 
   deviceInfo() {
@@ -241,7 +250,7 @@ class MockDevice {
       const layer = msg.reserve >> 8;
       switch (msg.subcmd) {
       case CC.KC_GET: {
-        const range = this.keyRange(msg.payload, 0);
+        const range = this.keyQuery(msg.payload);
         if (!range || layer >= this.layerCount) return status(3);
         const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
@@ -250,11 +259,11 @@ class MockDevice {
         return reply(out);
       }
       case CC.KC_SET: {
-        const range = this.keyRange(msg.payload, 4);
+        const range = this.keySet(msg.payload, 4);
         if (!range || layer >= this.layerCount) return status(3);
+        const code = api.readLe32(msg.payload, 2);
         for (let i = 0; i < range.count; i++) {
-          this.keymap[layer][range.start + i] =
-            api.readLe32(msg.payload, 2 + i * 4);
+          this.keymap[layer][range.start + i] = code;
         }
         return status(0);
       }
@@ -269,26 +278,34 @@ class MockDevice {
         return status(0);
       }
       case CC.KC_TICK_GET: {
-        if (msg.payload.length !== 0) return status(3);
-        const out = new Uint8Array(8);
-        const values = [
-          this.tick.sclt, this.tick.sclto, this.tick.dclt, this.tick.dclto
-        ];
-        values.forEach((value, i) => api.writeLe16(out, i * 2, value));
+        const range = this.keyQuery(msg.payload);
+        if (!range) return status(3);
+        const out = new Uint8Array(range.count * 8);
+        for (let i = 0; i < range.count; i++) {
+          const tick = this.attributes[range.start + i].tick;
+          api.writeLe16(out, i * 8, tick.sclt);
+          api.writeLe16(out, i * 8 + 2, tick.sclto);
+          api.writeLe16(out, i * 8 + 4, tick.dclt);
+          api.writeLe16(out, i * 8 + 6, tick.dclto);
+        }
         return reply(out);
       }
       case CC.KC_TICK_SET: {
-        if (msg.payload.length !== 8) return status(3);
-        this.tick = {
-          sclt: api.readLe16(msg.payload, 0),
-          sclto: api.readLe16(msg.payload, 2),
-          dclt: api.readLe16(msg.payload, 4),
-          dclto: api.readLe16(msg.payload, 6)
+        const range = this.keySet(msg.payload, 8);
+        if (!range) return status(3);
+        const tick = {
+          sclt: api.readLe16(msg.payload, 2),
+          sclto: api.readLe16(msg.payload, 4),
+          dclt: api.readLe16(msg.payload, 6),
+          dclto: api.readLe16(msg.payload, 8)
         };
+        for (let i = 0; i < range.count; i++) {
+          this.attributes[range.start + i].tick = { ...tick };
+        }
         return status(0);
       }
       case CC.KC_TRG_GET: {
-        const range = this.keyRange(msg.payload, 0);
+        const range = this.keyQuery(msg.payload);
         if (!range) return status(3);
         const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
@@ -297,17 +314,17 @@ class MockDevice {
         return reply(out);
       }
       case CC.KC_TRG_SET: {
-        const range = this.keyRange(msg.payload, 4);
+        const range = this.keySet(msg.payload, 4);
         if (!range) return status(3);
+        const value = api.readLe32(msg.payload, 2);
+        if (value > 2) return status(3);
         for (let i = 0; i < range.count; i++) {
-          const value = api.readLe32(msg.payload, 2 + i * 4);
-          if (value > 2) return status(3);
           this.attributes[range.start + i].trg = value;
         }
         return status(0);
       }
       case CC.KC_DZ_GET: {
-        const range = this.keyRange(msg.payload, 0);
+        const range = this.keyQuery(msg.payload);
         if (!range) return status(3);
         const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
@@ -318,18 +335,19 @@ class MockDevice {
         return reply(out);
       }
       case CC.KC_DZ_SET: {
-        const range = this.keyRange(msg.payload, 4);
+        const range = this.keySet(msg.payload, 4);
         if (!range) return status(3);
+        const dz = {
+          dst_t: api.readLe16(msg.payload, 2),
+          dst_b: api.readLe16(msg.payload, 4)
+        };
         for (let i = 0; i < range.count; i++) {
-          this.attributes[range.start + i].dz = {
-            dst_t: api.readLe16(msg.payload, 2 + i * 4),
-            dst_b: api.readLe16(msg.payload, 2 + i * 4 + 2)
-          };
+          this.attributes[range.start + i].dz = { ...dz };
         }
         return status(0);
       }
       case CC.KC_NOM_GET: {
-        const range = this.keyRange(msg.payload, 0);
+        const range = this.keyQuery(msg.payload);
         if (!range) return status(3);
         const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
@@ -340,18 +358,19 @@ class MockDevice {
         return reply(out);
       }
       case CC.KC_NOM_SET: {
-        const range = this.keyRange(msg.payload, 4);
+        const range = this.keySet(msg.payload, 4);
         if (!range) return status(3);
+        const nom = {
+          dst_p: api.readLe16(msg.payload, 2),
+          dst_r: api.readLe16(msg.payload, 4)
+        };
         for (let i = 0; i < range.count; i++) {
-          this.attributes[range.start + i].nom = {
-            dst_p: api.readLe16(msg.payload, 2 + i * 4),
-            dst_r: api.readLe16(msg.payload, 2 + i * 4 + 2)
-          };
+          this.attributes[range.start + i].nom = { ...nom };
         }
         return status(0);
       }
       case CC.KC_RT_GET: {
-        const range = this.keyRange(msg.payload, 0);
+        const range = this.keyQuery(msg.payload);
         if (!range) return status(3);
         const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
@@ -362,13 +381,14 @@ class MockDevice {
         return reply(out);
       }
       case CC.KC_RT_SET: {
-        const range = this.keyRange(msg.payload, 4);
+        const range = this.keySet(msg.payload, 4);
         if (!range) return status(3);
+        const rt = {
+          dst_p: api.readLe16(msg.payload, 2),
+          dst_r: api.readLe16(msg.payload, 4)
+        };
         for (let i = 0; i < range.count; i++) {
-          this.attributes[range.start + i].rt = {
-            dst_p: api.readLe16(msg.payload, 2 + i * 4),
-            dst_r: api.readLe16(msg.payload, 2 + i * 4 + 2)
-          };
+          this.attributes[range.start + i].rt = { ...rt };
         }
         return status(0);
       }
@@ -382,14 +402,61 @@ class MockDevice {
       case CC.AXIS_LIST:
         if (msg.payload.length !== 0) return status(3);
         return reply(new Uint8Array(this.axisSupport));
-      case CC.AXIS_SET: {
-        const range = this.keyRange(msg.payload, 1);
+      case CC.AXIS_GET: {
+        const range = this.keyQuery(msg.payload);
         if (!range) return status(3);
+        const out = new Uint8Array(range.count * 4);
         for (let i = 0; i < range.count; i++) {
-          const axis = msg.payload[2 + i];
-          if (!this.axisSupport.includes(axis)) return status(3);
+          api.writeLe32(out, i * 4, this.attributes[range.start + i].axis);
+        }
+        return reply(out);
+      }
+      case CC.AXIS_SET: {
+        const range = this.keySet(msg.payload, 4);
+        if (!range) return status(3);
+        const axis = api.readLe32(msg.payload, 2);
+        if (!this.axisSupport.includes(axis)) return status(3);
+        for (let i = 0; i < range.count; i++) {
           this.attributes[range.start + i].axis = axis;
         }
+        return status(0);
+      }
+      default:
+        return status(4);
+      }
+    }
+
+    if (msg.cmd === CC.CMD_CALIB) {
+      switch (msg.subcmd) {
+      case CC.CALIB_STATUS_GET:
+        if (msg.payload.length !== 0) return status(3);
+        return reply(Uint8Array.of(this.calibSta, 0));
+      case CC.CALIB_STATUS_SET: {
+        if (msg.payload.length !== 2) return status(3);
+        const sta = msg.payload[0];
+        if (sta === CC.CALIB_STA_START) {
+          this.calibSta = CC.CALIB_STA_START;
+          return status(0);
+        }
+        if (sta === CC.CALIB_STA_STOP) {
+          this.calibSta = CC.CALIB_STA_STOP;
+          return status(0);
+        }
+        if (sta === CC.CALIB_STA_DONE) {
+          if (this.calibSta !== CC.CALIB_STA_START) return status(1);
+          this.calibSta = CC.CALIB_STA_DONE;
+          return status(0);
+        }
+        return status(3);
+      }
+      case CC.CALIB_AUTO_GET:
+        if (msg.payload.length !== 0) return status(3);
+        return reply(Uint8Array.of(this.autoCalib, 0));
+      case CC.CALIB_AUTO_SET: {
+        if (msg.payload.length !== 2) return status(3);
+        const value = msg.payload[0];
+        if (value > 1) return status(3);
+        this.autoCalib = value;
         return status(0);
       }
       default:
@@ -539,7 +606,9 @@ async function main() {
       'ROTCC_KC_DZ_GET', 'ROTCC_KC_DZ_SET',
       'ROTCC_KC_NOM_GET', 'ROTCC_KC_NOM_SET',
       'ROTCC_KC_RT_GET', 'ROTCC_KC_RT_SET',
-      'ROTCC_AXIS_LIST', 'ROTCC_AXIS_SET'
+      'ROTCC_AXIS_LIST', 'ROTCC_AXIS_GET', 'ROTCC_AXIS_SET',
+      'ROTCC_CALIB_STATUS_GET', 'ROTCC_CALIB_STATUS_SET',
+      'ROTCC_CALIB_AUTO_GET', 'ROTCC_CALIB_AUTO_SET'
     ];
     for (const name of handlers) {
       const inTable = new RegExp(`\\{[^\\n]*\\b${name}\\b`).test(source);
@@ -603,26 +672,35 @@ async function main() {
 
   await test('按键范围内读取/设置键码', async () => {
     const reserve = (2 << 8);
-    const range = Uint8Array.of(6, 8);
-    const write = new Uint8Array(2 + 3 * 4);
-    write.set(range, 0);
+    const query = Uint8Array.of(6, 8, 0, 0);
+    const write = new Uint8Array(2 + 4);
+    write[0] = 6;
+    write[1] = 8;
     api.writeLe32(write, 2, 0x0f000001);
-    api.writeLe32(write, 6, 0x0f000001);
-    api.writeLe32(write, 10, 0x04000000);
     await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
       reserve,
       payload: write,
       label: '写键码范围'
     });
 
+    const single = new Uint8Array(2 + 4);
+    single[0] = 7;
+    single[1] = 7;
+    api.writeLe32(single, 2, 0x04000000);
+    await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
+      reserve,
+      payload: single,
+      label: '写单个键码'
+    });
+
     const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, 12, {
       reserve,
-      payload: range,
+      payload: query,
       label: '读键码范围'
     });
     assert.strictEqual(api.readLe32(payload, 0), 0x0f000001);
-    assert.strictEqual(api.readLe32(payload, 4), 0x0f000001);
-    assert.strictEqual(api.readLe32(payload, 8), 0x04000000);
+    assert.strictEqual(api.readLe32(payload, 4), 0x04000000);
+    assert.strictEqual(api.readLe32(payload, 8), 0x0f000001);
   });
 
   await test('键码范围非法时返回参数错误', async () => {
@@ -630,7 +708,7 @@ async function main() {
     await assert.rejects(
       client.readPayload(CC.CMD_KC, CC.KC_GET, 8, {
         reserve,
-        payload: Uint8Array.of(8, 6),
+        payload: Uint8Array.of(8, 6, 0, 0),
         label: '非法范围'
       }),
       /参数错误/
@@ -638,145 +716,224 @@ async function main() {
     await assert.rejects(
       client.readPayload(CC.CMD_KC, CC.KC_GET, 8, {
         reserve,
-        payload: Uint8Array.of(40, 50),
+        payload: Uint8Array.of(40, 50, 0, 0),
         label: '越界范围'
+      }),
+      /参数错误/
+    );
+    await assert.rejects(
+      client.readPayload(CC.CMD_KC, CC.KC_GET, 8, {
+        reserve,
+        payload: Uint8Array.of(6, 8),
+        label: '查询帧缺少保留字节'
       }),
       /参数错误/
     );
     await assert.rejects(
       client.statusRequest(CC.CMD_KC, CC.KC_SET, {
         reserve,
-        payload: Uint8Array.of(6, 8, 1, 2, 3, 4),
-        label: '键码条目不足'
+        payload: Uint8Array.of(6, 8, 1, 2, 3, 4, 5, 6, 7, 8),
+        label: '设置帧带多个条目'
       }),
       /参数错误/
     );
   });
 
-  await test('按键 tick 参数读写', async () => {
+  await test('按键 tick 参数范围读写', async () => {
     const values = [100, 200, 300, 400];
-    const payload = new Uint8Array(8);
-    values.forEach((value, i) => api.writeLe16(payload, i * 2, value));
+    const payload = new Uint8Array(2 + 8);
+    payload[0] = 6;
+    payload[1] = 7;
+    values.forEach((value, i) => api.writeLe16(payload, 2 + i * 2, value));
     await client.statusRequest(CC.CMD_KC, CC.KC_TICK_SET, {
       payload,
-      label: '写 tick'
+      label: '写 tick 范围'
     });
 
-    const got = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 8, {
-      label: '读 tick'
+    const got = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 16, {
+      payload: Uint8Array.of(6, 7, 0, 0),
+      label: '读 tick 范围'
     });
-    values.forEach((value, i) => {
-      assert.strictEqual(api.readLe16(got, i * 2), value);
-    });
+    for (let i = 0; i < 2; i++) {
+      values.forEach((value, j) => {
+        assert.strictEqual(api.readLe16(got, i * 8 + j * 2), value);
+      });
+    }
   });
 
   await test('按键触发模式范围读写', async () => {
-    const payload = new Uint8Array(2 + 3 * 4);
+    const payload = new Uint8Array(2 + 4);
     payload[0] = 10;
     payload[1] = 12;
-    [1, 2, 0].forEach((value, i) => api.writeLe32(payload, 2 + i * 4, value));
+    api.writeLe32(payload, 2, 1);
     await client.statusRequest(CC.CMD_KC, CC.KC_TRG_SET, {
       payload,
       label: '写触发模式'
     });
 
     const got = await client.readPayload(CC.CMD_KC, CC.KC_TRG_GET, 12, {
-      payload: Uint8Array.of(10, 12),
+      payload: Uint8Array.of(10, 12, 0, 0),
       label: '读触发模式'
     });
-    assert.strictEqual(api.readLe32(got, 0), 1);
-    assert.strictEqual(api.readLe32(got, 4), 2);
-    assert.strictEqual(api.readLe32(got, 8), 0);
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual(api.readLe32(got, i * 4), 1);
+    }
   });
 
   await test('按键死区参数范围读写', async () => {
-    const payload = new Uint8Array(2 + 2 * 4);
+    const payload = new Uint8Array(2 + 4);
     payload[0] = 20;
     payload[1] = 21;
     api.writeLe16(payload, 2, 300);
     api.writeLe16(payload, 4, 400);
-    api.writeLe16(payload, 6, 500);
-    api.writeLe16(payload, 8, 600);
     await client.statusRequest(CC.CMD_KC, CC.KC_DZ_SET, {
       payload,
       label: '写死区'
     });
 
     const got = await client.readPayload(CC.CMD_KC, CC.KC_DZ_GET, 8, {
-      payload: Uint8Array.of(20, 21),
+      payload: Uint8Array.of(20, 21, 0, 0),
       label: '读死区'
     });
     assert.strictEqual(api.readLe16(got, 0), 300);
     assert.strictEqual(api.readLe16(got, 2), 400);
-    assert.strictEqual(api.readLe16(got, 4), 500);
-    assert.strictEqual(api.readLe16(got, 6), 600);
+    assert.strictEqual(api.readLe16(got, 4), 300);
+    assert.strictEqual(api.readLe16(got, 6), 400);
   });
 
   await test('按键常规触发参数范围读写', async () => {
-    const payload = new Uint8Array(2 + 2 * 4);
+    const payload = new Uint8Array(2 + 4);
     payload[0] = 22;
     payload[1] = 23;
     api.writeLe16(payload, 2, 1200);
     api.writeLe16(payload, 4, 1300);
-    api.writeLe16(payload, 6, 1400);
-    api.writeLe16(payload, 8, 1500);
     await client.statusRequest(CC.CMD_KC, CC.KC_NOM_SET, {
       payload,
       label: '写常规触发'
     });
 
     const got = await client.readPayload(CC.CMD_KC, CC.KC_NOM_GET, 8, {
-      payload: Uint8Array.of(22, 23),
+      payload: Uint8Array.of(22, 23, 0, 0),
       label: '读常规触发'
     });
     assert.strictEqual(api.readLe16(got, 0), 1200);
     assert.strictEqual(api.readLe16(got, 2), 1300);
-    assert.strictEqual(api.readLe16(got, 4), 1400);
-    assert.strictEqual(api.readLe16(got, 6), 1500);
+    assert.strictEqual(api.readLe16(got, 4), 1200);
+    assert.strictEqual(api.readLe16(got, 6), 1300);
   });
 
   await test('按键快速触发参数范围读写', async () => {
-    const payload = new Uint8Array(2 + 2 * 4);
+    const payload = new Uint8Array(2 + 4);
     payload[0] = 24;
     payload[1] = 25;
     api.writeLe16(payload, 2, 150);
     api.writeLe16(payload, 4, 250);
-    api.writeLe16(payload, 6, 350);
-    api.writeLe16(payload, 8, 450);
     await client.statusRequest(CC.CMD_KC, CC.KC_RT_SET, {
       payload,
       label: '写快速触发'
     });
 
     const got = await client.readPayload(CC.CMD_KC, CC.KC_RT_GET, 8, {
-      payload: Uint8Array.of(24, 25),
+      payload: Uint8Array.of(24, 25, 0, 0),
       label: '读快速触发'
     });
     assert.strictEqual(api.readLe16(got, 0), 150);
     assert.strictEqual(api.readLe16(got, 2), 250);
-    assert.strictEqual(api.readLe16(got, 4), 350);
-    assert.strictEqual(api.readLe16(got, 6), 450);
+    assert.strictEqual(api.readLe16(got, 4), 150);
+    assert.strictEqual(api.readLe16(got, 6), 250);
   });
 
-  await test('轴体列表与按键轴体设置', async () => {
+  await test('轴体列表与按键轴体读写', async () => {
     const list = await client.readPayload(CC.CMD_AXIS, CC.AXIS_LIST, 2, {
       label: '轴体列表'
     });
     assert.deepStrictEqual([...list], device.axisSupport);
 
-    const payload = Uint8Array.of(30, 32, 1, 0, 1);
+    const payload = new Uint8Array(2 + 4);
+    payload[0] = 30;
+    payload[1] = 32;
+    api.writeLe32(payload, 2, 1);
     await client.statusRequest(CC.CMD_AXIS, CC.AXIS_SET, {
       payload,
       label: '设置轴体'
     });
-    assert.strictEqual(device.attributes[30].axis, 1);
-    assert.strictEqual(device.attributes[31].axis, 0);
-    assert.strictEqual(device.attributes[32].axis, 1);
+
+    const got = await client.readPayload(CC.CMD_AXIS, CC.AXIS_GET, 12, {
+      payload: Uint8Array.of(30, 32, 0, 0),
+      label: '读取轴体'
+    });
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual(api.readLe32(got, i * 4), 1);
+    }
 
     await assert.rejects(
       client.statusRequest(CC.CMD_AXIS, CC.AXIS_SET, {
-        payload: Uint8Array.of(30, 30, 9),
+        payload: Uint8Array.of(30, 30, 0, 0, 9, 0),
         label: '设置非法轴体'
+      }),
+      /参数错误/
+    );
+  });
+
+  await test('校准状态与自校准读写', async () => {
+    let payload = await client.readPayload(CC.CMD_CALIB, CC.CALIB_STATUS_GET, 2, {
+      label: '校准状态'
+    });
+    assert.strictEqual(payload[0], CC.CALIB_STA_STOP);
+    assert.strictEqual(payload[1], 0);
+
+    await client.statusRequest(CC.CMD_CALIB, CC.CALIB_STATUS_SET, {
+      payload: Uint8Array.of(CC.CALIB_STA_START, 0),
+      label: '开始校准'
+    });
+    assert.strictEqual(device.calibSta, CC.CALIB_STA_START);
+
+    await client.statusRequest(CC.CMD_CALIB, CC.CALIB_STATUS_SET, {
+      payload: Uint8Array.of(CC.CALIB_STA_DONE, 0),
+      label: '完成校准'
+    });
+    assert.strictEqual(device.calibSta, CC.CALIB_STA_DONE);
+
+    await client.statusRequest(CC.CMD_CALIB, CC.CALIB_STATUS_SET, {
+      payload: Uint8Array.of(CC.CALIB_STA_STOP, 0),
+      label: '停止校准'
+    });
+    assert.strictEqual(device.calibSta, CC.CALIB_STA_STOP);
+
+    await assert.rejects(
+      client.statusRequest(CC.CMD_CALIB, CC.CALIB_STATUS_SET, {
+        payload: Uint8Array.of(CC.CALIB_STA_DONE, 0),
+        label: '未开始就完成'
+      }),
+      /失败/
+    );
+
+    await assert.rejects(
+      client.statusRequest(CC.CMD_CALIB, CC.CALIB_STATUS_SET, {
+        payload: Uint8Array.of(0x83, 0),
+        label: '非法校准状态'
+      }),
+      /参数错误/
+    );
+
+    payload = await client.readPayload(CC.CMD_CALIB, CC.CALIB_AUTO_GET, 2, {
+      label: '自校准状态'
+    });
+    assert.strictEqual(payload[0], 0);
+
+    await client.statusRequest(CC.CMD_CALIB, CC.CALIB_AUTO_SET, {
+      payload: Uint8Array.of(1, 0),
+      label: '开启自校准'
+    });
+    payload = await client.readPayload(CC.CMD_CALIB, CC.CALIB_AUTO_GET, 2, {
+      label: '自校准状态'
+    });
+    assert.strictEqual(payload[0], 1);
+
+    await assert.rejects(
+      client.statusRequest(CC.CMD_CALIB, CC.CALIB_AUTO_SET, {
+        payload: Uint8Array.of(2, 0),
+        label: '非法自校准参数'
       }),
       /参数错误/
     );

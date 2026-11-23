@@ -9,9 +9,10 @@ renderParamTabs();
 renderParamForm(null);
 renderAxisKeyboard();
 renderAxisTabs();
+renderCalibKeyboard();
 if (globalThis.ResizeObserver) {
   const keyboardObserver = new ResizeObserver(syncKeycapSize);
-  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard]) {
+  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard, $calibKeyboard]) {
     keyboardObserver.observe(keyboard.closest('.keyboard-card'));
   }
   new ResizeObserver(syncBoardSize).observe($pickerGroups);
@@ -22,9 +23,16 @@ function selectView(name) {
   for (const btn of navButtons) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  for (const view of ['remap', 'param', 'axis', 'upgrade', 'system', 'debug']) {
+  for (const view of ['remap', 'param', 'axis', 'calib', 'upgrade', 'system', 'debug']) {
     document.getElementById(`view-${view}`)
       .classList.toggle('active', view === name);
+  }
+  /* 日志在隐藏状态下无法滚动，切到调试页时补到底。 */
+  if (name === 'debug') {
+    scrollLogToBottom();
+    requestAnimationFrame(scrollLogToBottom);
+    setTimeout(scrollLogToBottom, 50);
+    setTimeout(scrollLogToBottom, 200);
   }
 }
 for (const btn of navButtons) {
@@ -78,14 +86,30 @@ $btnSysReset.addEventListener('click', () => {
 $btnSysResetAll.addEventListener('click', () => {
   resetDevice(SYS_RESET_ALL, '恢复出厂');
 });
+$btnCalibRead.addEventListener('click', () => {
+  queryCalibStatus().catch(() => {});
+});
+$btnCalibStart.addEventListener('click', () => {
+  writeCalibStatus(CC.CALIB_STA_START).catch(() => {});
+});
+$btnCalibFinish.addEventListener('click', () => {
+  writeCalibStatus(CC.CALIB_STA_DONE).catch(() => {});
+});
+$btnCalibStop.addEventListener('click', () => {
+  writeCalibStatus(CC.CALIB_STA_STOP).catch(() => {});
+});
+$btnAutoCalibRead.addEventListener('click', () => {
+  queryAutoCalib().catch(() => {});
+});
+$btnAutoCalibWrite.addEventListener('click', writeAutoCalib);
 $btnParamSelectAll.addEventListener('click', selectAllParamKeys);
 $btnParamClear.addEventListener('click', clearParamSelection);
-$btnParamRead.addEventListener('click', readParamValues);
-$btnParamWrite.addEventListener('click', writeParamValues);
+$btnAxisRead.addEventListener('click', readAxisTypes);
 $btnAxisSelectAll.addEventListener('click', selectAllAxisKeys);
 $btnAxisClear.addEventListener('click', clearAxisSelection);
-$btnAxisList.addEventListener('click', readAxisSupportList);
-$btnAxisWrite.addEventListener('click', writeAxisToSelection);
+$axisValue.addEventListener('change', () => {
+  writeAxisToSelection();
+});
 btnConnect.addEventListener('click', connect);
 btnDisconnect.addEventListener('click', disconnect);
 document.getElementById('btnClear').addEventListener('click', () => {

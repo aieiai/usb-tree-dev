@@ -65,10 +65,6 @@ typedef struct __attribute__((packed)) {
 _Static_assert(FLASH_APP_IMG_NUM == 2U, "upgrade info layout assumes two slots");
 _Static_assert(sizeof(upgrade_info_t) == 48U, "upgrade info payload layout changed");
 
-
-/* Initializes the shared flash HAL and detects the currently booted slot. */
-rotsta_t upgrade_init(void);
-
 /* Current slot, target slot, slot size and EXIP state for the Rot-CC INFO reply. */
 rotsta_t upgrade_get_info(upgrade_info_t *info);
 

@@ -8,6 +8,7 @@
 #include "kbd_config.h"
 #include "keyprop.h"
 #include "keymap.h"
+#include "keycalib.h"
 
 #include "rotcc.h"
 #include "rotver.h"
@@ -55,8 +56,8 @@ static uint32_t s_received_size;
 static bool s_initialized;
 
 static uint8_t s_tx_payload[ROTGEN_MAX_PAYLOAD_SIZE] __attribute__((aligned(4)));
-/* One entry per key in the requested range; the rapid trigger entry is the largest. */
-static uint8_t s_key_payload[ROTCC_KC_RT_LEN * KBD_KEY_MAX] __attribute__((aligned(4)));
+/* One entry per key in the requested range; the tick entry is the largest. */
+static uint8_t s_key_payload[ROTCC_KC_TICK_LEN * KBD_KEY_MAX] __attribute__((aligned(4)));
 
 _Static_assert(sizeof(s_key_payload) <= ROTGEN_MAX_PAYLOAD_SIZE, "per-key reply exceeds one frame");
 
@@ -291,13 +292,6 @@ static void _handle_upgrade_start(const rotcc_msg_t *msg, uint32_t fw_size, uint
 
     _upgrade_reset_session(true);
 
-    state = upgrade_init();
-    if (state != rotsta_success) {
-        hal_dt_printf(TAG "upgrade init failed: 0x%08x\r\n", (unsigned)state);
-        _reply_status(msg, state);
-        return;
-    }
-
     state = upgrade_start(fw_size, fw_crc32);
     if (state != rotsta_success) {
         hal_dt_printf(TAG "upgrade start failed: 0x%08x\r\n", (unsigned)state);
@@ -412,15 +406,10 @@ static void _handle_upgrade_data(const rotcc_msg_t *msg)
     _reply_status(msg, rotsta_success);
 }
 
-/*
- * Per-key commands carry {start, end} followed by count * entry_len bytes.
- * Queries pass entry_len 0, so the request is exactly the 2-byte header.
- */
-static rotsta_t _key_range(const rotcc_msg_t *msg, uint16_t entry_len, uint8_t *start, uint8_t *end, uint32_t *count)
+/* Query payload is {start, end, rsv, rsv}; every key in the range gets its own reply entry. */
+static rotsta_t _key_query(const rotcc_msg_t *msg, uint8_t *start, uint8_t *end, uint32_t *count)
 {
-    uint32_t n;
-
-    if (msg->payload_len < ROTCC_KC_RANGE_HEADER_LEN) {
+    if (msg->payload_len != ROTCC_KC_QUERY_LEN) {
         return rotsta_invalid_argument;
     }
 
@@ -430,12 +419,24 @@ static rotsta_t _key_range(const rotcc_msg_t *msg, uint16_t entry_len, uint8_t *
         return rotsta_invalid_argument;
     }
 
-    n = (uint32_t)(*end - *start) + 1U;
-    if (msg->payload_len != (uint16_t)(ROTCC_KC_RANGE_HEADER_LEN + (n * entry_len))) {
+    *count = (uint32_t)(*end - *start) + 1U;
+    return rotsta_success;
+}
+
+/* Set payload is {start, end, entry}; the one entry is applied to the whole range. */
+static rotsta_t _key_set_range(const rotcc_msg_t *msg, uint16_t entry_len, uint8_t *start, uint8_t *end, uint32_t *count)
+{
+    if (msg->payload_len != (uint16_t)(ROTCC_KC_RANGE_HEADER_LEN + entry_len)) {
         return rotsta_invalid_argument;
     }
 
-    *count = n;
+    *start = msg->payload[0];
+    *end = msg->payload[1];
+    if ((*end < *start) || (*end >= KBD_KEY_MAX)) {
+        return rotsta_invalid_argument;
+    }
+
+    *count = (uint32_t)(*end - *start) + 1U;
     return rotsta_success;
 }
 
@@ -447,7 +448,7 @@ static void _handle_kc_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if ((layer >= KBD_MAP_MAX) || (_key_range(msg, 0U, &start, &end, &count) != rotsta_success)) {
+    if ((layer >= KBD_MAP_MAX) || (_key_query(msg, &start, &end, &count) != rotsta_success)) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -465,16 +466,17 @@ static void _handle_kc_set(const rotcc_msg_t *msg)
     uint8_t start;
     uint8_t end;
     uint32_t count;
+    uint32_t code;
     rotsta_t state = rotsta_success;
 
-    if ((layer >= KBD_MAP_MAX) || (_key_range(msg, ROTCC_KC_CODE_LEN, &start, &end, &count) != rotsta_success)) {
+    if ((layer >= KBD_MAP_MAX) || (_key_set_range(msg, ROTCC_KC_CODE_LEN, &start, &end, &count) != rotsta_success)) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
+    code = rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN]);
     for (uint32_t i = 0U; i < count; i++) {
-        state = keymap_set_key(layer, (uint8_t)(start + i),
-                               rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_CODE_LEN)]));
+        state = keymap_set_key(layer, (uint8_t)(start + i), code);
         if (state != rotsta_success) {
             break;
         }
@@ -529,37 +531,48 @@ static void _handle_kc_set_active_layer(const rotcc_msg_t *msg)
 
 static void _handle_kc_tick_get(const rotcc_msg_t *msg)
 {
-    const keyattr_t *p_attr = &g_obkp.attr[0];
+    uint8_t start;
+    uint8_t end;
+    uint32_t count;
+    uint32_t offset = 0U;
 
-    if (msg->payload_len != 0U) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
-    rotutil_put_le16(&s_key_payload[0], p_attr->act.sclt);
-    rotutil_put_le16(&s_key_payload[2], p_attr->act.sclto);
-    rotutil_put_le16(&s_key_payload[4], p_attr->act.dclt);
-    rotutil_put_le16(&s_key_payload[6], p_attr->act.dclto);
-    (void)rotcc_proto_reply(msg, s_key_payload, ROTCC_KC_TICK_LEN);
+    for (uint32_t i = 0U; i < count; i++) {
+        const keyattr_t *p_attr = &g_obkp.attr[start + i];
+
+        rotutil_put_le16(&s_key_payload[offset + 0U], p_attr->act.sclt);
+        rotutil_put_le16(&s_key_payload[offset + 2U], p_attr->act.sclto);
+        rotutil_put_le16(&s_key_payload[offset + 4U], p_attr->act.dclt);
+        rotutil_put_le16(&s_key_payload[offset + 6U], p_attr->act.dclto);
+        offset += ROTCC_KC_TICK_LEN;
+    }
+    (void)rotcc_proto_reply(msg, s_key_payload, (uint16_t)offset);
 }
 
 static void _handle_kc_tick_set(const rotcc_msg_t *msg)
 {
+    uint8_t start;
+    uint8_t end;
+    uint32_t count;
     rotsta_t state;
 
-    if (msg->payload_len != ROTCC_KC_TICK_LEN) {
+    if (_key_set_range(msg, ROTCC_KC_TICK_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
-    // Tick parameters are board-wide, keep every key in sync.
-    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        keyattr_t *p_attr = &g_obkp.attr[ki];
+    for (uint32_t i = 0U; i < count; i++) {
+        keyattr_t *p_attr = &g_obkp.attr[start + i];
+        const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->act.sclt = rotutil_get_le16(&msg->payload[0]);
-        p_attr->act.sclto = rotutil_get_le16(&msg->payload[2]);
-        p_attr->act.dclt = rotutil_get_le16(&msg->payload[4]);
-        p_attr->act.dclto = rotutil_get_le16(&msg->payload[6]);
+        p_attr->act.sclt = rotutil_get_le16(&entry[0U]);
+        p_attr->act.sclto = rotutil_get_le16(&entry[2U]);
+        p_attr->act.dclt = rotutil_get_le16(&entry[4U]);
+        p_attr->act.dclto = rotutil_get_le16(&entry[6U]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -573,7 +586,7 @@ static void _handle_kc_trg_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_range(msg, 0U, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -590,23 +603,22 @@ static void _handle_kc_trg_set(const rotcc_msg_t *msg)
     uint8_t start;
     uint8_t end;
     uint32_t count;
+    uint32_t trg_ty;
     rotsta_t state;
 
-    if (_key_range(msg, ROTCC_KC_TRG_LEN, &start, &end, &count) != rotsta_success) {
+    if (_key_set_range(msg, ROTCC_KC_TRG_LEN, &start, &end, &count) != rotsta_success) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    trg_ty = rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN]);
+    if (trg_ty > (uint32_t)KTRG_TY_RT_CTN) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
-        if (rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_TRG_LEN)]) > (uint32_t)KTRG_TY_RT_CTN) {
-            _reply_status(msg, rotsta_invalid_argument);
-            return;
-        }
-    }
-
-    for (uint32_t i = 0U; i < count; i++) {
-        g_obkp.attr[start + i].trg_ty =
-            (ktrg_ty)rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_TRG_LEN)]);
+        g_obkp.attr[start + i].trg_ty = (ktrg_ty)trg_ty;
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -620,7 +632,7 @@ static void _handle_kc_dz_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_range(msg, 0U, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -642,16 +654,17 @@ static void _handle_kc_dz_set(const rotcc_msg_t *msg)
     uint32_t count;
     rotsta_t state;
 
-    if (_key_range(msg, ROTCC_KC_DZ_LEN, &start, &end, &count) != rotsta_success) {
+    if (_key_set_range(msg, ROTCC_KC_DZ_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
         keyattr_t *p_attr = &g_obkp.attr[start + i];
+        const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->dz.dst_t = rotutil_get_le16(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_DZ_LEN)]);
-        p_attr->dz.dst_b = rotutil_get_le16(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_DZ_LEN) + 2U]);
+        p_attr->dz.dst_t = rotutil_get_le16(&entry[0U]);
+        p_attr->dz.dst_b = rotutil_get_le16(&entry[2U]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -665,7 +678,7 @@ static void _handle_kc_nom_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_range(msg, 0U, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -687,16 +700,17 @@ static void _handle_kc_nom_set(const rotcc_msg_t *msg)
     uint32_t count;
     rotsta_t state;
 
-    if (_key_range(msg, ROTCC_KC_NOM_LEN, &start, &end, &count) != rotsta_success) {
+    if (_key_set_range(msg, ROTCC_KC_NOM_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
         keyattr_t *p_attr = &g_obkp.attr[start + i];
+        const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->nom.dst_p = rotutil_get_le16(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_NOM_LEN)]);
-        p_attr->nom.dst_r = rotutil_get_le16(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_NOM_LEN) + 2U]);
+        p_attr->nom.dst_p = rotutil_get_le16(&entry[0U]);
+        p_attr->nom.dst_r = rotutil_get_le16(&entry[2U]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -710,7 +724,7 @@ static void _handle_kc_rt_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_range(msg, 0U, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -732,17 +746,17 @@ static void _handle_kc_rt_set(const rotcc_msg_t *msg)
     uint32_t count;
     rotsta_t state;
 
-    if (_key_range(msg, ROTCC_KC_RT_LEN, &start, &end, &count) != rotsta_success) {
+    if (_key_set_range(msg, ROTCC_KC_RT_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
         keyattr_t *p_attr = &g_obkp.attr[start + i];
-        uint32_t offset = ROTCC_KC_RANGE_HEADER_LEN + (i * ROTCC_KC_RT_LEN);
+        const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->rt.dst_p = rotutil_get_le16(&msg->payload[offset + 0U]);
-        p_attr->rt.dst_r = rotutil_get_le16(&msg->payload[offset + 2U]);
+        p_attr->rt.dst_p = rotutil_get_le16(&entry[0U]);
+        p_attr->rt.dst_r = rotutil_get_le16(&entry[2U]);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -775,33 +789,125 @@ static void _handle_axis_list(const rotcc_msg_t *msg)
     (void)rotcc_proto_reply(msg, s_key_payload, (uint16_t)count);
 }
 
-static void _handle_axis_set(const rotcc_msg_t *msg)
+static void _handle_axis_get(const rotcc_msg_t *msg)
 {
     uint8_t start;
     uint8_t end;
     uint32_t count;
-    rotsta_t state;
+    uint32_t offset = 0U;
 
-    if (_key_range(msg, 1U, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
-        if (!_axis_supported(msg->payload[ROTCC_KC_RANGE_HEADER_LEN + i])) {
-            _reply_status(msg, rotsta_invalid_argument);
-            return;
-        }
+        rotutil_put_le32(&s_key_payload[offset], (uint32_t)g_obkp.attr[start + i].axis.ty);
+        offset += ROTCC_KC_AXIS_LEN;
+    }
+    (void)rotcc_proto_reply(msg, s_key_payload, (uint16_t)offset);
+}
+
+static void _handle_axis_set(const rotcc_msg_t *msg)
+{
+    uint8_t start;
+    uint8_t end;
+    uint32_t count;
+    uint32_t axis;
+    rotsta_t state;
+
+    if (_key_set_range(msg, ROTCC_KC_AXIS_LEN, &start, &end, &count) != rotsta_success) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    axis = rotutil_get_le32(&msg->payload[ROTCC_KC_RANGE_HEADER_LEN]);
+    if ((axis >= (uint32_t)KAXIS_MAX) || !_axis_supported((uint8_t)axis)) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
     }
 
     for (uint32_t i = 0U; i < count; i++) {
         uint8_t ki = (uint8_t)(start + i);
 
-        g_obkp.attr[ki].axis.ty = (kaxis_ty)msg->payload[ROTCC_KC_RANGE_HEADER_LEN + i];
+        g_obkp.attr[ki].axis.ty = (kaxis_ty)axis;
         keymag_update_factor(ki);
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
+    _reply_status(msg, state);
+}
+
+static void _handle_calib_status_get(const rotcc_msg_t *msg)
+{
+    uint8_t payload[2];
+
+    if (msg->payload_len != 0U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    payload[0] = keycalib_get_status();
+    payload[1] = 0U;
+    (void)rotcc_proto_reply(msg, payload, sizeof(payload));
+}
+
+static void _handle_calib_status_set(const rotcc_msg_t *msg)
+{
+    rotsta_t state;
+
+    if (msg->payload_len != 2U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    state = keycalib_set_status(msg->payload[0]);
+    hal_dt_printf(TAG "calib set 0x%02x, result=0x%08x\r\n", (unsigned)msg->payload[0], (unsigned)state);
+    _reply_status(msg, state);
+}
+
+static void _handle_calib_auto_get(const rotcc_msg_t *msg)
+{
+    uint8_t payload[2];
+
+    if (msg->payload_len != 0U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    payload[0] = (g_obi.fs.auto_calib != 0U) ? 1U : 0U;
+    payload[1] = 0U;
+    (void)rotcc_proto_reply(msg, payload, sizeof(payload));
+}
+
+static void _handle_calib_auto_set(const rotcc_msg_t *msg)
+{
+    uint8_t prev;
+    uint32_t value;
+    rotsta_t state;
+
+    if (msg->payload_len != 2U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    value = msg->payload[0];
+    if (value > 1U) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+    if ((uint32_t)g_obi.fs.auto_calib == value) {
+        _reply_status(msg, rotsta_success);
+        return;
+    }
+
+    prev = g_obi.fs.auto_calib;
+    g_obi.fs.auto_calib = (uint8_t)value;
+    state = db_update(DB_ITEM_OBI, DB_SAVE_TY_NOW);
+    if (state != rotsta_success) {
+        g_obi.fs.auto_calib = prev;
+        hal_dt_printf(TAG "auto calib save failed: 0x%08x\r\n", (unsigned)state);
+    }
     _reply_status(msg, state);
 }
 
@@ -834,7 +940,13 @@ static const rotcc_cmd_entry_t cmd_table[] = {
     { ROTCC_CMD_KC,      ROTCC_KC_RT_SET,           _handle_kc_rt_set            },
 
     { ROTCC_CMD_AXIS,    ROTCC_AXIS_LIST,           _handle_axis_list            },
+    { ROTCC_CMD_AXIS,    ROTCC_AXIS_GET,            _handle_axis_get             },
     { ROTCC_CMD_AXIS,    ROTCC_AXIS_SET,            _handle_axis_set             },
+
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_STATUS_GET,    _handle_calib_status_get     },
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_STATUS_SET,    _handle_calib_status_set     },
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_AUTO_GET,      _handle_calib_auto_get       },
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_AUTO_SET,      _handle_calib_auto_set       },
 
     { ROTCC_CMD_UPGRADE, ROTCC_UPGRADE_INFO,        _handle_upgrade_info         },
     { ROTCC_CMD_UPGRADE, ROTCC_UPGRADE_REQUEST,     _handle_upgrade_request      },

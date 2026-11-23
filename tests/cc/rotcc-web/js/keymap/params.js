@@ -21,6 +21,9 @@ let paramPrimaryKey = null;
 let paramReadSeq = 0;
 let paramReadPending = false;
 let paramReading = false;
+let paramWriteTimer = 0;
+let paramWriting = false;
+let paramWritePending = false;
 const paramSelected = new Set();
 
 function setParamState(text, className = '') {
@@ -60,8 +63,17 @@ function syncParamSelection() {
   refreshControls();
 }
 
+function cancelPendingParamWrite() {
+  if (paramWriteTimer) {
+    clearTimeout(paramWriteTimer);
+    paramWriteTimer = 0;
+  }
+  paramWritePending = false;
+}
+
 function invalidateParamValues() {
   paramLoaded = false;
+  cancelPendingParamWrite();
 }
 
 function paramPrimary() {
@@ -74,7 +86,7 @@ function paramPrimary() {
 
 /* 选中键位或切换分类后自动读取参数；读取期间只保留最后一次请求。 */
 function scheduleParamRead() {
-  if ((paramTab.id !== 'tick') && (paramSelected.size === 0)) return;
+  if (paramSelected.size === 0) return;
   if (sysBusy || isFirmwareActive()) return;
   if (!Boolean(device?.opened)) {
     setParamState('请连接设备', 'warn');
@@ -101,17 +113,10 @@ function toggleParamKey(index) {
     paramPrimaryKey = index;
   }
 
-  if (paramTab.id !== 'tick') {
-    paramReadSeq++;
-    invalidateParamValues();
-  }
+  paramReadSeq++;
+  invalidateParamValues();
   syncParamSelection();
 
-  if (paramTab.id === 'tick') {
-    setParamState('tick 参数为全键盘配置');
-    if (!paramLoaded) scheduleParamRead();
-    return;
-  }
   if (paramSelected.size === 0) {
     renderParamForm(null);
     setParamState('未选择');
@@ -130,10 +135,8 @@ function selectAllParamKeys() {
     paramSelected.add(index);
     if (paramPrimaryKey === null) paramPrimaryKey = index;
   }
-  if (paramTab.id !== 'tick') {
-    paramReadSeq++;
-    invalidateParamValues();
-  }
+  paramReadSeq++;
+  invalidateParamValues();
   syncParamSelection();
   setParamState(`已选择 ${paramSelected.size} 个键位，读取中...`);
   scheduleParamRead();
@@ -143,11 +146,9 @@ function clearParamSelection() {
   if (sysBusy || isFirmwareActive()) return;
   paramSelected.clear();
   paramPrimaryKey = null;
-  if (paramTab.id !== 'tick') {
-    paramReadSeq++;
-    invalidateParamValues();
-    renderParamForm(null);
-  }
+  paramReadSeq++;
+  invalidateParamValues();
+  renderParamForm(null);
   syncParamSelection();
   setParamState('未选择');
 }
@@ -191,6 +192,7 @@ function formNumberInput(value) {
   input.min = '0';
   input.max = '65535';
   input.value = String(value);
+  input.addEventListener('input', () => scheduleParamWrite(300));
   return input;
 }
 
@@ -203,10 +205,11 @@ function formSelect(labels, value) {
     select.appendChild(option);
   });
   select.value = String(Math.min(labels.length - 1, Math.max(0, value)));
+  select.addEventListener('change', () => scheduleParamWrite(0));
   return select;
 }
 
-/* values 为空时显示默认值；读取后传入首个选中键的参数或 tick 数组。 */
+/* values 为空时显示默认值；读取后传入首个选中键的参数。 */
 function renderParamForm(values) {
   $paramForm.textContent = '';
   const grid = document.createElement('div');
@@ -214,11 +217,12 @@ function renderParamForm(values) {
   paramFormRefs = {};
 
   if (paramTab.id === 'tick') {
-    paramFormRefs.tick = TICK_LABELS.map((label, i) => {
-      const input = formNumberInput(values ? values[i] : 0);
+    paramFormRefs.tick = {};
+    for (const label of TICK_LABELS) {
+      const input = formNumberInput(values ? values[label] : 0);
+      paramFormRefs.tick[label] = input;
       grid.appendChild(formField(label, input));
-      return input;
-    });
+    }
     $paramForm.appendChild(grid);
     return;
   }
@@ -252,21 +256,32 @@ function parseParamEntry(tab, payload, index) {
   switch (tab.id) {
     case 'trg':
       return { trg: readLe32(payload, index * 4) };
-    case 'dz':
-    case 'nom':
-    case 'rt':
+    case 'tick':
+      return {
+        sclt: readLe16(payload, index * 8),
+        sclto: readLe16(payload, index * 8 + 2),
+        dclt: readLe16(payload, index * 8 + 4),
+        dclto: readLe16(payload, index * 8 + 6)
+      };
+    default:
       return {
         a: readLe16(payload, index * 4),
         b: readLe16(payload, index * 4 + 2)
       };
-    default:
-      return null;
   }
 }
 
 function readParamForm() {
   if (paramTab.id === 'trg') {
     return { trg: Number(paramFormRefs.trg.value) || 0 };
+  }
+  if (paramTab.id === 'tick') {
+    return {
+      sclt: paramNumber(paramFormRefs.tick.sclt.value),
+      sclto: paramNumber(paramFormRefs.tick.sclto.value),
+      dclt: paramNumber(paramFormRefs.tick.dclt.value),
+      dclto: paramNumber(paramFormRefs.tick.dclto.value)
+    };
   }
   return {
     a: paramNumber(paramFormRefs.a.value),
@@ -277,10 +292,28 @@ function readParamForm() {
 function writeParamEntry(tab, payload, offset, values) {
   if (tab.id === 'trg') {
     writeLe32(payload, offset, values.trg);
+  } else if (tab.id === 'tick') {
+    writeLe16(payload, offset, values.sclt);
+    writeLe16(payload, offset + 2, values.sclto);
+    writeLe16(payload, offset + 4, values.dclt);
+    writeLe16(payload, offset + 6, values.dclto);
   } else {
     writeLe16(payload, offset, values.a);
     writeLe16(payload, offset + 2, values.b);
   }
+}
+
+/* 表单修改后延迟写入，避免连续输入时产生多帧。 */
+function scheduleParamWrite(delay) {
+  if (!paramLoaded || (paramSelected.size === 0)) return;
+  if (sysBusy || isFirmwareActive() || !Boolean(device?.opened)) return;
+  if (paramWriteTimer) {
+    clearTimeout(paramWriteTimer);
+  }
+  paramWriteTimer = setTimeout(() => {
+    paramWriteTimer = 0;
+    writeParamValues();
+  }, delay);
 }
 
 async function readParamValues() {
@@ -290,9 +323,8 @@ async function readParamValues() {
   }
 
   const tab = paramTab;
-  const tick = tab.id === 'tick';
-  const primary = tick ? null : paramPrimary();
-  if (!tick && (primary === null)) {
+  const primary = paramPrimary();
+  if (primary === null) {
     setParamState('请先在键盘上选择按键。', 'warn');
     return;
   }
@@ -310,33 +342,23 @@ async function readParamValues() {
     return;
   }
 
+  cancelPendingParamWrite();
   const seq = ++paramReadSeq;
   paramReading = true;
   kcBusy = true;
   refreshControls();
   try {
+    setParamState(`读取${tab.name} K${primary}...`);
     let values = null;
 
-    if (tick) {
-      setParamState('读取 tick...');
-      await ccCall(target, async client => {
-        const payload = await client.readPayload(CC.CMD_KC, CC.KC_TICK_GET, 8, {
-          label: '读取 tick',
-          timeoutMs: 3000
-        });
-        values = TICK_LABELS.map((_, i) => readLe16(payload, i * 2));
+    await ccCall(target, async client => {
+      const payload = await client.readPayload(CC.CMD_KC, tab.get, tab.size, {
+        payload: Uint8Array.of(primary, primary, 0, 0),
+        label: `读取${tab.name} K${primary}`,
+        timeoutMs: 3000
       });
-    } else {
-      setParamState(`读取${tab.name} K${primary}...`);
-      await ccCall(target, async client => {
-        const payload = await client.readPayload(CC.CMD_KC, tab.get, tab.size, {
-          payload: Uint8Array.of(primary, primary),
-          label: `读取${tab.name} K${primary}`,
-          timeoutMs: 3000
-        });
-        values = parseParamEntry(tab, payload, 0);
-      });
-    }
+      values = parseParamEntry(tab, payload, 0);
+    });
 
     if (seq !== paramReadSeq) {
       return;
@@ -344,13 +366,8 @@ async function readParamValues() {
 
     renderParamForm(values);
     paramLoaded = true;
-    if (tick) {
-      setParamState('tick 参数已读取');
-      appendLine('[PARAM] tick 参数已读取');
-    } else {
-      setParamState(`${tab.name} K${primary} 已读取 · 写入 ${paramSelected.size} 个键位`);
-      appendLine(`[PARAM] ${tab.name} K${primary} 已读取`);
-    }
+    setParamState(`${tab.name} K${primary} 已读取 · 修改后自动写入 ${paramSelected.size} 个键位`);
+    appendLine(`[PARAM] ${tab.name} K${primary} 已读取`);
   } catch (error) {
     if (seq === paramReadSeq) {
       setParamState(`读取失败：${error.message || error}`, 'err');
@@ -368,22 +385,24 @@ async function readParamValues() {
 }
 
 async function writeParamValues() {
-  const tab = paramTab;
-  const tick = tab.id === 'tick';
-  if (!tick && (paramSelected.size === 0)) {
-    setParamState('请先在键盘上选择按键。', 'warn');
+  if (paramWriting) {
+    paramWritePending = true;
     return;
   }
-  if (!paramLoaded) {
-    setParamState('请先读取参数。', 'warn');
+
+  const tab = paramTab;
+  if (!paramLoaded || (paramSelected.size === 0)) {
     return;
   }
   if (!Boolean(device?.opened)) {
     setParamState('请先连接设备。', 'warn');
     return;
   }
-  if (kcBusy || sysBusy || isFirmwareActive()) {
-    setParamState('设备忙，请稍后再试。', 'warn');
+  if (sysBusy || isFirmwareActive()) {
+    return;
+  }
+  if (kcBusy) {
+    paramWritePending = true;
     return;
   }
   const target = findCcTarget();
@@ -392,44 +411,20 @@ async function writeParamValues() {
     return;
   }
 
-  const values = tick ? null : readParamForm();
-  const tickValues = tick
-    ? paramFormRefs.tick.map(input => paramNumber(input.value))
-    : null;
+  const values = readParamForm();
   const indices = [...paramSelected].sort((a, b) => a - b);
   const runs = groupKeyRuns(indices);
 
+  paramWriting = true;
   kcBusy = true;
   refreshControls();
   try {
-    if (tick) {
-      const payload = new Uint8Array(8);
-      tickValues.forEach((value, i) => {
-        writeLe16(payload, i * 2, value);
-      });
-      setParamState('写入 tick...');
-      await ccCall(target, client =>
-        client.statusRequest(CC.CMD_KC, CC.KC_TICK_SET, {
-          payload,
-          label: '写入 tick',
-          timeoutMs: 3000
-        })
-      );
-      setParamState('tick 参数已写入');
-      appendLine('[PARAM] tick 参数已写入');
-      return;
-    }
-
-    setParamState(`写入${tab.name}...`);
     await ccCall(target, async client => {
       for (const run of runs) {
-        const count = run.end - run.start + 1;
-        const payload = new Uint8Array(2 + count * tab.size);
+        const payload = new Uint8Array(2 + tab.size);
         payload[0] = run.start;
         payload[1] = run.end;
-        for (let i = 0; i < count; i++) {
-          writeParamEntry(tab, payload, 2 + i * tab.size, values);
-        }
+        writeParamEntry(tab, payload, 2, values);
         await client.statusRequest(CC.CMD_KC, tab.set, {
           payload,
           label: `写入${tab.name} K${run.start}-${run.end}`,
@@ -444,7 +439,12 @@ async function writeParamValues() {
     setParamState(`写入失败：${error.message || error}`, 'err');
     appendLine(`[PARAM] ${tab.name} 写入失败：${error.message || error}`, 'err');
   } finally {
+    paramWriting = false;
     kcBusy = false;
     refreshControls();
+    if (paramWritePending) {
+      paramWritePending = false;
+      writeParamValues();
+    }
   }
 }

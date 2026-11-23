@@ -30,7 +30,8 @@
 避免旧 EXIP 头残留导致明文镜像无法启动。启动头随数据流接收并缓存，只有
 整镜像校验通过后才写回 Flash，因此中断的传输不会留下可启动的目标槽。
 
-当前启动分区由 ROM remap 状态判断，升级始终写入另一个槽。
+当前启动分区由 ROM remap 状态判断（`upgrade_get_info` 与 `upgrade_start`
+每次都实时查询，不缓存），升级始终写入另一个槽。
 
 ## OTP 布局检查
 
@@ -44,8 +45,10 @@ EXIP 状态取自 OTP word 24 的 bit12。
 
 ## 调用方式
 
+升级模块不再有自己的 init：Flash HAL 由 `db_init()` 提前初始化，启动槽在
+每次查询/开始时从 ROM remap 状态现取，没有需要缓存的模块状态。
+
 ```c
-upgrade_init();
 upgrade_get_info(&info);      /* Rot-CC 的升级信息命令 */
 upgrade_start(image_size, image_crc32);
 while (has_data) {

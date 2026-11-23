@@ -46,7 +46,6 @@ typedef struct {
 } upgrade_ctx_t;
 
 
-static bool s_initialized;
 static upgrade_ctx_t ctx;
 static uint8_t s_align_buf[4] __attribute__((aligned(4)));
 static uint8_t s_align_count;
@@ -329,59 +328,33 @@ static rotsta_t _retire_active_slot(void)
     return rotsta_success;
 }
 
-rotsta_t upgrade_init(void)
+rotsta_t upgrade_get_info(upgrade_info_t *info)
 {
-    rotsta_t state;
     uint8_t active_slot = 0U;
+    uint32_t otp_boot;
+    uint32_t sec_img_offset;
+    uint32_t max_img_len;
+    rotsta_t state;
 
-    if (s_initialized) {
-        return rotsta_success;
+    if (info == NULL) {
+        return rotsta_invalid_argument;
     }
 
-    state = hal_flash_init();
-    if (state != rotsta_success) {
-        return state;
-    }
-    if (hal_flash_get_sector_size() != FLASH_SECTOR_SIZ) {
-        printf(TAG "sector size %u does not match DB page size %u\r\n", (unsigned)hal_flash_get_sector_size(), (unsigned)FLASH_SECTOR_SIZ);
-        return rotsta_upgrade_init_fail;
-    }
-
+    /* Booted slot is derived from the ROM remap state, so no cached state can go stale. */
     state = hal_flash_get_active_app_slot(&active_slot);
     if (state != rotsta_success) {
         return state;
     }
     if (!_slot_valid(active_slot)) {
-        return rotsta_upgrade_init_fail;
-    }
-
-    _reset_ctx();
-    ctx.slot_act = active_slot;
-    s_initialized = true;
-
-    printf(TAG "active APP%u, exip=%u\r\n", (unsigned)(ctx.slot_act + 1U), _exip_enabled() ? 1U : 0U);
-    return rotsta_success;
-}
-
-rotsta_t upgrade_get_info(upgrade_info_t *info)
-{
-    uint32_t otp_boot;
-    uint32_t sec_img_offset;
-    uint32_t max_img_len;
-
-    if (info == NULL) {
-        return rotsta_invalid_argument;
-    }
-    if (!s_initialized) {
-        return rotsta_upgrade_not_init;
+        return rotsta_upgrade_invalid_slot;
     }
 
     memset(info, 0, sizeof(*info));
-    info->slot_act = ctx.slot_act;
-    info->slot_tag = (uint8_t)(ctx.slot_act ^ 1U);
+    info->slot_act = active_slot;
+    info->slot_tag = (uint8_t)(active_slot ^ 1U);
     info->slot_cnt = FLASH_APP_IMG_NUM;
     info->encrypted = _exip_enabled() ? 1U : 0U;
-    info->remap_enabled = (ctx.slot_act == 1U) ? 1U : 0U;
+    info->remap_enabled = active_slot;
     info->slot_size = FLASH_APP_IMG_SIZE;
     info->image_base_offset = info->encrypted ? 0U : UPGRADE_IMAGE_BASE_PLAIN;
     info->file_boot_offset = info->encrypted
@@ -403,13 +376,13 @@ rotsta_t upgrade_get_info(upgrade_info_t *info)
 
     for (uint8_t slot = 0U; slot < FLASH_APP_IMG_NUM; slot++) {
         uint16_t version = 0U;
-        rotsta_t state = _read_slot_version(slot, &version);
+        rotsta_t slot_state = _read_slot_version(slot, &version);
 
-        if (state == rotsta_upgrade_invalid_image) {
+        if (slot_state == rotsta_upgrade_invalid_image) {
             continue;
         }
-        if (state != rotsta_success) {
-            return state;
+        if (slot_state != rotsta_success) {
+            return slot_state;
         }
         info->slot_valid[slot] = 1U;
         info->slot_version[slot] = version;
@@ -426,9 +399,6 @@ rotsta_t upgrade_start(uint32_t image_size, uint32_t image_crc32)
     uint16_t active_version = 0U;
     rotsta_t state;
 
-    if (!s_initialized) {
-        return rotsta_upgrade_not_init;
-    }
     if (ctx.active) {
         return rotsta_upgrade_busy;
     }
@@ -495,9 +465,6 @@ rotsta_t upgrade_write(const void *data, uint32_t len)
     const uint8_t *bytes = (const uint8_t *)data;
     rotsta_t state;
 
-    if (!s_initialized) {
-        return rotsta_upgrade_not_init;
-    }
     if (!ctx.active) {
         return rotsta_upgrade_incomplete;
     }
@@ -524,9 +491,6 @@ rotsta_t upgrade_finish(void)
     uint16_t sw_version = 0U;
     rotsta_t state;
 
-    if (!s_initialized) {
-        return rotsta_upgrade_not_init;
-    }
     if (!ctx.active) {
         return rotsta_upgrade_incomplete;
     }
@@ -571,10 +535,6 @@ rotsta_t upgrade_finish(void)
 
 rotsta_t upgrade_abort(void)
 {
-    if (!s_initialized) {
-        return rotsta_upgrade_not_init;
-    }
-
     return _fail(rotsta_success);
 }
 

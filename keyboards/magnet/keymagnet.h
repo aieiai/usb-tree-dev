@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include "rotsta.h"
 #include "kbd_config.h"
@@ -58,6 +59,7 @@ extern obmag_t g_obmag;
 
 rotsta_t obmag_db_register(void);
 rotsta_t keymag_init(void);
+bool     keymag_lmt_valid(const keymag_lmt_t *p_lmt);
 void     keymag_update_factor(uint8_t ki);
 float    keymag_pt2du(uint8_t ki, uint16_t point);
 uint16_t keymag_du2pt(uint8_t ki, float dist_um);

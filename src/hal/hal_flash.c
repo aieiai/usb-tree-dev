@@ -1,4 +1,5 @@
 #include "hal_flash.h"
+#include "hal_chip.h"
 #include "flash_layout.h"
 #include "rotutil.h"
 
@@ -404,6 +405,7 @@ rotsta_t hal_flash_init(void)
     }
     hpm_stat_t st = status_success;
     xpi_nor_config_option_t option;
+    hal_chip_info_t chip;
 
     memset(&hal_fm, 0, sizeof(hal_fm));
     hal_fm.base = (XPI_Type *)NOR_XPI_BASE;
@@ -461,6 +463,11 @@ rotsta_t hal_flash_init(void)
     }
 
     printf(TAG "chip %u KB, block %u KB, sector %u KB, page %u B\r\n", hal_fm.total_siz / 1024u, hal_fm.block_siz / 1024u, hal_fm.sector_siz / 1024u, hal_fm.page_siz);
+
+    if (hal_chip_get_info(&chip) == rotsta_success) {
+        printf(TAG "OTP chip id 0x%08x, flash %u KB\r\n", (unsigned)chip.otp_chip_id, (unsigned)(chip.flash_size / 1024U));
+    }
+
     hal_fm.ready = true;
     return rotsta_success;
 }

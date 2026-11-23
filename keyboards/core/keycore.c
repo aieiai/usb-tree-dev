@@ -8,6 +8,7 @@
 #include "keyevt.h"
 #include "keyadv.h"
 #include "keyprop.h"
+#include "keycalib.h"
 #include "keymagnet.h"
 
 #include "board.h"
@@ -59,9 +60,10 @@ static void keycore_process_frame(volatile uint32_t *frame)
 #endif
 
         keyevt_updete(ki, adc_buf[ki]);
+    }
 
-
-
+    if (keycalib_active()) {
+        keycalib_post_adc(adc_buf);
     }
 }
 
@@ -87,21 +89,16 @@ static void keycore_recv_cb(uint32_t *p_buf)
 
 rotsta_t keycore_init(void)
 {
-    rotsta_t state = rotsta_success;
+    rotsta_t result = rotsta_success;
     
-    state = keymap_init();
-    if (state != rotsta_success) {
-        printf(TAG "keymap init failed: 0x%08x, using defaults\r\n", (unsigned)state);
+    result = keymap_init();
+    if (result != rotsta_success) {
+        printf(TAG "keymap init failed: 0x%08x, using defaults\r\n", (unsigned)result);
     }
 
-    state = keymag_init();
-    if (state != rotsta_success) {
-        printf(TAG "keymag init failed: 0x%08x, using defaults\r\n", (unsigned)state);
-    }
-    
-    state = keyadv_init();
-    if (state != rotsta_success) {
-        printf(TAG "keyadv init failed: 0x%08x\r\n", (unsigned)state);
+    result = keyadv_init();
+    if (result != rotsta_success) {
+        printf(TAG "keyadv init failed: 0x%08x\r\n", (unsigned)result);
     }
     
     keyevt_init();

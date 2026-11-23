@@ -26,6 +26,7 @@ function refreshControls() {
   refreshFirmwareControls();
   refreshDebugControls();
   refreshSystemControls();
+  refreshCalibControls();
   refreshParamControls();
 }
 
@@ -62,27 +63,36 @@ function refreshSystemControls() {
   $chkPopup.disabled = busy || !ready || !popupSupported;
 }
 
+function refreshCalibControls() {
+  const busy = isFirmwareActive() || kcBusy || sysBusy || ccQueryPromise !== null;
+  const ready = Boolean(device?.opened) && links.length > 0;
+  const known = ccCalibSta !== null;
+  const calibrating = ccCalibSta === CC.CALIB_STA_START;
+
+  $btnCalibRead.disabled = busy || !ready;
+  $btnCalibStart.disabled = busy || !ready || (known && calibrating);
+  $btnCalibFinish.disabled = busy || !ready || (known && !calibrating);
+  $btnCalibStop.disabled = busy || !ready || (known && !calibrating);
+  $btnAutoCalibRead.disabled = busy || !ready;
+  $btnAutoCalibWrite.disabled = busy || !ready;
+  $chkAutoCalib.disabled = busy || !ready;
+}
+
 function refreshParamControls() {
   const busy = isFirmwareActive() || kcBusy || sysBusy || ccQueryPromise !== null;
   const ready = Boolean(device?.opened) && links.length > 0;
-  const tick = paramTab.id === 'tick';
   const hasParamSelection = paramSelected.size > 0;
   const hasAxisSelection = axisSelected.size > 0;
 
   $btnParamSelectAll.disabled =
     busy || paramSelected.size >= paramKeyEls.size;
   $btnParamClear.disabled = busy || !hasParamSelection;
-  $btnParamRead.disabled =
-    busy || !ready || (!tick && !hasParamSelection);
-  $btnParamWrite.disabled =
-    busy || !ready || !paramLoaded || (!tick && !hasParamSelection);
   $btnAxisSelectAll.disabled =
     busy || axisSelected.size >= axisKeyEls.size;
   $btnAxisClear.disabled = busy || !hasAxisSelection;
-  $btnAxisList.disabled = busy || !ready;
-  $btnAxisWrite.disabled =
-    busy || !ready || !hasAxisSelection || axisSupport.length === 0;
-  $axisValue.disabled = busy || !ready || axisSupport.length === 0;
+  $btnAxisRead.disabled = busy || !ready || !hasAxisSelection;
+  $axisValue.disabled =
+    busy || !ready || (axisSupport.length === 0) || !hasAxisSelection;
 
   for (const btn of $paramTabs.children) {
     btn.disabled = busy;

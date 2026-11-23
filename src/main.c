@@ -3,12 +3,12 @@
 
 #include "hal_usb.h"
 #include "hal_flash.h"
-#include "hal_chip.h"
 
 #include "cst.h"
 #include "db.h"
 
 #include "keycore.h"
+#include "keycalib.h"
 #include "rgb.h"
 
 #include "rotcc.h"
@@ -44,41 +44,36 @@ extern void gamepad_test(uint8_t busid);
 void tx_application_define(void *first_unused_memory)
 {
     (void)first_unused_memory;
-    rotsta_t state;
-    hal_chip_info_t chip;
+    rotsta_t result = rotsta_success;
 
-    state = db_init();
-    if (state != rotsta_success) {
-        printf(TAG "db init failed: 0x%08x\r\n", (unsigned)state);
+    result = db_init();
+    if (result != rotsta_success) {
+        printf(TAG "db init failed: 0x%08x\r\n", (unsigned)result);
     }
 
-    state = keycore_init();
-    if (state != rotsta_success) {
-        printf(TAG "keycore nit failed: 0x%08x, using defaults\r\n", (unsigned)state);
+    result = keycal_init();
+    if (result != rotsta_success) {
+        printf(TAG "keycal init failed: 0x%08x, using defaults\r\n", (unsigned)result);
     }
 
-    if (hal_chip_get_info(&chip) == rotsta_success) {
-        printf(TAG "OTP chip id 0x%08x, flash %u KB\r\n", (unsigned)chip.otp_chip_id, (unsigned)(chip.flash_size / 1024U));
+    result = keycore_init();
+    if (result != rotsta_success) {
+        printf(TAG "keycore nit failed: 0x%08x, using defaults\r\n", (unsigned)result);
     }
 
-    state = upgrade_init();
-    if (state != rotsta_success) {
-        printf(TAG "upgrade init failed: 0x%08x\r\n", (unsigned)state);
-    }
-
-    state = rgb_init();
-    if (state != rotsta_success) {
-        printf(TAG "rgb init failed: 0x%08x\r\n", (unsigned)state);
+    result = rgb_init();
+    if (result != rotsta_success) {
+        printf(TAG "rgb init failed: 0x%08x\r\n", (unsigned)result);
     }
     
-    state = rotcc_init();
-    if (state != rotsta_success) {
-        printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)state);
+    result = rotcc_init();
+    if (result != rotsta_success) {
+        printf(TAG "rotcc init failed: 0x%08x\r\n", (unsigned)result);
     }
 
-    state = rotcc_proto_init();
-    if (state != rotsta_success) {
-        printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)state);
+    result = rotcc_proto_init();
+    if (result != rotsta_success) {
+        printf(TAG "rotcc proto init failed: 0x%08x\r\n", (unsigned)result);
     }
 
     //cst_init();

@@ -47,7 +47,7 @@ keyevt_t g_keyevt[KBD_KEY_MAX] = {0};
  *            - KEVT_ACT_DCL: Double click long.
  *            - KEVT_ACT_DCLTO: Double click long timeout.
  */
-static __inline kevt_act_ty _act_detect(uint8_t ki)
+static inline kevt_act_ty _act_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
     keyattr_t *p_attr = &g_obkp.attr[ki];
@@ -183,7 +183,7 @@ static __inline kevt_act_ty _act_detect(uint8_t ki)
  *            - KEVT_MD_D: Move down.
  *            - KEVT_MD_S: Stay still.
  */
-static __inline kevt_md_ty _md_detect(uint8_t ki)
+static inline kevt_md_ty _md_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
     return ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S);
@@ -202,7 +202,7 @@ static __inline kevt_md_ty _md_detect(uint8_t ki)
  *            - KEVT_TRG_D2D: From down to down.
  *            - KEVT_TRG_D2U: From down to up.
  */
-static __inline kevt_trg_ty _trg_detect(uint8_t ki)
+static inline kevt_trg_ty _trg_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
     return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
@@ -220,7 +220,7 @@ static __inline kevt_trg_ty _trg_detect(uint8_t ki)
  *            - KSTA_EVT_POS_BOT: The key is pressed and the position is at the bottom.
  *            - KSTA_EVT_POS_MID: The key is pressed and the position is between the top and the bottom.
  */
-static __inline kevt_pos_ty _pos_detect(uint8_t ki)
+static inline kevt_pos_ty _pos_detect(uint8_t ki)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
     const keyaxis_para_t *p_axis = p_evt->axis_para;
@@ -241,16 +241,17 @@ static __inline kevt_pos_ty _pos_detect(uint8_t ki)
  */
 void keyevt_updete(uint8_t ki, uint16_t val)
 {
-    g_keyevt[ki].valp  = g_keyevt[ki].val;
-    g_keyevt[ki].valdp = g_keyevt[ki].vald;
-    g_keyevt[ki].val   = val;
-    g_keyevt[ki].vald  = g_keyevt[ki].val - g_keyevt[ki].valp;
+    keyevt_t *p_evt = &g_keyevt[ki];
+    p_evt->valp  = p_evt->val;
+    p_evt->valdp = p_evt->vald;
+    p_evt->val   = val;
+    p_evt->vald  = p_evt->val - p_evt->valp;
 
-    g_keyevt[ki].dst = keymag_pt2du(ki, g_keyevt[ki].val);
-    g_keyevt[ki].md  = _md_detect(ki);
-    g_keyevt[ki].trg = _trg_detect(ki);
-    g_keyevt[ki].act = _act_detect(ki);
-    // g_keyevt[ki].pos = _pos_detect(ki);
+    p_evt->dst = keymag_pt2du(ki, p_evt->val);
+    p_evt->md  = _md_detect(ki);
+    // p_evt->trg = _trg_detect(ki);
+    p_evt->act = _act_detect(ki);
+    p_evt->pos = _pos_detect(ki);
 }
 
 /**

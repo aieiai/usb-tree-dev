@@ -72,6 +72,15 @@ const $btnPopupSupport = document.getElementById('btnPopupSupport');
 const $btnPopupRead = document.getElementById('btnPopupRead');
 const $btnPopupWrite = document.getElementById('btnPopupWrite');
 const $chkPopup = document.getElementById('chkPopup');
+const $calibStatus = document.getElementById('calibStatus');
+const $calibState = document.getElementById('calibState');
+const $btnCalibRead = document.getElementById('btnCalibRead');
+const $btnCalibStart = document.getElementById('btnCalibStart');
+const $btnCalibFinish = document.getElementById('btnCalibFinish');
+const $btnCalibStop = document.getElementById('btnCalibStop');
+const $btnAutoCalibRead = document.getElementById('btnAutoCalibRead');
+const $btnAutoCalibWrite = document.getElementById('btnAutoCalibWrite');
+const $chkAutoCalib = document.getElementById('chkAutoCalib');
 const $chkResetKc = document.getElementById('chkResetKc');
 const $chkResetRgb = document.getElementById('chkResetRgb');
 const $chkResetAdv = document.getElementById('chkResetAdv');
@@ -82,20 +91,19 @@ const $paramState = document.getElementById('paramState');
 const $paramSelection = document.getElementById('paramSelection');
 const $btnParamSelectAll = document.getElementById('btnParamSelectAll');
 const $btnParamClear = document.getElementById('btnParamClear');
-const $btnParamRead = document.getElementById('btnParamRead');
-const $btnParamWrite = document.getElementById('btnParamWrite');
+const $calibKeyboard = document.getElementById('calibKeyboard');
 const $axisKeyboard = document.getElementById('axisKeyboard');
 const $axisSupport = document.getElementById('axisSupport');
 const $axisTabs = document.getElementById('axisTabs');
 const $axisListPanel = document.getElementById('axisListPanel');
+const $axisListText = document.getElementById('axisListText');
 const $axisSetPanel = document.getElementById('axisSetPanel');
 const $axisSelection = document.getElementById('axisSelection');
 const $axisValue = document.getElementById('axisValue');
 const $axisState = document.getElementById('axisState');
+const $btnAxisRead = document.getElementById('btnAxisRead');
 const $btnAxisSelectAll = document.getElementById('btnAxisSelectAll');
 const $btnAxisClear = document.getElementById('btnAxisClear');
-const $btnAxisList = document.getElementById('btnAxisList');
-const $btnAxisWrite = document.getElementById('btnAxisWrite');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 
@@ -113,6 +121,7 @@ let firmwareLastDurationMs = 0;
 let ccQueryPromise = null;
 let sysBusy = false;
 let ccPopupSupported = null;
+let ccCalibSta = null;
 let kcBusy = false;
 const kcSelected = new Set();
 let kcLayerIndex = 0;
@@ -126,6 +135,10 @@ function nowText() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false });
 }
 
+function scrollLogToBottom() {
+  $log.scrollTop = $log.scrollHeight;
+}
+
 function appendLine(text, className = '') {
   const line = document.createElement('span');
   if (className) line.className = className;
@@ -134,7 +147,17 @@ function appendLine(text, className = '') {
   if ($log.textContent.length > MAX_LOG_CHARS) {
     $log.textContent = $log.textContent.slice(-MAX_LOG_CHARS);
   }
-  $log.scrollTop = $log.scrollHeight;
+  scrollLogToBottom();
+  requestAnimationFrame(scrollLogToBottom);
+}
+
+/* 任何来源的日志变化都跟随到底部。 */
+if (globalThis.MutationObserver) {
+  new MutationObserver(scrollLogToBottom).observe($log, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 }
 
 function asUint8Array(data) {

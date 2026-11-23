@@ -18,7 +18,12 @@ extern "C" {
 #define ROTCC_UPGRADE_INFO_LEN      (48U)
 #define ROTCC_UPGRADE_REQUEST_LEN   (14U)
 
-/* Per-key commands: payload starts with {start, end}, followed by one entry per key. */
+/*
+ * Per-key commands:
+ *   get: payload is {start, end, rsv, rsv} and the reply carries one entry per key;
+ *   set: payload is {start, end, entry} and the same entry is applied to the range.
+ */
+#define ROTCC_KC_QUERY_LEN          (4U)
 #define ROTCC_KC_RANGE_HEADER_LEN   (2U)
 #define ROTCC_KC_CODE_LEN           (4U)
 #define ROTCC_KC_TICK_LEN           (8U)
@@ -26,12 +31,14 @@ extern "C" {
 #define ROTCC_KC_DZ_LEN             (4U)
 #define ROTCC_KC_NOM_LEN            (4U)
 #define ROTCC_KC_RT_LEN             (4U)
+#define ROTCC_KC_AXIS_LEN           (4U)
 
 enum {
     ROTCC_CMD_SYS = 0x00,
     ROTCC_CMD_UPGRADE = 0x01,
     ROTCC_CMD_KC = 0x02,
     ROTCC_CMD_AXIS = 0x03,
+    ROTCC_CMD_CALIB = 0x04,
 };
 
 enum {
@@ -71,7 +78,15 @@ enum {
 
 enum {
     ROTCC_AXIS_LIST = 0x00,
-    ROTCC_AXIS_SET = 0x01,
+    ROTCC_AXIS_GET = 0x01,
+    ROTCC_AXIS_SET = 0x02,
+};
+
+enum {
+    ROTCC_CALIB_STATUS_GET = 0x00,
+    ROTCC_CALIB_STATUS_SET = 0x01,
+    ROTCC_CALIB_AUTO_GET = 0x02,
+    ROTCC_CALIB_AUTO_SET = 0x03,
 };
 
 /* Request types carried by ROTCC_UPGRADE_REQUEST. */

@@ -161,6 +161,7 @@ async function connect() {
 
   try {
     if (device) await disconnect();
+    ccCalibSta = null;
     device = await navigator.usb.requestDevice({
       filters: [{ vendorId: VID, productId: PID }]
     });
@@ -220,6 +221,11 @@ async function connect() {
       } catch (error) {
         /* 按键数量仅用于展示/校验 */
       }
+      try {
+        await queryCalibStatus({ silent: true });
+      } catch (error) {
+        /* 校准状态仅用于按钮使能 */
+      }
       await queryKeymapInfo();
       autoReadKeymap();
     })();
@@ -228,6 +234,7 @@ async function connect() {
     appendLine(`[连接失败] ${error.message || error}`, 'err');
     if (device && device.opened) await device.close().catch(() => {});
     device = null;
+    ccCalibSta = null;
     destroyLinks();
     $status.textContent = '连接失败。';
     btnConnect.disabled = false;
@@ -351,6 +358,7 @@ async function sendPacket(link, ep, input) {
 async function disconnect() {
   btnConnect.disabled = true;
   btnDisconnect.disabled = true;
+  ccCalibSta = null;
   if (firmwareSession) firmwareSession.cancel();
   for (const link of links) {
     for (const state of link.reads.values()) state.active = false;

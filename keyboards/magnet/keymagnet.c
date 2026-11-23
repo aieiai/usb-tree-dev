@@ -4,18 +4,18 @@
 #include "db.h"
 
 #define TAG "keymagnet: "
-#define KEYMAG_BOT_DFT  (0)
-#define KEYMAG_TOP_DFT  ((0x01 << KBD_ADC_BIT) - 1)
-#define KEYMAG_DIF_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 500)) /* 500mV */
+#define KEYMAG_TOP_DFT  (((0x01 << KBD_ADC_BIT) >> 1) - 1) /* 50% of the ADC range */
+#define KEYMAG_BOT_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 100)) /* 100mV */
+#define KEYMAG_DIF_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 300)) /* 300mV */
 
 obmag_t g_obmag;
 
 typedef struct {
     float k;
     float b;
-} factor_t;
+} magk_t;
 
-static factor_t factor[KBD_KEY_MAX];
+static magk_t magk[KBD_KEY_MAX];
 
 /**
  * @brief:  Convert the point location to the distance from the top of the key to the bottom.
@@ -30,10 +30,10 @@ static factor_t factor[KBD_KEY_MAX];
  */
 float keymag_pt2du(uint8_t ki, uint16_t point)
 {
-    factor_t *p_factor = &factor[ki];
+    magk_t *p_magk = &magk[ki];
     keyattr_t *p_attr = &g_obkp.attr[ki];
     const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
-    return (p_axis->t2h_dst - (p_factor->k / ((float)point - p_factor->b)));
+    return (p_axis->t2h_dst - (p_magk->k / ((float)point - p_magk->b)));
 }
 
 /**
@@ -49,10 +49,10 @@ float keymag_pt2du(uint8_t ki, uint16_t point)
  */
 uint16_t keymag_du2pt(uint8_t ki, float dist_um)
 {
-    factor_t *p_factor = &factor[ki];
+    magk_t *p_magk = &magk[ki];
     keyattr_t *p_attr = &g_obkp.attr[ki];
     const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
-    return (uint16_t)((p_factor->k / (p_axis->t2h_dst - dist_um)) + p_factor->b);
+    return (uint16_t)((p_magk->k / (p_axis->t2h_dst - dist_um)) + p_magk->b);
 }
 
 /**
@@ -62,7 +62,7 @@ uint16_t keymag_du2pt(uint8_t ki, float dist_um)
  */
 void keymag_update_factor(uint8_t ki)
 {
-    factor_t *p_factor = &factor[ki];
+    magk_t *p_magk = &magk[ki];
     keyattr_t *p_attr = &g_obkp.attr[ki];
     keymag_lmt_t *p_lmt = &g_obmag.cal.lmt[ki];
     const keyaxis_para_t *p_axis = &g_keyaxis_para[p_attr->axis.ty];
@@ -74,8 +74,13 @@ void keymag_update_factor(uint8_t ki)
     float t2bv  = topv - botv;
     float k     = (KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * t2bv) / ((1.0f / t2hdm) - (1.0f / b2hdm));
     float b     = (KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * topv) - (k / t2hdm);
-    p_factor->k = (1000.0f * 1000.0f / (KBD_ADC_VEF * 1000.0f) * (float)((0x01 << KBD_ADC_BIT) - 1.0f)) * k;
-    p_factor->b = (1000.0f * (float)((0x01 << KBD_ADC_BIT) - 1.0f) / (KBD_ADC_VEF * 1000.0f)) * b;
+    p_magk->k   = (1000.0f * 1000.0f / (KBD_ADC_VEF * 1000.0f) * (float)((0x01 << KBD_ADC_BIT) - 1.0f)) * k;
+    p_magk->b   = (1000.0f * (float)((0x01 << KBD_ADC_BIT) - 1.0f) / (KBD_ADC_VEF * 1000.0f)) * b;
+}
+
+bool keymag_lmt_valid(const keymag_lmt_t *p_lmt)
+{
+    return (p_lmt->max > p_lmt->min) && ((p_lmt->max - p_lmt->min) >= KEYMAG_DIF_DFT);
 }
 
 static bool _keymag_cal_valid(const keymag_cal_t *p_cal)
@@ -84,8 +89,7 @@ static bool _keymag_cal_valid(const keymag_cal_t *p_cal)
         return false;
     }
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        if ((p_cal->lmt[ki].max <= p_cal->lmt[ki].min) || 
-            (p_cal->lmt[ki].max - p_cal->lmt[ki].min) < KEYMAG_DIF_DFT) {
+        if (!keymag_lmt_valid(&p_cal->lmt[ki])) {
             return false;
         }
     }

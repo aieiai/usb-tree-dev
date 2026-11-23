@@ -16,7 +16,10 @@ const AXIS_TABS = [
 let axisSupport = [];
 let axisKeyEls = new Map();
 let axisTab = AXIS_TABS[0];
+let axisWriting = false;
+let axisWritePending = false;
 const axisSelected = new Set();
+const axisValues = new Map();
 
 function axisReady() {
   return !kcBusy && !sysBusy && ccQueryPromise === null &&
@@ -49,7 +52,7 @@ function renderAxisTabs() {
       axisTab = tab;
       renderAxisTabs();
       refreshControls();
-      if ((axisTab.id === 'set') && (axisSupport.length === 0) && axisReady()) {
+      if ((axisSupport.length === 0) && axisReady()) {
         readAxisSupportList();
       }
     });
@@ -66,9 +69,11 @@ function renderAxisOptions() {
     option.textContent = axisLabel(type);
     $axisValue.appendChild(option);
   }
-  $axisSupport.textContent = axisSupport.length
+  const text = axisSupport.length
     ? `支持 ${axisSupport.map(axisLabel).join(' / ')}`
     : '支持列表 --';
+  $axisSupport.textContent = text;
+  $axisListText.textContent = text;
 }
 
 function renderAxisKeyboard() {
@@ -142,8 +147,6 @@ async function readAxisSupportList() {
   try {
     await ccCall(target, client => fetchAxisSupport(client));
     setAxisState('支持列表已读取');
-    axisTab = AXIS_TABS[1];
-    renderAxisTabs();
     refreshControls();
   } catch (error) {
     setAxisState(`读取失败：${error.message || error}`, 'err');
@@ -154,7 +157,61 @@ async function readAxisSupportList() {
   }
 }
 
+/* 读取选中键所在连续区间的轴体类型：查询帧为 {start, end, rsv, rsv}，每键 4 字节。 */
+async function readAxisTypes() {
+  if (!axisReady()) {
+    setAxisState('请先连接设备。', 'warn');
+    return;
+  }
+  if (axisSelected.size === 0) {
+    setAxisState('请先在键盘上选择按键。', 'warn');
+    return;
+  }
+  const target = findCcTarget();
+  if (!target) {
+    setAxisState('没有找到 CC IN/OUT 端点。', 'err');
+    return;
+  }
+
+  const indices = [...axisSelected].sort((a, b) => a - b);
+  const start = indices[0];
+  const end = indices[indices.length - 1];
+  const count = end - start + 1;
+
+  kcBusy = true;
+  refreshControls();
+  setAxisState('读取轴体...');
+  try {
+    await ccCall(target, async client => {
+      const payload = await client.readPayload(CC.CMD_AXIS, CC.AXIS_GET, count * 4, {
+        payload: Uint8Array.of(start & 0xff, end & 0xff, 0, 0),
+        label: `读取轴体 K${start}-${end}`,
+        timeoutMs: 3000
+      });
+      for (let i = 0; i < count; i++) {
+        axisValues.set(start + i, readLe32(payload, i * 4));
+      }
+    });
+
+    const text = indices
+      .map(index => `K${index}=${axisLabel(axisValues.get(index))}`)
+      .join(' · ');
+    setAxisState(text);
+    appendLine(`[AXIS] ${text}`);
+  } catch (error) {
+    setAxisState(`读取失败：${error.message || error}`, 'err');
+    appendLine(`[AXIS] 轴体读取失败：${error.message || error}`, 'err');
+  } finally {
+    kcBusy = false;
+    refreshControls();
+  }
+}
+
 async function writeAxisToSelection() {
+  if (axisWriting) {
+    axisWritePending = true;
+    return;
+  }
   if (!axisReady()) {
     setAxisState('请先连接设备。', 'warn');
     return;
@@ -177,23 +234,24 @@ async function writeAxisToSelection() {
   const indices = [...axisSelected].sort((a, b) => a - b);
   const runs = groupKeyRuns(indices);
 
+  axisWriting = true;
   kcBusy = true;
   refreshControls();
   setAxisState(`写入${axisLabel(axis)}...`);
   try {
     await ccCall(target, async client => {
       for (const run of runs) {
-        const count = run.end - run.start + 1;
-        const payload = new Uint8Array(2 + count);
+        const payload = new Uint8Array(2 + 4);
         payload[0] = run.start;
         payload[1] = run.end;
-        payload.fill(axis & 0xff, 2);
+        writeLe32(payload, 2, axis);
         await client.statusRequest(CC.CMD_AXIS, CC.AXIS_SET, {
           payload,
           label: `写入轴体 K${run.start}-${run.end}`,
           timeoutMs: 3000
         });
       }
+      for (const index of indices) axisValues.set(index, axis);
     });
 
     setAxisState(`${axisLabel(axis)} 已写入 ${indices.length} 个键位`);
@@ -202,7 +260,12 @@ async function writeAxisToSelection() {
     setAxisState(`写入失败：${error.message || error}`, 'err');
     appendLine(`[AXIS] 写入失败：${error.message || error}`, 'err');
   } finally {
+    axisWriting = false;
     kcBusy = false;
     refreshControls();
+    if (axisWritePending) {
+      axisWritePending = false;
+      writeAxisToSelection();
+    }
   }
 }

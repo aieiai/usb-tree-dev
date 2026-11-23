@@ -29,7 +29,9 @@ function buildKeyboard(container, onKeyClick) {
       valueEl.textContent = '--';
 
       keyEl.appendChild(valueEl);
-      keyEl.addEventListener('click', () => onKeyClick(index));
+      if (onKeyClick) {
+        keyEl.addEventListener('click', () => onKeyClick(index));
+      }
 
       container.appendChild(keyEl);
       keyEls.set(index, { root: keyEl, value: valueEl });
@@ -68,7 +70,7 @@ function fitKeyboardSize(container) {
 }
 
 function syncKeycapSize() {
-  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard]) {
+  for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard, $calibKeyboard]) {
     if (keyboard) fitKeyboardSize(keyboard);
   }
 }
@@ -187,16 +189,14 @@ function selectKey(index) {
   readKeycode(index);
 }
 
-/* 按设备协议读取 [start, end] 范围内的键码，返回值为每个键 4 字节。 */
+/* 按设备协议读取 [start, end] 范围内的键码：查询帧为 {start, end, rsv, rsv}。 */
 async function readKeycodeRange(client, layer, start, end) {
   const count = end - start + 1;
-  const range = new Uint8Array(2);
-  range[0] = start & 0xff;
-  range[1] = end & 0xff;
+  const query = Uint8Array.of(start & 0xff, end & 0xff, 0, 0);
 
   const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, count * 4, {
     reserve: (layer & 0xff) << 8,
-    payload: range,
+    payload: query,
     label: `读取键码 Fn${layer} K${start}-${end}`,
     timeoutMs: 3000
   });
@@ -285,15 +285,12 @@ function autoReadKeymap() {
   readKeycodeLayer();
 }
 
-/* 按设备协议把同一个键码写入 [start, end] 范围。 */
+/* 设置帧为 {start, end, kc_t}，同一个键码应用到整个范围。 */
 async function writeKeycodeRange(client, layer, start, end, code) {
-  const count = end - start + 1;
-  const payload = new Uint8Array(2 + count * 4);
+  const payload = new Uint8Array(2 + 4);
   payload[0] = start & 0xff;
   payload[1] = end & 0xff;
-  for (let i = 0; i < count; i++) {
-    writeLe32(payload, 2 + i * 4, code);
-  }
+  writeLe32(payload, 2, code);
 
   await client.statusRequest(CC.CMD_KC, CC.KC_SET, {
     reserve: (layer & 0xff) << 8,

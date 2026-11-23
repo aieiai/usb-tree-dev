@@ -38,6 +38,7 @@
     <button class="nav-btn active" data-view="remap">按键映射</button>
     <button class="nav-btn" data-view="param">按键参数</button>
     <button class="nav-btn" data-view="axis">轴体</button>
+    <button class="nav-btn" data-view="calib">校准</button>
     <button class="nav-btn" data-view="upgrade">升级</button>
     <button class="nav-btn" data-view="system">系统</button>
     <button class="nav-btn" data-view="debug">Debug</button>
@@ -153,12 +154,8 @@
         <div class="param-body">
           <div id="paramTabs" class="param-tabs" role="group" aria-label="参数分类"></div>
           <div class="param-content">
-            <div class="upgrade-row">
-              <button id="btnParamRead" class="secondary" disabled>读取</button>
-              <button id="btnParamWrite" disabled>写入</button>
-            </div>
             <div id="paramForm" class="param-form">
-              <div class="hint">选择分类后点击“读取”。</div>
+              <div class="hint">选择按键后自动读取，修改参数后自动写入。</div>
             </div>
           </div>
         </div>
@@ -178,6 +175,7 @@
         </div>
         <div class="param-toolbar">
           <span id="axisSelection" class="muted">已选择 0 个键位</span>
+          <button id="btnAxisRead" class="secondary" disabled>读取轴体</button>
           <button id="btnAxisSelectAll" class="secondary" disabled>全选</button>
           <button id="btnAxisClear" class="secondary" disabled>清空</button>
         </div>
@@ -185,18 +183,48 @@
           <div id="axisTabs" class="param-tabs" role="group" aria-label="轴体分类"></div>
           <div class="param-content">
             <div id="axisListPanel">
-              <div class="upgrade-row">
-                <button id="btnAxisList" class="secondary" disabled>读取支持列表</button>
-              </div>
+              <div id="axisListText" class="hint">支持列表 --</div>
             </div>
             <div id="axisSetPanel" hidden>
               <div class="upgrade-row">
                 <label>轴体 <select id="axisValue" disabled></select></label>
-                <button id="btnAxisWrite" disabled>写入轴体</button>
               </div>
             </div>
-            <div id="axisState" class="hint">尚未读取支持列表。</div>
+            <div id="axisState" class="hint">选择按键后自动读取支持列表。</div>
           </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-calib" class="view">
+      <section class="interface keyboard-card">
+        <div class="kc-panel">
+          <div id="calibKeyboard" class="keyboard readonly"></div>
+        </div>
+      </section>
+      <section class="interface">
+        <div class="interface-head">
+          <strong class="grow">按键校准</strong>
+          <span id="calibStatus" class="muted">校准 --</span>
+        </div>
+        <div class="hint">
+          开始校准后，依次把每个按键按压到底再完全松开，让设备记录每个按键的
+          ADC 量程；点击完成校准时保存量程并重新计算触发曲线，停止校准则放弃
+          本次采样。自校准是设备上电后的自动校准开关，保存在板载信息里。
+        </div>
+        <div class="upgrade-body">
+          <div class="upgrade-row">
+            <button id="btnCalibRead" class="secondary" disabled>读取校准状态</button>
+            <button id="btnCalibStart" class="secondary" disabled>开始校准</button>
+            <button id="btnCalibFinish" disabled>完成校准</button>
+            <button id="btnCalibStop" class="secondary" disabled>停止校准</button>
+          </div>
+          <div class="upgrade-row">
+            <button id="btnAutoCalibRead" class="secondary" disabled>读取自校准</button>
+            <label><input id="chkAutoCalib" type="checkbox" disabled> 自校准</label>
+            <button id="btnAutoCalibWrite" class="secondary" disabled>写入自校准</button>
+          </div>
+          <div id="calibState" class="hint">连接后可执行校准。</div>
         </div>
       </section>
     </section>
@@ -231,6 +259,7 @@
   <script src="./js/cc/request.js"></script>
   <script src="./js/cc/device-info.js"></script>
   <script src="./js/cc/system.js"></script>
+  <script src="./js/cc/calib.js"></script>
   <script src="./js/keymap/data.js"></script>
   <script src="./js/keymap/picker.js"></script>
   <script src="./js/keymap/keyboard.js"></script>
