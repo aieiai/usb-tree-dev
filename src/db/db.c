@@ -10,7 +10,7 @@
 #define TAG "db: "
 
 #define DB_SAVE_DELAY_MS       (5000U)
-#define DB_NOW_TIMEOUT_MS      (5000U)
+#define DB_SAVE_DELAY_TICKS    ((DB_SAVE_DELAY_MS * TX_TIMER_TICKS_PER_SECOND + 999U) / 1000U)
 #define DB_ITEM_BIT(item_ty)   (1UL << (uint32_t)(item_ty))
 
 _Static_assert(DB_ITEM_MAX <= 32U, "DB dirty mask supports at most 32 types");
@@ -24,7 +24,6 @@ typedef struct {
 typedef struct {
     void *buf;
     uint32_t buf_size;
-    bool update;
     bool registered;
     const msg_t msg;
 } item_t;
@@ -42,34 +41,14 @@ static volatile item_t items[DB_ITEM_MAX] = {
 };
 
 static TX_THREAD db_thread;
-static TX_MUTEX s_api_mutex;
-static TX_MUTEX s_data_mutex;
 static TX_SEMAPHORE s_wake_sem;
-static TX_SEMAPHORE s_done_sem;
 static uint8_t db_thread_stack[DB_THREAD_STACK] __attribute__((aligned(8U)));
 
 static uint32_t s_generation[DB_ITEM_MAX];
-static rotsta_t s_save_result[DB_ITEM_MAX];
 
 static volatile uint32_t s_dirty_mask;
 static volatile uint32_t s_now_mask;
 static bool s_initialized;
-
-static bool _mutex_lock(TX_MUTEX *mutex) {
-    return (TX_SUCCESS == tx_mutex_get(mutex, TX_NO_WAIT)) || (TX_SUCCESS == tx_mutex_get(mutex, TX_WAIT_FOREVER));
-}
-static void _mutex_unlock(TX_MUTEX *mutex) {
-    (void)tx_mutex_put(mutex);
-}
-static bool _sem_wait(TX_SEMAPHORE *semaphore, ULONG timeout) {
-    return TX_SUCCESS == tx_semaphore_get(semaphore, timeout);
-}
-static void _sem_post(TX_SEMAPHORE *semaphore) {
-    (void)tx_semaphore_ceiling_put(semaphore, 1U);
-}
-static void _sem_reset(TX_SEMAPHORE *semaphore) {
-    while (TX_SUCCESS == tx_semaphore_get(semaphore, TX_NO_WAIT)) {}
-}
 
 static bool _type_valid(db_item_ty type) 
 {
@@ -86,46 +65,31 @@ static void *_registered_record(db_item_ty type)
 
 static void _state_snapshot(uint32_t *dirty, uint32_t *now)
 {
-    *dirty = 0U;
-    *now = 0U;
-    if (!_mutex_lock(&s_data_mutex)) {
-        return;
-    }
+    TX_INTERRUPT_SAVE_AREA
+
+    TX_DISABLE
     *dirty = s_dirty_mask;
     *now = s_now_mask;
-    _mutex_unlock(&s_data_mutex);
-}
-
-static bool _type_is_dirty(db_item_ty type)
-{
-    bool dirty;
-
-    if (!_mutex_lock(&s_data_mutex)) {
-        return false;
-    }
-    dirty = (s_dirty_mask & DB_ITEM_BIT(type)) != 0U;
-    _mutex_unlock(&s_data_mutex);
-    return dirty;
+    TX_RESTORE
 }
 
 static rotsta_t _snapshot_type(db_item_ty type, db_save_ty save_type)
 {
+    uint32_t type_bit = DB_ITEM_BIT(type);
+    TX_INTERRUPT_SAVE_AREA
+
     if (_registered_record(type) == NULL) {
         return rotsta_db_not_registered;
     }
-    if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_db_lock_fail;
-    }
 
+    TX_DISABLE
     s_generation[type]++;
-    s_dirty_mask |= DB_ITEM_BIT(type);
+    s_dirty_mask |= type_bit;
     if (save_type == DB_SAVE_TY_NOW) {
-        s_now_mask |= DB_ITEM_BIT(type);
-    } else {
-        s_now_mask &= ~DB_ITEM_BIT(type);
+        s_now_mask |= type_bit;
     }
+    TX_RESTORE
 
-    _mutex_unlock(&s_data_mutex);
     return rotsta_success;
 }
 
@@ -195,32 +159,50 @@ static rotsta_t _save_type(db_item_ty type)
     uint32_t type_bit = DB_ITEM_BIT(type);
     uint32_t generation;
     rotsta_t result;
+    TX_INTERRUPT_SAVE_AREA
 
     if ((!item->registered) || (item->buf == NULL) || (item->buf_size == 0U) || ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg.cap)) {
         return rotsta_db_save_fail;
     }
-    if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_db_lock_fail;
-    }
+
+    TX_DISABLE
     generation = s_generation[type];
-    _mutex_unlock(&s_data_mutex);
+    TX_RESTORE
 
     result = _item_write(type);
 
-    if (!_mutex_lock(&s_data_mutex)) {
-        return rotsta_db_lock_fail;
-    }
-    if (s_generation[type] == generation) {
+    TX_DISABLE
+    /* Only clear the pending flags when no newer update happened during the write.
+     * A failed write keeps the dirty flag so the item is retried on the next cycle. */
+    if ((result == rotsta_success) && (s_generation[type] == generation)) {
         s_dirty_mask &= ~type_bit;
         s_now_mask &= ~type_bit;
     }
-    s_save_result[type] = result;
-    _mutex_unlock(&s_data_mutex);
+    TX_RESTORE
 
     if (result != rotsta_success) {
-        printf(TAG "save %s failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
+        printf(TAG "save %s failed: 0x%08x, retry later\r\n", item->msg.name, (unsigned)result);
     }
     return result;
+}
+
+static void _flush_dirty(void)
+{
+    uint32_t dirty;
+    TX_INTERRUPT_SAVE_AREA
+
+    /* A NOW request is satisfied once this batch is attempted; failed items keep
+     * their dirty bit and are retried after the normal delay. */
+    TX_DISABLE
+    dirty = s_dirty_mask;
+    s_now_mask = 0U;
+    TX_RESTORE
+
+    for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
+        if ((dirty & DB_ITEM_BIT(i)) != 0U) {
+            (void)_save_type((db_item_ty)i);
+        }
+    }
 }
 
 static void db_thread_entry(ULONG argument)
@@ -228,46 +210,75 @@ static void db_thread_entry(ULONG argument)
     (void)argument;
 
     for (;;) {
-        uint32_t dirty;
-        uint32_t now_mask;
-        bool saved_now = false;
-
-        (void)_sem_wait(&s_wake_sem, TX_WAIT_FOREVER);
+        (void)tx_semaphore_get(&s_wake_sem, TX_WAIT_FOREVER);
 
         for (;;) {
+            uint32_t dirty, now_mask;
+
             _state_snapshot(&dirty, &now_mask);
             if (dirty == 0U) {
                 break;
             }
 
-            saved_now = false;
-            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
-                if (((dirty & DB_ITEM_BIT(i)) != 0U) && ((now_mask & DB_ITEM_BIT(i)) != 0U)) {
-                    (void)_save_type((db_item_ty)i);
-                    saved_now = true;
-                }
-            }
-            if (saved_now) {
-                _sem_post(&s_done_sem);
+            if (now_mask != 0U) {
+                _flush_dirty();
                 continue;
             }
 
-            if (_sem_wait(&s_wake_sem, DB_SAVE_DELAY_MS)) {
+            /* Delayed save: every new request restarts the 5s window. */
+            if (TX_SUCCESS == tx_semaphore_get(&s_wake_sem, DB_SAVE_DELAY_TICKS)) {
                 continue;
             }
 
             _state_snapshot(&dirty, &now_mask);
-            if ((dirty & now_mask) != 0U) {
+            if (now_mask != 0U) {
                 continue;
             }
-            for (uint32_t i = 0U; i < (uint32_t)DB_ITEM_MAX; i++) {
-                if ((dirty & DB_ITEM_BIT(i)) != 0U) {
-                    (void)_save_type((db_item_ty)i);
-                }
-            }
-            break;
+            _flush_dirty();
         }
     }
+}
+
+rotsta_t db_update(db_item_ty type, db_save_ty save_type)
+{
+    rotsta_t result;
+
+    if (!s_initialized) {
+        return rotsta_db_not_init;
+    }
+    if (!_type_valid(type)) {
+        return rotsta_db_invalid_type;
+    }
+    if (save_type >= DB_SAVE_TY_MAX) {
+        return rotsta_db_invalid_save_type;
+    }
+
+    /* Non-blocking: only mark the item dirty and wake the saver. NOW is flushed as soon as the saver runs; D5S after 5s without further updates. */
+    result = _snapshot_type(type, save_type);
+    if (result != rotsta_success) {
+        return result;
+    }
+
+    if (TX_NULL == tx_thread_identify()) {
+        /* Kernel not started yet (e.g. tx_application_define): db_thread cannot run,
+         * so flush here to make boot-time updates durable before continuing. */
+        uint32_t dirty;
+        TX_INTERRUPT_SAVE_AREA
+
+        _flush_dirty();
+
+        TX_DISABLE
+        dirty = s_dirty_mask;
+        TX_RESTORE
+
+        if (dirty != 0U) {
+            tx_semaphore_ceiling_put(&s_wake_sem, 1U); /* Save failed: let db_thread retry once the kernel is running. */
+        }
+        return ((dirty & DB_ITEM_BIT(type)) == 0U) ? rotsta_success : rotsta_db_save_fail;
+    }
+
+    tx_semaphore_ceiling_put(&s_wake_sem, 1U);
+    return rotsta_success;
 }
 
 rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
@@ -292,68 +303,16 @@ rotsta_t db_register(db_item_ty type, void *buf, uint32_t buf_size)
 
     item->buf        = buf;
     item->buf_size   = buf_size;
-    item->update     = false;
     item->registered = true;
 
-    s_generation[type]  = 0U;
-    s_save_result[type] = rotsta_success;
+    s_generation[type] = 0U;
 
     result = _item_read(type);
     if (result != rotsta_success) {
         item->buf = NULL;
         item->buf_size = 0U;
-        item->update = false;
         item->registered = false;
     }
-    return result;
-}
-
-rotsta_t db_update(db_item_ty type, db_save_ty save_type)
-{
-    bool now;
-    rotsta_t result;
-
-    if (!s_initialized) {
-        return rotsta_db_not_init;
-    }
-    if (!_type_valid(type)) {
-        return rotsta_db_invalid_type;
-    }
-    if ((uint32_t)save_type >= (uint32_t)DB_SAVE_TY_MAX) {
-        return rotsta_db_invalid_save_type;
-    }
-    if (!_mutex_lock(&s_api_mutex)) {
-        return rotsta_db_lock_fail;
-    }
-
-    now = save_type == DB_SAVE_TY_NOW;
-    if (now) {
-        _sem_reset(&s_done_sem);
-    }
-
-    result = _snapshot_type(type, save_type);
-    if (result == rotsta_success) {
-        _sem_post(&s_wake_sem);
-    }
-
-    if ((result == rotsta_success) && now && (tx_thread_identify() != TX_NULL)) {
-        while (_type_is_dirty(type)) {
-            if (!_sem_wait(&s_done_sem, DB_NOW_TIMEOUT_MS)) {
-                result = rotsta_timeout;
-                break;
-            }
-        }
-        if (result == rotsta_success) {
-            if (!_mutex_lock(&s_data_mutex)) {
-                result = rotsta_db_lock_fail;
-            } else {
-                result = s_save_result[type];
-                _mutex_unlock(&s_data_mutex);
-            }
-        }
-    }
-
-    _mutex_unlock(&s_api_mutex);
     return result;
 }
 
@@ -370,10 +329,7 @@ rotsta_t db_init(void)
         return rotsta_db_init_fail;
     }
 
-    if ((TX_SUCCESS != tx_mutex_create(&s_api_mutex, "db_api", TX_INHERIT)) ||
-        (TX_SUCCESS != tx_mutex_create(&s_data_mutex, "db_data", TX_INHERIT)) ||
-        (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "db_wake", 0U)) ||
-        (TX_SUCCESS != tx_semaphore_create(&s_done_sem, "db_done", 0U))) {
+    if (TX_SUCCESS != tx_semaphore_create(&s_wake_sem, "db_wake", 0U)) {
         return rotsta_db_init_fail;
     }
 
