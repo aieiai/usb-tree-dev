@@ -82,6 +82,7 @@
 /* COL2ROW COL is ADC, ROW is SEL */
 #define SENSOR_MATRIX_SELS 8
 #define SENSOR_MATRIX_ROUND_SELS_MAX 8 /* scan 40 sel in once shot, SENSOR_MATRIX_SELS_SEQUENCE */
+// {0, 3, 6, 1, 4, 7, 2, 5}
 #define SENSOR_MATRIX_SELS_SEQUENCE {0, 1, 2, 3, 4, 5, 6, 7}
 
 

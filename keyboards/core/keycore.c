@@ -10,6 +10,7 @@
 #include "keyprop.h"
 #include "keycalib.h"
 #include "keymagnet.h"
+#include "keymonitor.h"
 
 #include "board.h"
 
