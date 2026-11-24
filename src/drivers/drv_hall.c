@@ -257,8 +257,8 @@ static void isr_hdma(void)
 
     // 时间戳记录：与上一帧的间隔（帧周期）+ SOF 沿到本帧扫描完成
     if (g_sensor_matrix_timing.isr_count != 0U) {
-        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) /  480;
-        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / 480;
+        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) /  (clock_get_frequency(clock_cpu0) / 1000000);
+        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / (clock_get_frequency(clock_cpu0) / 1000000);
     }
     g_sensor_matrix_timing.isr_tick = cycle;
     g_sensor_matrix_timing.sof_tick = gptmr_channel_get_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL, gptmr_counter_type_normal);

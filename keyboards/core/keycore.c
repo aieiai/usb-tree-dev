@@ -10,6 +10,7 @@
 #include "keyprop.h"
 #include "keycalib.h"
 #include "keymagnet.h"
+#include "keymonitor.h"
 
 #include "board.h"
 
@@ -55,6 +56,7 @@ static void keycore_process_frame(volatile uint32_t *frame)
 #endif
 
         keyevt_updete(ki, p_buf[ki]);
+        keymonitor_lmt(ki, p_buf[ki]);
     }
 
     if (keycalib_active()) {
