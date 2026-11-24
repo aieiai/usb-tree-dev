@@ -4,9 +4,9 @@
 #include "db.h"
 
 #define TAG "keymagnet: "
-#define KEYMAG_TOP_DFT  (((0x01 << KBD_ADC_BIT) >> 1) - 1) /* 50% of the ADC range */
-#define KEYMAG_BOT_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 100)) /* 100mV */
-#define KEYMAG_DIF_DFT  ((KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 300)) /* 300mV */
+#define KEYMAG_TOP_DFT  ((0x01 << KBD_ADC_BIT) >> 1) /* 50% of the ADC range */
+#define KEYMAG_BOT_DFT  (KBD_ADC_MVEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 100) /* 100mV */
+#define KEYMAG_DIF_DFT  (KBD_ADC_MVEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * 300) /* 300mV */
 
 obmag_t g_obmag;
 
@@ -72,10 +72,10 @@ void keymag_update_factor(uint8_t ki)
     float t2hdm = p_axis->t2h_dst / 1000.0f;
     float b2hdm = p_axis->b2h_dst / 1000.0f;
     float t2bv  = topv - botv;
-    float k     = (KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * t2bv) / ((1.0f / t2hdm) - (1.0f / b2hdm));
-    float b     = (KBD_ADC_VEF / (float)((0x01 << KBD_ADC_BIT) - 1.0f) * topv) - (k / t2hdm);
-    p_magk->k   = (1000.0f * 1000.0f / (KBD_ADC_VEF * 1000.0f) * (float)((0x01 << KBD_ADC_BIT) - 1.0f)) * k;
-    p_magk->b   = (1000.0f * (float)((0x01 << KBD_ADC_BIT) - 1.0f) / (KBD_ADC_VEF * 1000.0f)) * b;
+    float k     = (KBD_ADC_MVEF / (float)(0x01 << KBD_ADC_BIT) * t2bv) / ((1.0f / t2hdm) - (1.0f / b2hdm));
+    float b     = (KBD_ADC_MVEF / (float)(0x01 << KBD_ADC_BIT) * topv) - (k / t2hdm);
+    p_magk->k   = (1000.0f * 1000.0f / (KBD_ADC_MVEF * 1000.0f) * (float)(0x01 << KBD_ADC_BIT)) * k;
+    p_magk->b   = (1000.0f * (float)(0x01 << KBD_ADC_BIT) / (KBD_ADC_MVEF * 1000.0f)) * b;
 }
 
 bool keymag_lmt_valid(const keymag_lmt_t *p_lmt)
