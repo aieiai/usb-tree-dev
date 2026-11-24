@@ -37,7 +37,7 @@ typedef struct {
 typedef struct {
     uint32_t now_mask;
     uint32_t dirty_mask;
-    // uint8_t snapshot[DB_SNAPSHOT_SIZE] __attribute__((aligned(4)));
+    uint8_t snapshot[DB_SNAPSHOT_SIZE] __attribute__((aligned(4)));
     item_t item[DB_ITEM_MAX];
 } db_t;
 
@@ -117,7 +117,7 @@ static rotsta_t _item_read(db_item_ty type)
     return rotsta_success;
 }
 
-static rotsta_t _item_write(db_item_ty type)
+static rotsta_t _item_write(db_item_ty type, uint32_t offset, const void *data, uint32_t size)
 {
     const volatile item_t *item;
     rotsta_t result;
@@ -127,12 +127,16 @@ static rotsta_t _item_write(db_item_ty type)
         return rotsta_db_invalid_type;
     }
     item = &db.item[type];
-    if ((!item->registered) || (item->buf == NULL) || (item->buf_size == 0U) || ((item->buf_size & 3U) != 0U) || (item->buf_size > item->msg.cap)) {
+    if ((!item->registered) || (data == NULL) || (size == 0U) ||
+        ((offset & (FLASH_SECTOR_SIZ - 1U)) != 0U) || ((size & 3U) != 0U) ||
+        (offset > item->buf_size) || (size > (item->buf_size - offset)) ||
+        ((offset + size) > item->msg.cap)) {
         return rotsta_invalid_argument;
     }
 
-    uint32_t erase_size = ROT_ALIGN_UP(item->buf_size, FLASH_SECTOR_SIZ);
-    result = hal_flash_compare(item->msg.offset, item->buf, item->buf_size, &equal);
+    uint32_t flash_offset = item->msg.offset + offset;
+    uint32_t erase_size = ROT_ALIGN_UP(size, FLASH_SECTOR_SIZ);
+    result = hal_flash_compare(flash_offset, data, size, &equal);
     if (result != rotsta_success) {
         printf(TAG "%s compare failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
@@ -142,18 +146,18 @@ static rotsta_t _item_write(db_item_ty type)
         return rotsta_success;
     }
 
-    result = hal_flash_erase(item->msg.offset, erase_size);
+    result = hal_flash_erase(flash_offset, erase_size);
     if (result != rotsta_success) {
         printf(TAG "%s erase failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
     }
 
-    result = hal_flash_write(item->msg.offset, item->buf, item->buf_size);
+    result = hal_flash_write(flash_offset, data, size);
     if (result != rotsta_success) {
         printf(TAG "%s write failed: 0x%08x\r\n", item->msg.name, (unsigned)result);
         return result;
     }
-    printf(TAG "%s written %u byte\r\n\r\n", item->msg.name, (unsigned)item->buf_size);
+    printf(TAG "%s written %u byte @%u\r\n\r\n", item->msg.name, (unsigned)size, (unsigned)offset);
     return result;
 }
 
@@ -162,21 +166,54 @@ static rotsta_t _save_type(db_item_ty type)
     volatile item_t *item = &db.item[type];
     uint32_t type_bit = DB_ITEM_BIT(type);
     uint32_t generation;
-    rotsta_t result;
+    uint32_t size;
+    uint32_t offset;
+    const uint8_t *buf;
+    rotsta_t result = rotsta_success;
+    bool buffer_changed = false;
     bool dropped = false;
     TX_INTERRUPT_SAVE_AREA
 
     TX_DISABLE
     generation = item->generation;
+    size = item->buf_size;
+    buf = (const uint8_t *)item->buf;
     TX_RESTORE
 
-    result = _item_write(type);
+    if ((buf == NULL) || (size == 0U)) {
+        return rotsta_db_save_fail;
+    }
+
+    for (offset = 0U; offset < size; offset += DB_SNAPSHOT_SIZE) {
+        uint32_t chunk = size - offset;
+
+        if (chunk > DB_SNAPSHOT_SIZE) {
+            chunk = DB_SNAPSHOT_SIZE;
+        }
+
+        /* Snapshot this chunk with interrupts locked: no thread/ISR can modify the
+         * live buffer meanwhile, so flash always gets a coherent copy. */
+        TX_DISABLE
+        memcpy((void *)db.snapshot, buf + offset, chunk);
+        TX_RESTORE
+
+        result = _item_write(type, offset, (void *)db.snapshot, chunk);
+        if (result != rotsta_success) {
+            break;
+        }
+
+        /* Keep the item dirty if the application changed this chunk while it was
+         * being written, even if db_update() has not been called yet. */
+        if (memcmp(buf + offset, (void *)db.snapshot, chunk) != 0) {
+            buffer_changed = true;
+        }
+    }
 
     TX_DISABLE
     if (result == rotsta_success) {
         item->retry = 0U;
-        /* Only clear the pending flags when no newer update happened during the write. */
-        if (item->generation == generation) {
+        /* Only clear the pending flags when nothing changed during the write. */
+        if ((!buffer_changed) && (item->generation == generation)) {
             db.dirty_mask &= ~type_bit;
             db.now_mask &= ~type_bit;
         }

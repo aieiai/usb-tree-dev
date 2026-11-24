@@ -21,7 +21,7 @@ set(CONFIG_SEGGER_RTT 1)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/git.cmake)
 
 # 由本地化脚本注入：APP_NAME 必须在 find_package 之前定义
-set(APP_NAME ray)
+set(APP_NAME usb-dev)
 # 引入工程内本地化 SDK、编译工具链和构建工具路径
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)
     include(${CMAKE_CURRENT_SOURCE_DIR}/localized_sdk.cmake)
@@ -36,7 +36,7 @@ get_git_author(GIT_AUTHOR)
 
 
 find_package(hpm-sdk REQUIRED HINTS $ENV{HPM_SDK_BASE})
-project(ray)
+project(${APP_NAME})
 
 # SoC identity from the SDK, used by hal_chip and the chip specific flash layout.
 if(NOT DEFINED HPM_SOC OR NOT DEFINED HPM_SOC_SERIES)
