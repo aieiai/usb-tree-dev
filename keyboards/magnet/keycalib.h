@@ -26,7 +26,7 @@ rotsta_t keycalib_set_status(uint8_t sta);
 bool keycalib_active(void);
 
 /* Core thread copies one ADC frame per key and notifies the calibration task. */
-void keycalib_post_adc(uint16_t *adc);
+void keycalib_post_adc(uint16_t *p_buf);
 
 
 #endif  /* KEYCALIB_H */

@@ -15,7 +15,7 @@
 static TX_THREAD calib_thread;
 static uint8_t calib_thread_stack[CALIB_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_EVENT_FLAGS_GROUP calib_events;
-static uint16_t calib_rx[KBD_KEY_MAX];
+static uint16_t *calib_frame = NULL;
 static keymag_lmt_t calib_acc[KBD_KEY_MAX];
 static uint8_t calib_sta = KCALIB_STA_STOP;
 
@@ -113,7 +113,7 @@ static void calib_thread_entry(ULONG id)
         ULONG events = 0U;
 
         if (tx_event_flags_get(&calib_events, KCALIB_EVT_FRAME, TX_OR_CLEAR, &events, TX_WAIT_FOREVER) == TX_SUCCESS) {
-            _calib_accumulate(calib_rx);
+            _calib_accumulate((const uint16_t *)calib_frame);
         }
     }
 }
@@ -123,7 +123,7 @@ bool keycalib_active(void)
     return calib_sta == KCALIB_STA_START;
 }
 
-void keycalib_post_adc(uint16_t *adc)
+void keycalib_post_adc(uint16_t *p_buf)
 {
     if (!keycalib_active()) {
         return;
@@ -133,7 +133,7 @@ void keycalib_post_adc(uint16_t *adc)
      * calibration copy stays private to the consumer. Calibration only needs a
      * steady stream, the newest frame wins.
      */
-    memcpy(calib_rx, adc, sizeof(calib_rx));
+    calib_frame = p_buf;
     (void)tx_event_flags_set(&calib_events, KCALIB_EVT_FRAME, TX_OR);
 }
 

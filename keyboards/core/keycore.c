@@ -21,16 +21,9 @@ static TX_THREAD core_thread;
 static uint8_t core_thread_stack[CORE_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_EVENT_FLAGS_GROUP core_events;
 static volatile uint32_t *core_frame = NULL;
-static uint16_t adc_buf[KBD_KEY_MAX];
+static uint8_t adc_buf_idx = 0;
+static uint16_t adc_buf[2][KBD_KEY_MAX];
 
-static uint8_t ks2ki[SENSOR_TOTAL_SIZE] = {
-    22,  24,  28,  25,  29,  27,  15,  16,  19,  17,  21,  18,  
-    23,  39,  56,  62,  67,  64,  59,  60,  35,  255, 61,  4,   
-    8,   10,  13,  11,  14,  12,  0,   1,   5,   2,   6,   3,   
-    9,   52,  65,  26,  66,  63,  58,  255, 20,  255, 7,   255, 
-    50,  51,  55,  53,  57,  54,  44,  45,  48,  46,  49,  47,  
-    37,  38,  42,  40,  43,  41,  30,  31,  34,  32,  36,  33,  
-};
 
 #if KI_EN
 static uint8_t cnt = 0;
@@ -41,13 +34,15 @@ static uint16_t sersor_buf[SENSOR_TOTAL_SIZE];
 
 static void keycore_process_frame(volatile uint32_t *frame)
 {
+    adc_buf_idx = !adc_buf_idx;
+    uint16_t *p_buf = adc_buf[adc_buf_idx];
     for (uint8_t ki = 0, i = 0; i < SENSOR_TOTAL_SIZE; i++) {
-        ki = (ks2ki[i]);
+        ki = keymap_get_ki(i);
         if (KBD_CK_KI(ki) != true) {
             continue;
         }
 
-        adc_buf[ki] = GET_ADC_VALUE(frame, i);
+        p_buf[ki] = GET_ADC_VALUE(frame, i);
 #if KI_EN
         sersor_buf[i] = GET_ADC_VALUE(frame, i);
         if (cnt == 0) {
@@ -59,11 +54,11 @@ static void keycore_process_frame(volatile uint32_t *frame)
         }
 #endif
 
-        keyevt_updete(ki, adc_buf[ki]);
+        keyevt_updete(ki, p_buf[ki]);
     }
 
     if (keycalib_active()) {
-        keycalib_post_adc(adc_buf);
+        keycalib_post_adc(p_buf);
     }
 }
 
