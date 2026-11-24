@@ -86,6 +86,8 @@ extern keyevt_t g_keyevt[KBD_KEY_MAX];
 
 void keyevt_init(void);
 void keyevt_updete(uint8_t ki, uint16_t val);
+kevt_trg_ty keyevt_trg_detect(uint8_t ki);
+void keyevt_reload(void);
 
 
 

@@ -1,6 +1,7 @@
 #include "keycalib.h"
 #include "keymagnet.h"
 #include "keyprop.h"
+#include "keyevt.h"
 #include "db.h"
 
 #include <string.h>
@@ -65,16 +66,15 @@ static rotsta_t _calib_commit(void)
             skipped++;
             continue;
         }
-        printf(TAG "K%u top=%u bot=%u dif=%u\r\n", (unsigned)ki,
-               (unsigned)calib_acc[ki].top, (unsigned)calib_acc[ki].bot, (unsigned)span);
+        printf(TAG "K%u top=%u bot=%u dif=%u\r\n", (unsigned)ki, (unsigned)calib_acc[ki].top, (unsigned)calib_acc[ki].bot, (unsigned)span);
         g_obmag.cal.lmt[ki] = calib_acc[ki];
         keymag_update_factor(ki);
+        keyevt_reload();
         updated++;
     }
 
     if (updated == 0U) {
-        printf(TAG "no key moved, max span=%u (need %u), keep stored limits\r\n",
-               (unsigned)max_span, (unsigned)KCALIB_MIN_SPAN);
+        printf(TAG "no key moved, max span=%u (need %u), keep stored limits\r\n", (unsigned)max_span, (unsigned)KCALIB_MIN_SPAN);
         return rotsta_fail;
     }
     state = db_update(DB_ITEM_OBMAG, DB_SAVE_TY_NOW);

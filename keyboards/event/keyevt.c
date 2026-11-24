@@ -190,26 +190,6 @@ static inline kevt_md_ty _md_detect(uint8_t ki)
 }
 
 /**
- * @brief:  Detect the trigger event of the key.
- * @param:  The index of the key.
- * @return: The trigger event of the key.
- *
- *          Detect the trigger event of the key by comparing the current value
- *          with the previous value and threshold. The trigger event can be one
- *          of the following:
- *            - KEVT_TRG_U2U: From up to up.
- *            - KEVT_TRG_U2D: From up to down.
- *            - KEVT_TRG_D2D: From down to down.
- *            - KEVT_TRG_D2U: From down to up.
- */
-static inline kevt_trg_ty _trg_detect(uint8_t ki)
-{
-    keyevt_t *p_evt = &g_keyevt[ki];
-    return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
-                                 : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
-}
-
-/**
  * @brief:  Detect the position event of the key.
  * @param:  The index of the key.
  * @return: The position event of the key.
@@ -228,6 +208,25 @@ static inline kevt_pos_ty _pos_detect(uint8_t ki)
 }
 
 
+/**
+ * @brief:  Detect the trigger event of the key.
+ * @param:  The index of the key.
+ * @return: The trigger event of the key.
+ *
+ *          Detect the trigger event of the key by comparing the current value
+ *          with the previous value and threshold. The trigger event can be one
+ *          of the following:
+ *            - KEVT_TRG_U2U: From up to up.
+ *            - KEVT_TRG_U2D: From up to down.
+ *            - KEVT_TRG_D2D: From down to down.
+ *            - KEVT_TRG_D2U: From down to up.
+ */
+kevt_trg_ty keyevt_trg_detect(uint8_t ki)
+{
+    keyevt_t *p_evt = &g_keyevt[ki];
+    return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
+                                 : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
+}
 
 /**
  * @brief:  Update the state of the key.
@@ -272,3 +271,14 @@ void keyevt_init(void)
     }
 }
 
+void keyevt_reload(void)
+{
+    for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
+        keyevt_t *p_evt = &g_keyevt[ki];
+        keyattr_t *p_attr = &g_obkp.attr[ki];
+        
+        p_evt->pv = keymag_du2pt(ki, p_attr->nom.dst_p);
+        p_evt->rv = keymag_du2pt(ki, p_attr->nom.dst_r);
+        p_evt->axis_para = &g_keyaxis_para[p_attr->axis.ty];
+    }
+}

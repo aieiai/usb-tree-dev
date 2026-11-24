@@ -42,9 +42,17 @@ typedef struct _key_rt {
 } __attribute__((aligned(4))) keyrt_t;
 
 
-
 static keyrt_t keyrt[KBD_KEY_MAX];
 
+bool keyrt_is_en(uint8_t ki)
+{
+    return (g_obkp.attr[ki].trg_ty != KTRG_TY_NOM) ? true : false;
+}
+
+bool keyrt_is_ctn(uint8_t ki)
+{
+    return (g_obkp.attr[ki].trg_ty == KTRG_TY_RT_CTN) ? true : false;
+}
 
 /**
  * @brief:  Record the release depth dist

@@ -80,8 +80,9 @@ int hal_kbd_send(const uint8_t *report, uint16_t len, uint32_t timeout_ms)
         return -2;
     }
 
-    /* 丢弃上一次可能残留的完成信号，避免误判本次传输已完成 */
-    while (tx_semaphore_get(&s_tx_sem, timeout_ms) == TX_SUCCESS) {
+    /* 丢弃上一次可能残留的完成信号，避免误判本次传输已完成。
+     * 这里必须非阻塞取，否则每次发送都会先空等一个超时周期。 */
+    while (tx_semaphore_get(&s_tx_sem, TX_NO_WAIT) == TX_SUCCESS) {
     }
 
     memcpy(s_tx_buf, report, len);

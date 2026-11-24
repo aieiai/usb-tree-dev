@@ -9,6 +9,9 @@
 #include "keyprop.h"
 #include "keymap.h"
 #include "keycalib.h"
+#include "keymagnet.h"
+#include "keyevt.h"
+
 
 #include "rotcc.h"
 #include "rotver.h"
@@ -695,8 +698,8 @@ static void _handle_kc_nom_get(const rotcc_msg_t *msg)
 
 static void _handle_kc_nom_set(const rotcc_msg_t *msg)
 {
-    uint8_t start;
-    uint8_t end;
+    uint8_t start, end, is_valid = 0;
+    uint16_t dst_p, dst_r;
     uint32_t count;
     rotsta_t state;
 
@@ -709,10 +712,24 @@ static void _handle_kc_nom_set(const rotcc_msg_t *msg)
         keyattr_t *p_attr = &g_obkp.attr[start + i];
         const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->nom.dst_p = rotutil_get_le16(&entry[0U]);
-        p_attr->nom.dst_r = rotutil_get_le16(&entry[2U]);
+        dst_p = rotutil_get_le16(&entry[0U]);
+        dst_r = rotutil_get_le16(&entry[2U]);
+        if ((dst_p != 0) && (dst_p != p_attr->nom.dst_p)) {
+            is_valid = 1;
+            p_attr->nom.dst_p = dst_p;
+        }
+        if ((dst_r != 0) && (dst_r != p_attr->nom.dst_r)) {
+            is_valid = 1;
+            p_attr->nom.dst_r = dst_r;
+        }
     }
 
+    if (!is_valid) {
+        _reply_status(msg, rotsta_fail);
+        return;
+    }
+
+    keyevt_reload();
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
     _reply_status(msg, state);
 }
@@ -741,8 +758,8 @@ static void _handle_kc_rt_get(const rotcc_msg_t *msg)
 
 static void _handle_kc_rt_set(const rotcc_msg_t *msg)
 {
-    uint8_t start;
-    uint8_t end;
+    uint8_t start, end, is_valid = 0;
+    uint16_t dst_p, dst_r;
     uint32_t count;
     rotsta_t state;
 
@@ -755,8 +772,21 @@ static void _handle_kc_rt_set(const rotcc_msg_t *msg)
         keyattr_t *p_attr = &g_obkp.attr[start + i];
         const uint8_t *entry = &msg->payload[ROTCC_KC_RANGE_HEADER_LEN];
 
-        p_attr->rt.dst_p = rotutil_get_le16(&entry[0U]);
-        p_attr->rt.dst_r = rotutil_get_le16(&entry[2U]);
+        dst_p = rotutil_get_le16(&entry[0U]);
+        dst_r = rotutil_get_le16(&entry[2U]);
+        if ((dst_p != 0) && (dst_p != p_attr->rt.dst_p)) {
+            is_valid = 1;
+            p_attr->rt.dst_p = dst_p;
+        }
+        if ((dst_r != 0) && (dst_r != p_attr->rt.dst_r)) {
+            is_valid = 1;
+            p_attr->rt.dst_r = dst_r;
+        }
+    }
+
+    if (!is_valid) {
+        _reply_status(msg, rotsta_fail);
+        return;
     }
 
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
@@ -810,8 +840,7 @@ static void _handle_axis_get(const rotcc_msg_t *msg)
 
 static void _handle_axis_set(const rotcc_msg_t *msg)
 {
-    uint8_t start;
-    uint8_t end;
+    uint8_t start, end, is_valid = 0;
     uint32_t count;
     uint32_t axis;
     rotsta_t state;
@@ -829,11 +858,19 @@ static void _handle_axis_set(const rotcc_msg_t *msg)
 
     for (uint32_t i = 0U; i < count; i++) {
         uint8_t ki = (uint8_t)(start + i);
-
-        g_obkp.attr[ki].axis.ty = (kaxis_ty)axis;
-        keymag_update_factor(ki);
+        if (g_obkp.attr[ki].axis.ty != (kaxis_ty)axis) {
+            is_valid = 1;
+            g_obkp.attr[ki].axis.ty = (kaxis_ty)axis;
+            keymag_update_factor(ki);
+        }
     }
 
+    if (!is_valid) {
+        _reply_status(msg, rotsta_fail);
+        return;
+    }
+
+    keyevt_reload();
     state = db_update(DB_ITEM_OBKP, DB_SAVE_TY_D5S);
     _reply_status(msg, state);
 }

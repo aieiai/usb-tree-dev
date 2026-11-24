@@ -5,6 +5,9 @@
 
 #include "hpm_clock_drv.h"
 
+#define TAG "keymonitor: "
+#define WAIT_TICK MS2TK(5000)
+
 typedef struct {
     uint8_t rst;
     uint16_t max_mval;
@@ -16,7 +19,10 @@ typedef struct {
 } __attribute__((aligned(4))) keymon_t;
 
 static uint64_t run_tick = 0;
-static keymon_t g_keymon;
+static keymon_t g_keymon = { 
+    .rst = 1,
+    .wait_tick = WAIT_TICK
+};
 
 void keymonitor_lmt(uint8_t ki, uint16_t data)
 {
@@ -29,7 +35,7 @@ void keymonitor_lmt(uint8_t ki, uint16_t data)
 
     if (p_mon->rst) {
         p_mon->rst = 0;
-        p_mon->wait_tick = MS2TK(5000);
+        p_mon->wait_tick = WAIT_TICK;
         p_mon->max_mval = 0;
         for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
             keymon_t *p = &g_keymon;
@@ -53,6 +59,7 @@ void keymonitor_lmt(uint8_t ki, uint16_t data)
     }
     p_mon->run_us = (hpm_csr_get_core_cycle() - run_tick) / (clock_get_frequency(clock_cpu0) / 1000000);
 }
+
 void keymonitor_rst(void)
 {
     g_keymon.rst = true;

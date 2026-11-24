@@ -1,165 +1,181 @@
+/**
+ * @Brief:  keyboard typing. Map key events to HID key codes and report them.
+ */
 #include "keyhid.h"
+
+#include "kbd_config.h"
 #include "keycode.h"
-#include "rotutil.h"
+#include "keyevt.h"
+#include "keymap.h"
+#include "keyprop.h"
+#include "keyrpt.h"
 
-static khid_rpt_nkro_t s_rpt_nkro = { .id = KHID_RPT_ID_NKRO };
-static khid_rpt_csm_t  s_rpt_csm  = { .id = KHID_RPT_ID_CSM  };
-static khid_rpt_sys_t  s_rpt_sys  = { .id = KHID_RPT_ID_SYS  };
-static khid_rpt_6kro_t s_rpt_kb6  = { .id = KHID_RPT_ID_6KRO };
-static khid_rpt_ms_t   s_rpt_ms   = { .id = KHID_RPT_ID_MS   };
+#include "usb/keyboard/hal_kbd.h"
 
-static inline uint8_t khid_mod_bit(uint8_t kc)
+#include <string.h>
+
+/* 等待 IN 传输完成的时间：主机按端点间隔轮询，正常情况下远小于该值。 */
+#define KEYHID_TX_TIMEOUT_MS    (5U)
+#define KEYHID_NO_FN            (0xFFU)
+
+typedef struct {
+    uint32_t out;       /* 按下期间上报的键码，0 表示不上报（Fn 等） */
+    uint8_t  fn_layer;  /* FN_KEY 对应的层，KEYHID_NO_FN 表示不是 Fn 键 */
+} keyhid_key_t;
+
+static keyhid_key_t s_kbd[KBD_KEY_MAX];
+static bool s_dirty;
+
+/* KC_FN1..KC_FN7（0xF1..0xF7）与上位机下发的 1..7 都表示层号。 */
+static uint8_t _fn_layer(uint16_t co)
 {
-    return (uint8_t)(0x01U << (kc - KC_LCTL));
+    uint8_t layer = (co >= KC_FN0) ? (uint8_t)(co - KC_FN0) : (uint8_t)co;
+
+    if (layer == 0U) {
+        layer = 1U;
+    }
+    return (layer < KBD_MAP_MAX) ? layer : (uint8_t)(KBD_MAP_MAX - 1U);
 }
 
-/* System Control usage 0x81..0x83 映射到描述符 Logical 1..3，0 表示无动作 */
-static inline uint8_t khid_sys_action(uint8_t sc)
+/* 同一键码是否还被其他物理按键持有（例如 Fn 层映射重叠）。 */
+static bool _code_held(uint8_t except, uint32_t code)
 {
-    if ((sc >= SC_POWER_DOWN) && (sc <= SC_WAKE_UP)) {
-        return (uint8_t)(sc - SC_POWER_DOWN + 1U);
-    }
-    return 0U;
-}
-
-/** ---------------- Report ID 4: 6KRO ---------------- */
-
-void khid_rpt_add_6kro(uint8_t kc)
-{
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_set(s_rpt_kb6.modify.dat, khid_mod_bit(kc));
-    }
-    else if (kc != KC_NONE) {
-        for (uint8_t i = 0U; i < (uint8_t)sizeof(s_rpt_kb6.keys); i++) {
-            if (s_rpt_kb6.keys[i] == KC_NONE) {
-                s_rpt_kb6.keys[i] = kc;
-                break;
-            }
-        }
-    }
-}
-
-void khid_rpt_del_6kro(uint8_t kc)
-{
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_clr(s_rpt_kb6.modify.dat, khid_mod_bit(kc));
-    }
-    else if (kc != KC_NONE) {
-        for (uint8_t i = 0U; i < (uint8_t)sizeof(s_rpt_kb6.keys); i++) {
-            if (s_rpt_kb6.keys[i] == kc) {
-                s_rpt_kb6.keys[i] = KC_NONE;
-                break;
-            }
-        }
-    }
-}
-
-bool khid_rpt_get_6kro(uint8_t kc)
-{
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        return rotutil_bit_get(s_rpt_kb6.modify.dat, khid_mod_bit(kc)) != 0U;
-    }
-    else if (kc != KC_NONE) {
-        for (uint8_t i = 0U; i < (uint8_t)sizeof(s_rpt_kb6.keys); i++) {
-            if (s_rpt_kb6.keys[i] == kc) {
-                return true;
-            }
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if ((ki != except) && (s_kbd[ki].out == code)) {
+            return true;
         }
     }
     return false;
 }
 
-/** ---------------- Report ID 1: NKRO ---------------- */
-
-void khid_rpt_add_nkro(uint8_t kc)
+static uint8_t _active_layer(void)
 {
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_set(s_rpt_nkro.modify.dat, khid_mod_bit(kc));
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if (s_kbd[ki].fn_layer != KEYHID_NO_FN) {
+            return s_kbd[ki].fn_layer;
+        }
     }
-    else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(s_rpt_nkro.keys) * 8U))) {
-        /* 位图 bit0 对应 usage 0；usage >= 128 不在描述符范围内 */
-        rotutil_bit_set(s_rpt_nkro.keys[kc >> 3], (uint8_t)(0x01U << (kc & 0x07U)));
-    }
+    return keymap_get_active_layer();
 }
 
-void khid_rpt_del_nkro(uint8_t kc)
+static void _report_send(void)
 {
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_clr(s_rpt_nkro.modify.dat, khid_mod_bit(kc));
-    }
-    else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(s_rpt_nkro.keys) * 8U))) {
-        rotutil_bit_clr(s_rpt_nkro.keys[kc >> 3], (uint8_t)(0x01U << (kc & 0x07U)));
+    const uint8_t *buf = NULL;
+    uint8_t id = (g_obi.fs.nkro != 0U) ? KRPT_ID_NKRO : KRPT_ID_6KRO;
+    uint16_t len = krpt_get_raw(id, &buf);
+
+    if ((buf != NULL) && (len != 0U)) {
+        (void)hal_kbd_send(buf, len, KEYHID_TX_TIMEOUT_MS);
     }
 }
 
-bool khid_rpt_get_nkro(uint8_t kc)
+/* Fn 键在按下时记录层号，不产生 HID 上报。 */
+static void _fn_press(uint8_t ki, uint8_t layer)
 {
-    if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        return rotutil_bit_get(s_rpt_nkro.modify.dat, khid_mod_bit(kc)) != 0U;
-    }
-    else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(s_rpt_nkro.keys) * 8U))) {
-        return rotutil_bit_get(s_rpt_nkro.keys[kc >> 3], (uint8_t)(0x01U << (kc & 0x07U))) != 0U;
-    }
-    return false;
-}
+    rotkc_t kc = { .code = keymap_get_key(layer, ki) };
 
-/** ---------------- Report ID 2: Consumer Control ---------------- */
-
-void khid_rpt_add_csm(uint16_t cc)
-{
-    if (cc != 0U) {
-        s_rpt_csm.usage = cc;
+    /* _FN()/_FL()... 把功能类型写在 sy 位域，co 保存层号或功能号 */
+    if ((kc.ty == KCT_FN) && (kc.fn.sy == FN_KEY)) {
+        s_kbd[ki].fn_layer = _fn_layer((uint16_t)kc.fn.co);
     }
 }
 
-void khid_rpt_del_csm(uint16_t cc)
+static void _key_press(uint8_t ki, uint8_t layer)
 {
-    if (s_rpt_csm.usage == cc) {
-        s_rpt_csm.usage = 0U;
+    rotkc_t kc;
+
+    s_kbd[ki].out = 0U;
+
+    /* 已识别为 Fn 的按键不产生 HID 上报 */
+    if (s_kbd[ki].fn_layer != KEYHID_NO_FN) {
+        return;
+    }
+
+    kc.code = keymap_get_key(layer, ki);
+
+    /* 目前只处理普通键码；多媒体/系统/鼠标等键码不参与打字。 */
+    if (kc.ty != KCT_KBD) {
+        return;
+    }
+    if ((kc.kbd.co == KC_NONE) || (kc.kbd.co == KC_UNDEFINED)) {
+        return;
+    }
+
+    s_kbd[ki].out = kc.code;
+    if (_code_held(ki, kc.code)) {
+        return;
+    }
+
+    krpt_add_6kro(kc.kbd.co);
+    krpt_add_nkro(kc.kbd.co);
+    s_dirty = true;
+}
+
+static void _key_release(uint8_t ki)
+{
+    uint32_t code = s_kbd[ki].out;
+    rotkc_t kc = { .code = code };
+
+    s_kbd[ki].out = 0U;
+    s_kbd[ki].fn_layer = KEYHID_NO_FN;
+
+    if ((code == 0U) || (kc.ty != KCT_KBD) || _code_held(ki, code)) {
+        return;
+    }
+
+    krpt_del_6kro(kc.kbd.co);
+    krpt_del_nkro(kc.kbd.co);
+    s_dirty = true;
+}
+
+void keyhid_init(void)
+{
+    memset(s_kbd, 0, sizeof(s_kbd));
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        s_kbd[ki].fn_layer = KEYHID_NO_FN;
+    }
+    s_dirty = false;
+}
+
+void keyhid_process(void)
+{
+    uint8_t layer;
+
+    /* 先登记本帧按下的 Fn 键，保证同帧的其他按键能使用对应层。 */
+    layer = _active_layer();
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if (KEVT_TRG_U2D == g_keyevt[ki].trg) {
+            _fn_press(ki, layer);
+        }
+    }
+
+    layer = _active_layer();
+
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if (KEVT_TRG_D2U == g_keyevt[ki].trg) {
+            _key_release(ki);
+        }
+    }
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if (KEVT_TRG_U2D == g_keyevt[ki].trg) {
+            _key_press(ki, layer);
+        }
+    }
+
+    if (s_dirty) {
+        s_dirty = false;
+        _report_send();
     }
 }
 
-bool khid_rpt_get_csm(uint16_t cc)
+void keyhid_suspend(void)
 {
-    return (cc != 0U) && (s_rpt_csm.usage == cc);
-}
-
-/** ---------------- Report ID 3: System Control ---------------- */
-
-void khid_rpt_add_sys(uint8_t sc)
-{
-    uint8_t action = khid_sys_action(sc);
-    if (action != 0U) {
-        s_rpt_sys.action = action;
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        _key_release(ki);
     }
-}
 
-void khid_rpt_del_sys(uint8_t sc)
-{
-    if ((khid_sys_action(sc) != 0U) && (s_rpt_sys.action == khid_sys_action(sc))) {
-        s_rpt_sys.action = 0U;
+    if (s_dirty) {
+        s_dirty = false;
+        _report_send();
     }
-}
-
-bool khid_rpt_get_sys(uint8_t sc)
-{
-    uint8_t action = khid_sys_action(sc);
-    return (action != 0U) && (s_rpt_sys.action == action);
-}
-
-/** ---------------- Report ID 5: Mouse ---------------- */
-
-void khid_rpt_add_ms(uint8_t btn)
-{
-    s_rpt_ms.buttons |= btn;
-}
-
-void khid_rpt_del_ms(uint8_t btn)
-{
-    s_rpt_ms.buttons &= (uint8_t)~btn;
-}
-
-bool khid_rpt_get_ms(uint8_t btn)
-{
-    return (btn != 0U) && ((s_rpt_ms.buttons & btn) != 0U);
 }

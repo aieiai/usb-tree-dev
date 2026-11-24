@@ -152,12 +152,7 @@ static const uint32_t keymap[KBD_SYS_MAX][KBD_MAP_MAX][KBD_KEY_MAX] = {
     },
 };
 
-#include "drv_hall.h"
-#ifndef SENSOR_TOTAL_SIZE
-#define SENSOR_TOTAL_SIZE 72
-#endif
-
-static const uint8_t ks2ki[SENSOR_TOTAL_SIZE] = {
+static const uint8_t ks2ki[] = {
     22,  24,  28,  25,  29,  27,  15,  16,  19,  17,  21,  18,  
     23,  39,  56,  62,  67,  64,  59,  60,  35,  255, 61,  4,   
     8,   10,  13,  11,  14,  12,  0,   1,   5,   2,   6,   3,   
@@ -177,7 +172,7 @@ const uint32_t *keymap_get_default(uint8_t sys, uint8_t map)
 
 uint8_t keymap_get_ki(uint8_t si)
 {
-    if (si >= SENSOR_TOTAL_SIZE) {
+    if (si >= sizeof(ks2ki)) {
         return 0xff;
     }
     return ks2ki[si];

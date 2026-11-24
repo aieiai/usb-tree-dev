@@ -327,8 +327,8 @@
         HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_POWER_DOWN ),           \
         HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_SLEEP      ),           \
         HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_WAKE_UP    ),           \
-        HID_LOGICAL_MIN  ( 0                                   ),           \
-        HID_LOGICAL_MAX  ( 3                                   ),           \
+        HID_LOGICAL_MIN  ( 0x80                                ),           \
+        HID_LOGICAL_MAX  ( 0x83                                ),           \
         HID_REPORT_SIZE  ( 8                                   ),           \
         HID_REPORT_COUNT ( 1                                   ),           \
         HID_INPUT        ( HID_DATA | HID_ARRAY | HID_ABSOLUTE ),           \
