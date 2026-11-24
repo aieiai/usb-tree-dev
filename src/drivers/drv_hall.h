@@ -35,8 +35,8 @@
 /* MCHTMR 24MHz 换算：ns = ticks * 1e9 / 24e6 = ticks * 125 / 3；us = ticks / 24 */
 #define SENSOR_MATRIX_MCHTMR_TICKS_TO_NS(t) ((uint32_t)(((uint64_t)(t)) * 125ULL / 3ULL))
 #define SENSOR_MATRIX_MCHTMR_TICKS_TO_US(t) ((uint32_t)(((uint64_t)(t)) / 24ULL))
-/* GPTMR 200MHz 换算：1 tick = 5ns */
-#define SENSOR_MATRIX_TMR_TICKS_TO_NS(t)    ((uint32_t)(((uint64_t)(t)) * 5ULL))
+/* GPTMR 100MHz 换算：1 tick = 10ns */
+#define SENSOR_MATRIX_TMR_TICKS_TO_NS(t)    ((uint32_t)(((uint64_t)(t)) * 10ULL))
 
 #define SENSOR_TOTAL_SIZE                   (SENSOR_MATRIX_ROUND_SELS_MAX * SENSOR_MATRIX_ADC_TOTAL_CHANNELS)
 #if ((SENSOR_MATRIX_ADC_SAMPLE_ROUNDS) == 1)

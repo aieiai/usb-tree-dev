@@ -24,7 +24,7 @@
 
 
 #define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */
-#define SENSOR_MATRIX_TMR_SEL_FREQ 250000 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
+#define SENSOR_MATRIX_TMR_SEL_FREQ 218800 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
 
 #define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time) */
 #define SENSOR_MATRIX_TMR_ST_TIME 70 /* tmr soft sync setup time default 350ns, DMA 握手，写 GPIO 切 mux  */
