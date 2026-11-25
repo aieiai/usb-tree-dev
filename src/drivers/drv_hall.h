@@ -51,13 +51,12 @@ typedef void (*hall_recv_cb_t)(uint32_t *p_buf);
 /*
  * 扫描时序测
  * isr_ts / frame_ticks 基于 HPM_CORE_MCYCLE，固定 core freq xMHz
- * sof_tick 基于 GPTMR（200MHz），1 tick = 5ns
+ * sof_tick 基于 GPTMR（100MHz），1 tick = 10ns
  */
 typedef struct {
-    volatile uint64_t isr_tick;      /* 最近一帧扫描完成（DMA ISR）时的 MCHTMR 时间戳 */
     volatile uint64_t sof_start_tick;
-
-    volatile uint32_t sof_tick;   /* SOF 沿 → 本帧扫描完成（GPTMR1 SHT 通道计数） */
+    volatile uint64_t isr_tick;      /* 最近一帧扫描完成（DMA ISR）时的 MCYCLE 时间戳 */
+    volatile uint64_t sof_tick;   /* SOF 沿 → 本帧扫描完成（GPTMR1 SHT 通道计数） */
     volatile uint32_t isr_count;   /* 已完成的扫描帧数 */
     
     volatile uint32_t scan_time_us;

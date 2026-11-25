@@ -2,7 +2,7 @@
 #include "drv_hall.h"
 
 #include "usbd_core.h"
-
+#include "app_config.h"
 #include "board.h"
 
 volatile gamepad_mode_ty g_gamepad_mode = HAL_GAMEPAD_MODE_OFF;
@@ -73,7 +73,7 @@ void hal_usb_init(void)
     uint32_t i;
 
     board_init_usb((USB_Type *)CONFIG_USBD_REG_BASE);
-    intc_set_irq_priority(CONFIG_HPM_USBD_IRQn, 2);
+    intc_set_irq_priority(CONFIG_HPM_USBD_IRQn, USB_IRQ_PRIORITY);
     
     hid_descriptor_init();
 

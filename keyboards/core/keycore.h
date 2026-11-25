@@ -58,6 +58,7 @@ extern "C" {
 #endif
 
 
+extern uint32_t core_freq_mhz;
 rotsta_t keycore_init(void);
 
 #ifdef __cplusplus

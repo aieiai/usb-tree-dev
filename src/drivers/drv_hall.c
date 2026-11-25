@@ -19,6 +19,9 @@
 #include "_pin_defs.h"
 #include "gpio.h"
 
+#include "app_config.h"
+
+extern uint32_t core_freq_mhz;
 
 #if defined(HPM_HDMA)
 #    define MMX_HDMA HPM_HDMA
@@ -44,13 +47,17 @@
 #    error "SENSOR_MATRIX_DRIVER mux_io not support POWER_MANAGER"
 #endif
 
+#if (SENSOR_MATRIX_ROUND_SELS_MAX < 1)
+#    error "SENSOR_MATRIX_ROUND_SELS_MAX must be at least 1"
+#endif
+
 
 /* usb sof sync setup time (sof to tmr irq margin time) */
 #ifndef SENSOR_MATRIX_SOF_ST_TIME
 #    define SENSOR_MATRIX_SOF_ST_TIME 0
 #endif
 
-/* tmr soft sync setup time default 700ns  */
+/* tmr soft sync setup time default 700ns */
 #ifndef SENSOR_MATRIX_TMR_ST_TIME
 #    define SENSOR_MATRIX_TMR_ST_TIME 70
 #endif
@@ -126,13 +133,13 @@ volatile sensor_matrix_timing_t g_sensor_matrix_timing;
 ATTR_PLACE_AT_WITH_ALIGNMENT(".ahb_sram", 32)
 static dma_linked_descriptor_t dma_set_chain_descriptors[9];
 
-/* dma sel chain */
+/* dma sel chain: switch_chain(1) + (SELS_MAX-1)*(mux+copy) + stop_dma + stop_adc + copy_last + active_end + switch_preload(5) */
 enum {
     dma_sel_chain_buffer0 = 0,
     dma_sel_chain_buffer1 = 1,
 };
 ATTR_PLACE_AT_WITH_ALIGNMENT(".ahb_sram", 32)
-static dma_linked_descriptor_t dma_sel_chain_descriptors[2][2 + 1 + 2 * SENSOR_MATRIX_ROUND_SELS_MAX + 4];
+static dma_linked_descriptor_t dma_sel_chain_descriptors[2][1 + 2 * (SENSOR_MATRIX_ROUND_SELS_MAX - 1) + 5];
 
 /* mux addr control */
 enum {
@@ -140,7 +147,7 @@ enum {
     mux_addr_shadow  = 1,
 };
 ATTR_PLACE_AT_WITH_ALIGNMENT(".ahb_sram", 4)
-static volatile uint32_t MUX_ADDR_REG[2][(SENSOR_MATRIX_ROUND_SELS_MAX + 1) * 2];
+static volatile uint32_t MUX_ADDR_REG[2][SENSOR_MATRIX_ROUND_SELS_MAX * 2];
 
 /* scan array control */
 enum {
@@ -215,9 +222,6 @@ static uint32_t raw_buff[2][SENSOR_MATRIX_ROUND_SELS_MAX * SENSOR_MATRIX_ADC_TOT
  * 按“通道优先”排列，每通道 SAMPLE_ROUNDS 个采样：
  * [ch0 r0, ch0 r1, ch1 r0, ch1 r1, ..., ch9 r0, ch9 r1]
  */
-/* sel0   0,0 0,1 0,2 0,3 0,4 0,5 0,6   0,0 0,1 0,2 0,3 0,4 0,5 0,6   1,0 1,1 1,2 1,3 1,4 1,5 1,6   1,0 1,1 1,2 1,3 1,4 1,5 1,6 */
-/* sel1   0,0 0,1 0,2 0,3 0,4 0,5 0,6   0,0 0,1 0,2 0,3 0,4 0,5 0,6   1,0 1,1 1,2 1,3 1,4 1,5 1,6   1,0 1,1 1,2 1,3 1,4 1,5 1,6 */
-/* sel ... */
 
 static uint8_t  sensor_sof_src_saved;
 static uint8_t  sensor_sof_src;
@@ -225,17 +229,9 @@ static float    sensor_scan_adjust;
 static uint32_t sensor_scan_interval;
 static uint32_t mux_addr_mask;
 
-//#if ((SENSOR_MATRIX_ADC_CHANNELS) * (SENSOR_MATRIX_ADC_INSTANCES)) != (MATRIX_COLS)
-//#    error "SENSOR_MATRIX_ADC_CHANNELS * SENSOR_MATRIX_ADC_INSTANCES must be equal to MATRIX_COLS"
-//#endif
-
 #if ((SENSOR_MATRIX_ADC_CHANNELS) > 8)
 #    error "SENSOR_MATRIX_ADC_CHANNELS can't exceed 8"
 #endif
-
-// #if (SENSOR_MATRIX_ADC_SAMPLES) != 1
-// #    error "The adaptive 4-ADC mapper currently requires SENSOR_MATRIX_ADC_SAMPLES == 1"
-// #endif
 
 #if ((SENSOR_MATRIX_ADC_SAMPLES) > 1) && ((SENSOR_MATRIX_ADC_SAMPLES) & 1)
 #    error "SENSOR_MATRIX_ADC_SAMPLES must be 1 or even"
@@ -244,8 +240,8 @@ static uint32_t mux_addr_mask;
 
 static void isr_hdma(void)
 {
-    // uint64_t now = mchtmr_get_count(HPM_MCHTMR);
     uint64_t cycle = hpm_csr_get_core_mcycle();
+    //uint32_t sof_now = gptmr_channel_get_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL, gptmr_counter_type_normal);
 
     /* clear isr status */
     dma_clear_transfer_status(MMX_HDMA, SENSOR_MATRIX_DMA_SEL_CHANNEL);
@@ -255,18 +251,18 @@ static void isr_hdma(void)
         hall_recv_cb(raw_buff[bufidx]);
     }
 
-    // 时间戳记录：与上一帧的间隔（帧周期）+ SOF 沿到本帧扫描完成
     if (g_sensor_matrix_timing.isr_count != 0U) {
-        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) /  (clock_get_frequency(clock_cpu0) / 1000000);
-        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / (clock_get_frequency(clock_cpu0) / 1000000);
+        g_sensor_matrix_timing.scan_period_us = (cycle - g_sensor_matrix_timing.isr_tick) /  (core_freq_mhz);
+        g_sensor_matrix_timing.scan_time_us = (cycle - g_sensor_matrix_timing.sof_start_tick) / (core_freq_mhz);
     }
     g_sensor_matrix_timing.isr_tick = cycle;
-    g_sensor_matrix_timing.sof_tick = gptmr_channel_get_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL, gptmr_counter_type_normal);
+    g_sensor_matrix_timing.sof_tick = cycle;
     g_sensor_matrix_timing.isr_count++;
 }
+
 SDK_DECLARE_EXT_ISR_M(MMX_HDMA_IRQ, isr_hdma)
 
-static void sensor_matrix_init_pins(void) 
+static void sensor_matrix_init_pins(void)
 {
     uint32_t fast_padctrl = IOC_PAD_PAD_CTL_SPD_SET(3) | IOC_PAD_PAD_CTL_DS_SET(3);
     /* mux addr gpio init */
@@ -313,7 +309,7 @@ static void sensor_matrix_init_pins(void)
 #endif
 }
 
-static void sensor_matrix_set_mux(uint8_t val) 
+static void sensor_matrix_set_mux(uint8_t val)
 {
     uint32_t set = 0;
     uint32_t clr = 0;
@@ -321,7 +317,7 @@ static void sensor_matrix_set_mux(uint8_t val)
     for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) {
         if (val & 1) {
             set |= 1 << mux_pins[i].npin;
-        } 
+        }
         else {
             clr |= 1 << mux_pins[i].npin;
         }
@@ -332,13 +328,13 @@ static void sensor_matrix_set_mux(uint8_t val)
     mux_pins[0].ngpio->DO[mux_pins[0].nport].SET   = set;
 }
 
-static void sensor_matrix_init_mux(void) 
+static void sensor_matrix_init_mux(void)
 {
     uint8_t nport = mux_pins[0].nport;
     (void)nport;
 
     mux_addr_mask = 0;
-  
+
     /* check port */
     for (uint8_t i = 0; i < SENSOR_MATRIX_ADDRS; i++) {
         mux_addr_mask |= 1 << mux_pins[i].npin;
@@ -347,12 +343,12 @@ static void sensor_matrix_init_mux(void)
     sensor_matrix_set_mux(0);
 }
 
-static uint32_t sensor_matrix_init_adc_clock(ADC16_Type *ptr, bool clk_src_ahb) 
+static uint32_t sensor_matrix_init_adc_clock(ADC16_Type *ptr, bool clk_src_ahb)
 {
     return board_init_adc_clock(ptr, clk_src_ahb);
 }
 
-static void sensor_matrix_init_adc_common(ADC16_Type *ptr, bool clk_src_ahb) 
+static void sensor_matrix_init_adc_common(ADC16_Type *ptr, bool clk_src_ahb)
 {
     adc16_config_t cfg;
 
@@ -370,7 +366,7 @@ static void sensor_matrix_init_adc_common(ADC16_Type *ptr, bool clk_src_ahb)
 }
 
 
-static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx) 
+static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx)
 {
     adc16_seq_config_t     seq_cfg;
     adc16_dma_config_t     dma_cfg;
@@ -440,7 +436,7 @@ static void sensor_matrix_init_adc_config(ADC16_Type *ptr, uint8_t idx)
     adc16_init_seq_dma(ptr, &dma_cfg);
 }
 
-static void sensor_matrix_init_adc(void) 
+static void sensor_matrix_init_adc(void)
 {
     uint32_t freq;
     (void)freq;
@@ -453,7 +449,7 @@ static void sensor_matrix_init_adc(void)
     }
 }
 
-static void sensor_matrix_init_trgm(void) 
+static void sensor_matrix_init_trgm(void)
 {
     /* Trigger mux initialization */
     trgm_output_t trgm_sel_cfg;
@@ -472,7 +468,7 @@ static void sensor_matrix_init_trgm(void)
     sensor_matrix_set_sof_src(sensor_sof_src);
 }
 
-static void sensor_matrix_init_dma_set(void) 
+static void sensor_matrix_init_dma_set(void)
 {
     dma_channel_config_t dma_ch_config;
     uint32_t             idx = 0;
@@ -565,7 +561,7 @@ static void sensor_matrix_init_dma_set(void)
 
     /* 4. load scan mux buffer */
     do {
-        dma_ch_config.size_in_byte   = 4 * (SENSOR_MATRIX_ROUND_SELS_MAX + 1) * 2;
+        dma_ch_config.size_in_byte   = 4 * SENSOR_MATRIX_ROUND_SELS_MAX * 2;
         dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&MUX_ADDR_REG[mux_addr_preload][0]);
         dma_ch_config.dst_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&MUX_ADDR_REG[mux_addr_shadow][0]);
         dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
@@ -712,10 +708,11 @@ static void sensor_matrix_init_dma_set(void)
     dma_enable_channel(MMX_HDMA, SENSOR_MATRIX_DMA_SET_CHANNEL);
 }
 
-static void sensor_matrix_init_dma_sel(void) 
+static void sensor_matrix_init_dma_sel(void)
 {
     dma_channel_config_t dma_ch_config;
     uint32_t             idx = 0;
+    const uint32_t       sel_copy_words = SENSOR_MATRIX_ADC_TOTAL_CHANNELS * SENSOR_MATRIX_ADC_SAMPLE_ROUNDS;
 
     dma_default_channel_config(MMX_HDMA, &dma_ch_config);
     memset(dma_sel_chain_descriptors, 0, sizeof(dma_sel_chain_descriptors));
@@ -724,18 +721,18 @@ static void sensor_matrix_init_dma_sel(void)
     LLPOINTER[llpointer_buffer0] = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][0]) & ~0x7;
     LLPOINTER[llpointer_buffer1] = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][0]) & ~0x7;
 
-    /* 1. dummy, with handshake */
+    /* 1. pre (SEL 0), with handshake, mux addr (loaded directly into DMA_SEL_REG, executes in Slot 0) */
     do {
-        dma_ch_config.size_in_byte   = 4;
-        dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&DUMMY_REG[0]);
-        dma_ch_config.dst_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&DUMMY_REG[1]);
+        dma_ch_config.size_in_byte   = 8;
+        dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&MUX_ADDR_REG[mux_addr_shadow][1]);
+        dma_ch_config.dst_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&(mux_pins[0].ngpio->DO[mux_pins[0].nport].CLEAR));
         dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
         dma_ch_config.dst_width      = DMA_TRANSFER_WIDTH_WORD;
-        dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_1T;
+        dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_2T;
         dma_ch_config.src_mode       = DMA_HANDSHAKE_MODE_HANDSHAKE;
         dma_ch_config.dst_mode       = DMA_HANDSHAKE_MODE_NORMAL;
-        dma_ch_config.src_addr_ctrl  = DMA_ADDRESS_CONTROL_FIXED;
-        dma_ch_config.dst_addr_ctrl  = DMA_ADDRESS_CONTROL_FIXED;
+        dma_ch_config.src_addr_ctrl  = DMA_ADDRESS_CONTROL_DECREMENT;
+        dma_ch_config.dst_addr_ctrl  = DMA_ADDRESS_CONTROL_DECREMENT;
         dma_ch_config.priority       = DMA_CHANNEL_PRIORITY_HIGH;
         dma_ch_config.interrupt_mask = DMA_INTERRUPT_MASK_ALL;
         dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
@@ -747,12 +744,9 @@ static void sensor_matrix_init_dma_sel(void)
 
         /* enable transfer */
         DMA_SEL_REG.CTRL |= DMAV2_CHCTRL_CTRL_ENABLE_MASK;
-
-        /* next link */
-        idx++;
     } while (0);
 
-    /* 2. switch chain, no handshake */
+    /* 2. switch chain for next frame, no handshake */
     do {
         dma_ch_config.size_in_byte   = 4;
         dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
@@ -770,48 +764,20 @@ static void sensor_matrix_init_dma_sel(void)
         dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&DMA_SEL_REG.LLPOINTER);
         /* buffer 0 */
         dma_ch_config.src_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&LLPOINTER[llpointer_buffer1]);
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
         /* buffer 1 */
         dma_ch_config.src_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&LLPOINTER[llpointer_buffer0]);
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
         /* next link */
         idx++;
     } while (0);
 
-    for (uint32_t pre = 0; pre < 1; pre++) {
-        /* 3.1 pre, with handshake, mux addr */
-        do {
-            dma_ch_config.size_in_byte   = 8;
-            dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&MUX_ADDR_REG[mux_addr_shadow][pre * 2 + 1]);
-            dma_ch_config.dst_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&(mux_pins[0].ngpio->DO[mux_pins[0].nport].CLEAR));
-            dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
-            dma_ch_config.dst_width      = DMA_TRANSFER_WIDTH_WORD;
-            dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_2T;
-            dma_ch_config.src_mode       = DMA_HANDSHAKE_MODE_HANDSHAKE;
-            dma_ch_config.dst_mode       = DMA_HANDSHAKE_MODE_NORMAL;
-            dma_ch_config.src_addr_ctrl  = DMA_ADDRESS_CONTROL_DECREMENT;
-            dma_ch_config.dst_addr_ctrl  = DMA_ADDRESS_CONTROL_DECREMENT;
-            dma_ch_config.priority       = DMA_CHANNEL_PRIORITY_HIGH;
-            dma_ch_config.interrupt_mask = DMA_INTERRUPT_MASK_ALL;
-            dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
-            dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
-
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
-
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
-
-            /* next link */
-            idx++;
-        } while (0);
-    }
-
-    for (uint32_t sel = 0; sel < SENSOR_MATRIX_ROUND_SELS_MAX; sel++) {
-        /* 4.1 sel, with handshake, mux addr */
+    /* 3. loop sel 0 .. (SELS_MAX - 2): switch mux to (sel + 1), then copy seq_buff of sel */
+    for (uint32_t sel = 0; sel < (SENSOR_MATRIX_ROUND_SELS_MAX - 1); sel++) {
+        /* 3.1 switch mux addr to (sel + 1), with handshake */
         do {
             dma_ch_config.size_in_byte   = 8;
             dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&MUX_ADDR_REG[mux_addr_shadow][(sel + 1) * 2 + 1]);
@@ -828,32 +794,22 @@ static void sensor_matrix_init_dma_sel(void)
             dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
             dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
 
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
             /* next link */
             idx++;
         } while (0);
 
-        /* 4.2 sel, no handshake, adc data */
+        /* 3.2 copy adc data of sel, no handshake */
         do {
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-            dma_ch_config.size_in_byte = SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * sizeof(uint32_t);
-#else
-            dma_ch_config.size_in_byte = SENSOR_MATRIX_ADC_TOTAL_CHANNELS * sizeof(uint32_t);
-#endif
-            dma_ch_config.src_addr  = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&seq_buff);
-            dma_ch_config.src_width = DMA_TRANSFER_WIDTH_WORD;
-            dma_ch_config.dst_width = DMA_TRANSFER_WIDTH_WORD;
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-            dma_ch_config.src_burst_size = SENSOR_MATRIX_ADC_CHANNELS * 2 - 1;
-#else
-            dma_ch_config.src_burst_size = SENSOR_MATRIX_ADC_CHANNELS - 1;
-#endif
-
+            dma_ch_config.size_in_byte   = sel_copy_words * sizeof(uint32_t);
+            dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&seq_buff);
+            dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
+            dma_ch_config.dst_width      = DMA_TRANSFER_WIDTH_WORD;
             dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_1T;
             dma_ch_config.src_mode       = DMA_HANDSHAKE_MODE_NORMAL;
             dma_ch_config.dst_mode       = DMA_HANDSHAKE_MODE_NORMAL;
@@ -862,78 +818,22 @@ static void sensor_matrix_init_dma_sel(void)
             dma_ch_config.priority       = DMA_CHANNEL_PRIORITY_HIGH;
             dma_ch_config.interrupt_mask = DMA_INTERRUPT_MASK_ALL;
             dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
-            dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_CUSTOM_SIZE;
             dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
 
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-            dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * sel]);
-#else
-            dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * sel]);
-#endif
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+            dma_ch_config.dst_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][sel_copy_words * sel]);
+            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-            dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * sel]);
-#else
-            dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * sel]);
-#endif
-            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+            dma_ch_config.dst_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][sel_copy_words * sel]);
+            dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+            dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
             /* next link */
             idx++;
         } while (0);
     }
 
-    idx--;
-    /* 4.2x sel, no handshake, adc data */
-    do {
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-        dma_ch_config.size_in_byte = SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * sizeof(uint32_t);
-#else
-        dma_ch_config.size_in_byte = SENSOR_MATRIX_ADC_TOTAL_CHANNELS * sizeof(uint32_t);
-#endif
-        dma_ch_config.src_addr  = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&seq_buff);
-        dma_ch_config.src_width = DMA_TRANSFER_WIDTH_WORD;
-        dma_ch_config.dst_width = DMA_TRANSFER_WIDTH_WORD;
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-        dma_ch_config.src_burst_size = SENSOR_MATRIX_ADC_CHANNELS * 2 - 1;
-#else
-        dma_ch_config.src_burst_size = SENSOR_MATRIX_ADC_CHANNELS - 1;
-#endif
-        dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_1T;
-        dma_ch_config.src_mode       = DMA_HANDSHAKE_MODE_NORMAL;
-        dma_ch_config.dst_mode       = DMA_HANDSHAKE_MODE_NORMAL;
-        dma_ch_config.src_addr_ctrl  = DMA_ADDRESS_CONTROL_INCREMENT;
-        dma_ch_config.dst_addr_ctrl  = DMA_ADDRESS_CONTROL_INCREMENT;
-        dma_ch_config.priority       = DMA_CHANNEL_PRIORITY_HIGH;
-        dma_ch_config.interrupt_mask = DMA_INTERRUPT_MASK_ALL;
-        dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
-        dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_CUSTOM_SIZE;
-        dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
-
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-        dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
-#else
-        dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
-#endif
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
-
-#if ((SENSOR_MATRIX_ADC_SAMPLES) > 1)
-        dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * 2 * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
-#else
-        dma_ch_config.dst_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][SENSOR_MATRIX_ADC_TOTAL_CHANNELS * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
-#endif
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
-
-        /* next link */
-        idx++;
-    } while (0);
-
-    /* 5.1 disable dma tmr, with handshake */
+    /* 4.1 disable dma tmr, with handshake (triggers after last sel ADC finishes) */
     do {
         dma_ch_config.size_in_byte   = 4;
         dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&TMR_CHANNEL_REG[tmr_dma_channel_cr_disable]);
@@ -950,17 +850,17 @@ static void sensor_matrix_init_dma_sel(void)
         dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
         dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
         /* next link */
         idx++;
     } while (0);
 
-    /* 5.2 disable adc tmr, no handshake */
+    /* 4.2 disable adc tmr immediately, no handshake (prevents redundant ADC trigger) */
     do {
         dma_ch_config.size_in_byte   = 4;
         dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&TMR_CHANNEL_REG[tmr_adc_channel_cr_disable]);
@@ -977,16 +877,45 @@ static void sensor_matrix_init_dma_sel(void)
         dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
         dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+
         /* next link */
         idx++;
     } while (0);
 
-    /* 5.3 active_end = preload_end, no handshake */
+    /* 4.3 copy adc data of last sel (SELS_MAX - 1), no handshake */
+    do {
+        dma_ch_config.size_in_byte   = sel_copy_words * sizeof(uint32_t);
+        dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&seq_buff);
+        dma_ch_config.src_width      = DMA_TRANSFER_WIDTH_WORD;
+        dma_ch_config.dst_width      = DMA_TRANSFER_WIDTH_WORD;
+        dma_ch_config.src_burst_size = DMA_NUM_TRANSFER_PER_BURST_1T;
+        dma_ch_config.src_mode       = DMA_HANDSHAKE_MODE_NORMAL;
+        dma_ch_config.dst_mode       = DMA_HANDSHAKE_MODE_NORMAL;
+        dma_ch_config.src_addr_ctrl  = DMA_ADDRESS_CONTROL_INCREMENT;
+        dma_ch_config.dst_addr_ctrl  = DMA_ADDRESS_CONTROL_INCREMENT;
+        dma_ch_config.priority       = DMA_CHANNEL_PRIORITY_HIGH;
+        dma_ch_config.interrupt_mask = DMA_INTERRUPT_MASK_ALL;
+        dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
+        dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
+
+        dma_ch_config.dst_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer0][sel_copy_words * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+
+        dma_ch_config.dst_addr   = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&raw_buff[dma_sel_chain_buffer1][sel_copy_words * (SENSOR_MATRIX_ROUND_SELS_MAX - 1)]);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+
+        /* next link */
+        idx++;
+    } while (0);
+
+    /* 4.4 active_end = preload_end, no handshake */
     do {
         dma_ch_config.size_in_byte   = 4;
         dma_ch_config.src_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&STATUS_REG[status_reg_preload_end]);
@@ -1003,17 +932,17 @@ static void sensor_matrix_init_dma_sel(void)
         dma_ch_config.handshake_opt  = DMA_HANDSHAKE_OPT_ALL_TRANSIZE;
         dma_ch_config.burst_opt      = DMA_SRC_BURST_OPT_STANDAND_SIZE;
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
-        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_ch_config.linked_ptr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx + 1]);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
         /* next link */
         idx++;
     } while (0);
 
-    /* 5.4 switch preload, no handshake */
+    /* 4.5 switch preload & trigger TC interrupt, no handshake */
     do {
         dma_ch_config.size_in_byte   = 8;
         dma_ch_config.dst_addr       = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&STATUS_REG[status_reg_preload_beg]);
@@ -1031,10 +960,10 @@ static void sensor_matrix_init_dma_sel(void)
         dma_ch_config.linked_ptr     = 0;
 
         dma_ch_config.src_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&STATUS_REG[status_reg_magic1]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer0][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
         dma_ch_config.src_addr = core_local_mem_to_sys_address(HPM_CORE0, (uint32_t)&STATUS_REG[status_reg_magic0]);
-        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx - 1], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
+        dma_config_linked_descriptor(MMX_HDMA, &dma_sel_chain_descriptors[dma_sel_chain_buffer1][idx], SENSOR_MATRIX_DMA_SEL_CHANNEL, &dma_ch_config);
 
         /* next link */
         idx++;
@@ -1043,7 +972,7 @@ static void sensor_matrix_init_dma_sel(void)
     dmamux_config(HPM_DMAMUX, DMA_SOC_CHN_TO_DMAMUX_CHN(MMX_HDMA, SENSOR_MATRIX_DMA_SEL_CHANNEL), SENSOR_MATRIX_DMA_SEL_INPUT_SRC, true);
 }
 
-static void sensor_matrix_init_timer(void) 
+static void sensor_matrix_init_timer(void)
 {
     float    ssof_freq;
     float    scan_freq;
@@ -1072,7 +1001,7 @@ static void sensor_matrix_init_timer(void)
 
     if (sensor_sof_src == sensor_matrix_sof_usb) {
         config_sht.synci_edge = gptmr_synci_edge_both;
-    } 
+    }
     else {
         config_sht.synci_edge = gptmr_synci_edge_rising;
     }
@@ -1121,9 +1050,18 @@ static void sensor_matrix_init_timer(void)
     g_sensor_matrix_timing.adc_window_ticks = (uint16_t)cycle;
     g_sensor_matrix_timing.copy_words = (uint16_t)(SENSOR_MATRIX_ADC_TOTAL_CHANNELS * SENSOR_MATRIX_ADC_SAMPLE_ROUNDS);
 
-    config_adc.reload                    = tmr_clock / (SENSOR_MATRIX_TMR_SEL_FREQ);
     config_adc.cmp[0]                    = SENSOR_MATRIX_TMR_ST_TIME + SENSOR_MATRIX_SEL_HT_TIME1 + SENSOR_MATRIX_ADC_ST_TIME;
     config_adc.cmp[1]                    = SENSOR_MATRIX_TMR_ST_TIME + SENSOR_MATRIX_SEL_HT_TIME1 + SENSOR_MATRIX_ADC_ST_TIME + cycle; /* keep high when sample */
+
+    /* 防止实际外设时钟与配置宏不一致导致 reload <= cmp[1] 溢出 */
+    uint32_t min_reload = config_adc.cmp[1] + (uint32_t)SENSOR_MATRIX_SEL_MARGIN_TICKS;
+    if (config_dma.reload < min_reload) {
+        config_dma.reload = min_reload;
+        gptmr_channel_config_update_reload(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_DMA_CHANNEL, config_dma.reload);
+        scan_freq = (tmr_clock / (float)config_dma.reload);
+    }
+
+    config_adc.reload                    = config_dma.reload;
     config_adc.enable_cmp_output         = true;
     config_adc.cmp_initial_polarity_high = false;
     config_adc.enable_software_sync      = true;
@@ -1144,7 +1082,7 @@ static void sensor_matrix_init_timer(void)
     /* sof channel */
     ssof_freq                            = ((SENSOR_MATRIX_TMR_SHOT_FREQ) / sensor_scan_interval) + sensor_scan_adjust;
     config_sof.cmp[0]                    = 1;
-    config_sof.cmp[1]                    = 1 + 5; /* keep 500ns high */
+    config_sof.cmp[1]                    = 1 + 5; /* keep 50ns high @100MHz */
     config_sof.reload                    = (uint32_t)(tmr_clock / ssof_freq);
     ssof_freq                            = (tmr_clock / (float)config_sof.reload);
     config_sof.enable_cmp_output         = true;
@@ -1158,7 +1096,7 @@ static void sensor_matrix_init_timer(void)
     printf("sensor matrix update sof freq %d Hz, reload %d\n", (uint32_t)ssof_freq, config_sof.reload);
 }
 
-__attribute__((weak)) void sensor_matrix_post_init(void) 
+__attribute__((weak)) void sensor_matrix_post_init(void)
 {
     sensor_matrix_set_config_t config = {0};
 
@@ -1168,7 +1106,7 @@ __attribute__((weak)) void sensor_matrix_post_init(void)
 
     const uint8_t scan_order[SENSOR_MATRIX_ROUND_SELS_MAX] = SENSOR_MATRIX_SELS_SEQUENCE;
     memcpy(config.list, scan_order, sizeof(scan_order));
-    
+
     config.count    = SENSOR_MATRIX_ROUND_SELS_MAX;
     config.interval = 1;
     config.adjust   = 0;
@@ -1176,12 +1114,12 @@ __attribute__((weak)) void sensor_matrix_post_init(void)
     sensor_matrix_set_config(config);
 }
 
-void sensor_matrix_recv_cb(hall_recv_cb_t recv_cb) 
+void sensor_matrix_recv_cb(hall_recv_cb_t recv_cb)
 {
     hall_recv_cb = recv_cb;
 }
 
-void sensor_matrix_init(void) 
+void sensor_matrix_init(void)
 {
     (void)sensor_sof_src_saved;
     sensor_sof_src = sensor_matrix_sof_usb;
@@ -1208,10 +1146,10 @@ void sensor_matrix_init(void)
 
     sensor_matrix_post_init();
 
-    intc_m_enable_irq_with_priority(MMX_HDMA_IRQ, 7);
+    intc_m_enable_irq_with_priority(MMX_HDMA_IRQ, HDMA_IRQ_PRIORITY);
 }
 
-bool sensor_matrix_scan_is_busy(void) 
+bool sensor_matrix_scan_is_busy(void)
 {
     uint32_t beg0 = STATUS_REG[status_reg_active_beg];
     uint32_t end0 = STATUS_REG[status_reg_active_end];
@@ -1225,7 +1163,7 @@ bool sensor_matrix_scan_is_busy(void)
     return true;
 }
 
-void sensor_matrix_set_sof_src(uint8_t sof_src) 
+void sensor_matrix_set_sof_src(uint8_t sof_src)
 {
     static const char     *src_str[4] = {"usb", "ext", "tmr", "none"};
     trgm_output_t          trgm_sof_cfg;
@@ -1277,7 +1215,7 @@ void sensor_matrix_set_sof_src(uint8_t sof_src)
     printf("sensor matrix sof src %s\n", src_str[sensor_sof_src]);
 }
 
-void sensor_matrix_stop_sof_timer(void) 
+void sensor_matrix_stop_sof_timer(void)
 {
     gptmr_stop_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL);
     gptmr_stop_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SOF_CHANNEL);
@@ -1285,22 +1223,22 @@ void sensor_matrix_stop_sof_timer(void)
     gptmr_channel_reset_count(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SOF_CHANNEL);
 }
 
-void sensor_matrix_start_sof_timer(void) 
+void sensor_matrix_start_sof_timer(void)
 {
-    /* re222666666666 1s time to config */
+    /* reserve 1s time to config */
     gptmr_channel_update_count(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL, 0xffffffff - 100000000);
     gptmr_channel_reset_count(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SOF_CHANNEL);
     gptmr_start_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SHT_CHANNEL);
     gptmr_start_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_SOF_CHANNEL);
 }
 
-void sensor_matrix_restart_sof_timer(void) 
+void sensor_matrix_restart_sof_timer(void)
 {
     sensor_matrix_stop_sof_timer();
     sensor_matrix_start_sof_timer();
 }
 
-void sensor_matrix_stop_sel_timer(void) 
+void sensor_matrix_stop_sel_timer(void)
 {
     gptmr_stop_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_ADC_CHANNEL);
     gptmr_stop_counter(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_DMA_CHANNEL);
@@ -1308,7 +1246,7 @@ void sensor_matrix_stop_sel_timer(void)
     gptmr_channel_reset_count(SENSOR_MATRIX_TMR, SENSOR_MATRIX_TMR_DMA_CHANNEL);
 }
 
-void sensor_matrix_set_sof_timer(uint32_t interval, float adjust) 
+void sensor_matrix_set_sof_timer(uint32_t interval, float adjust)
 {
     uint32_t tmr_clock;
     uint32_t tmr_reload;
@@ -1329,7 +1267,7 @@ void sensor_matrix_set_sof_timer(uint32_t interval, float adjust)
     printf("sensor matrix update sof freq %d Hz, reload %d\n", (uint32_t)ssof_freq, tmr_reload);
 }
 
-void sensor_matrix_set_next_scan(uint32_t count, const uint8_t *list) 
+void sensor_matrix_set_next_scan(uint32_t count, const uint8_t *list)
 {
     uint32_t *data_buffer = (void *)MUX_ADDR_REG[mux_addr_preload];
     uint32_t  dummy;
@@ -1339,12 +1277,6 @@ void sensor_matrix_set_next_scan(uint32_t count, const uint8_t *list)
     }
 
     dummy = SENSOR_MATRIX_ROUND_SELS_MAX - count;
-
-    // memset((void *)MUX_ADDR_REG[mux_addr_preload], 0x00, sizeof(MUX_ADDR_REG[mux_addr_preload]));
-
-    /* last select */
-    MUX_ADDR_REG[mux_addr_preload][(SENSOR_MATRIX_ROUND_SELS_MAX) * 2 + 0] = 0;
-    MUX_ADDR_REG[mux_addr_preload][(SENSOR_MATRIX_ROUND_SELS_MAX) * 2 + 1] = mux_addr_mask;
 
     /* dummy select */
     for (uint8_t i = 0; i < dummy; i++) {
@@ -1373,13 +1305,13 @@ void sensor_matrix_set_next_scan(uint32_t count, const uint8_t *list)
     memcpy((void *)SENSOR_SCAN_ARRAY_REG[sensor_scan_array_preload].array, list, count);
 }
 
-void sensor_matrix_set_config(sensor_matrix_set_config_t config) 
+void sensor_matrix_set_config(sensor_matrix_set_config_t config)
 {
     sensor_matrix_stop_sof_timer();
 
     sensor_matrix_stop_sel_timer();
 
-    /* step.1 set scan mode  */
+    /* step.1 set scan mode */
     if (config.valid_mode) {
         sensor_matrix_init_timer();
         printf("sensor matrix update to [%s] mode\n", config.mode ? "low-power" : "high-performance");
@@ -1396,7 +1328,7 @@ void sensor_matrix_set_config(sensor_matrix_set_config_t config)
         printf("\n");
     }
 
-    /* step.3 set timer*/
+    /* step.3 set timer */
     if (config.valid_timer) {
         sensor_matrix_set_sof_timer(config.interval, config.adjust);
     }

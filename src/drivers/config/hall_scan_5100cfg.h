@@ -16,7 +16,7 @@
 #    define CEILING(dividend, divisor) (((dividend) + (divisor)-1) / (divisor))
 #endif
 
-#define SENSOR_MATRIX_ADC_SAMPLES 2        /* sample 1 in once sel */
+#define SENSOR_MATRIX_ADC_SAMPLES 2        /* sample 2 in once sel */
 #define SENSOR_MATRIX_ADC_SAMPLE_ROUNDS (((SENSOR_MATRIX_ADC_SAMPLES) > 1) ? 2 : 1)
 #define SENSOR_MATRIX_ADC_SAMPLE_CYCLE 2   /* adc sample cycle */
 #define SENSOR_MATRIX_ADC_CONVERT_CYCLE 21 /* 16-bit adc need 21 convert cycle */
@@ -24,13 +24,13 @@
 
 
 #define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */
-#define SENSOR_MATRIX_TMR_SEL_FREQ 218800 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
+//#define SENSOR_MATRIX_TMR_SEL_FREQ 218800 /* 100MHz / 218800 = 457 ticks (4.57us)，单周期留 0.10us 余量 */
 
-#define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time) */
-#define SENSOR_MATRIX_TMR_ST_TIME 70 /* tmr soft sync setup time default 350ns, DMA 握手，写 GPIO 切 mux  */
-#define SENSOR_MATRIX_SEL_HT_TIME1 1 
-#define SENSOR_MATRIX_SEL_HT_TIME2 45 // sel 保持时间
-#define SENSOR_MATRIX_ADC_ST_TIME 100 /* sample setup time is 1.0us,  模拟通路建立 */
+#define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time), 20.0us @100MHz */
+#define SENSOR_MATRIX_TMR_ST_TIME 70   /* tmr soft sync setup time 700ns @100MHz, DMA 握手写 GPIO 切 mux */
+#define SENSOR_MATRIX_SEL_HT_TIME1 1 /* MUX切换完成点 */
+#define SENSOR_MATRIX_SEL_HT_TIME2 45  /* sel 保持时间 */
+#define SENSOR_MATRIX_ADC_ST_TIME 100  /* sample setup time is 1.0us @100MHz, 模拟通路建立 */
 
 
 
@@ -81,9 +81,34 @@
 
 /* COL2ROW COL is ADC, ROW is SEL */
 #define SENSOR_MATRIX_SELS 8
-#define SENSOR_MATRIX_ROUND_SELS_MAX 8 /* scan 40 sel in once shot, SENSOR_MATRIX_SELS_SEQUENCE */
+#define SENSOR_MATRIX_ROUND_SELS_MAX 8 /* scan 8 sel in once shot, SENSOR_MATRIX_SELS_SEQUENCE */
 // {0, 3, 6, 1, 4, 7, 2, 5}
 #define SENSOR_MATRIX_SELS_SEQUENCE {0, 1, 2, 3, 4, 5, 6, 7}
 
+
+/* ==================== 自动计算 SEL 扫描频率 ==================== */
+#define SENSOR_MATRIX_TMR_CLK_HZ        100000000ULL /* GPTMR1 时钟: 100MHz */
+#define SENSOR_MATRIX_ADC_CLK_HZ        50000000ULL  /* ADC 工作时钟: 50MHz */
+#define SENSOR_MATRIX_SEL_MARGIN_TICKS  10ULL        /* 单周期尾部余量: 10 ticks = 0.10us @100MHz */
+
+/* 1. 单路最长 ADC 序列转换所需 GPTMR ticks（使用 ULL 防止 32 位平台乘法溢出） */
+#define SENSOR_MATRIX_ADC_CONV_TICKS                                                                            \
+    CEILING((SENSOR_MATRIX_TMR_CLK_HZ) * ((SENSOR_MATRIX_ADC_SAMPLE_CYCLE) + (SENSOR_MATRIX_ADC_CONVERT_CYCLE)) \
+                * (SENSOR_MATRIX_ADC_CHANNELS) * (SENSOR_MATRIX_ADC_SAMPLE_ROUNDS),                             \
+            (SENSOR_MATRIX_ADC_CLK_HZ))
+
+/* 2. 单路 SEL 所需最小 reload ticks = 70 + 1 + ADC_ST + ADC_CONV + MARGIN */
+#define SENSOR_MATRIX_SEL_RELOAD_TICKS                                                                          \
+    ((SENSOR_MATRIX_TMR_ST_TIME) + (SENSOR_MATRIX_SEL_HT_TIME1) + (SENSOR_MATRIX_ADC_ST_TIME)                   \
+     + (SENSOR_MATRIX_ADC_CONV_TICKS) + (SENSOR_MATRIX_SEL_MARGIN_TICKS))
+
+/* 3. 自动推导出 SENSOR_MATRIX_TMR_SEL_FREQ（向下取整，保证反算回 reload >= 目标值） */
+#define SENSOR_MATRIX_TMR_SEL_FREQ      ((SENSOR_MATRIX_TMR_CLK_HZ) / (SENSOR_MATRIX_SEL_RELOAD_TICKS))
+
+/* 4. 编译期防错：确保整帧（含 SOF 延时 + 8 路扫描 + 至少 20us 处理器余量）不超过 8kHz 周期 */
+#if ((10ULL + (SENSOR_MATRIX_SOF_ST_TIME) + (SENSOR_MATRIX_ROUND_SELS_MAX) * (SENSOR_MATRIX_SEL_RELOAD_TICKS)   \
+      + (SENSOR_MATRIX_TMR_ST_TIME) + 2000ULL) >= ((SENSOR_MATRIX_TMR_CLK_HZ) / (SENSOR_MATRIX_TMR_SHOT_FREQ)))
+#    error "Hall scan total time exceeds 8kHz frame budget! Reduce ADC_ST_TIME / SOF_ST_TIME / MARGIN."
+#endif
 
 #endif

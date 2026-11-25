@@ -28,6 +28,8 @@ static uint8_t view[SENSOR_TOTAL_SIZE] = {0};
 static uint16_t sersor_buf[SENSOR_TOTAL_SIZE];
 #endif
 
+uint32_t core_freq_mhz = 0;
+
 static TX_THREAD core_thread;
 static uint8_t core_thread_stack[CORE_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_EVENT_FLAGS_GROUP core_events;
@@ -130,6 +132,7 @@ rotsta_t keycore_init(void)
     sensor_matrix_init();
     sensor_matrix_recv_cb(keycore_recv_cb);
 
+    core_freq_mhz = hpm_core_clock / 1000000;
     if (tx_event_flags_create(&core_events, "core_evt") != TX_SUCCESS) {
         return rotsta_fail;
     }

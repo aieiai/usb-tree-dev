@@ -57,7 +57,7 @@ void keymonitor_lmt(uint8_t ki, uint16_t data)
     if (p_mon->mvol[ki] > p_mon->max_mval) {
         p_mon->max_mval = p_mon->mvol[ki];
     }
-    p_mon->run_us = (hpm_csr_get_core_cycle() - run_tick) / (clock_get_frequency(clock_cpu0) / 1000000);
+    p_mon->run_us = (hpm_csr_get_core_cycle() - run_tick) / core_freq_mhz;
 }
 
 void keymonitor_rst(void)
