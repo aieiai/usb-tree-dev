@@ -549,8 +549,8 @@ typedef union {
     uint32_t code;
     struct __attribute__((packed)) {
         uint32_t lk: 1; // Lock
-        uint32_t ty: 6; // Easy to search/query
-        uint32_t rv: 25;
+        uint32_t ty: 5; // Easy to search/query
+        uint32_t rv: 26;
     };
     struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard
     struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System

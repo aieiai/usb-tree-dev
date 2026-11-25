@@ -243,14 +243,14 @@ void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t report_type, u
         HID_USAGE       ( HID_USAGE_DESKTOP_Y                    ) ,\
         HID_LOGICAL_MIN_N ( -32767, 2                            ) ,\
         HID_LOGICAL_MAX_N ( 32767, 2                             ) ,\
-        HID_REPORT_COUNT( 2                                      ) ,\
+        HID_REPORT_COUNT( 1                                      ) ,\
         HID_REPORT_SIZE ( 16                                     ) ,\
         HID_INPUT       ( HID_DATA | HID_VARIABLE | HID_RELATIVE ) ,\
         /* Verital wheel scroll [-127, 127] */ \
         HID_USAGE       ( HID_USAGE_DESKTOP_WHEEL                )  ,\
         HID_LOGICAL_MIN_N ( -32767, 2                            )  ,\
         HID_LOGICAL_MAX_N ( 32767, 2                             )  ,\
-        HID_REPORT_COUNT( 2                                      )  ,\
+        HID_REPORT_COUNT( 1                                      )  ,\
         HID_REPORT_SIZE ( 16                                     )  ,\
         HID_INPUT       ( HID_DATA | HID_VARIABLE | HID_RELATIVE )  ,\
       HID_USAGE_PAGE  ( HID_USAGE_PAGE_CONSUMER ), \
