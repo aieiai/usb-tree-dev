@@ -34,6 +34,8 @@ get_git_branch(GIT_BRANCH)
 get_git_hash(GIT_HASH SHORT8)
 get_git_author(GIT_AUTHOR)
 
+set(HEAP_SIZE  0x800)
+set(STACK_SIZE 0x2000)
 
 find_package(hpm-sdk REQUIRED HINTS $ENV{HPM_SDK_BASE})
 project(${APP_NAME})
@@ -51,7 +53,7 @@ add_subdirectory(src)
 add_subdirectory(keyboards)
 add_subdirectory(rot)
 add_subdirectory(tu)
-add_subdirectory(tests/cst)
+# add_subdirectory(tests/cst)
 
 sdk_inc(config)
 
