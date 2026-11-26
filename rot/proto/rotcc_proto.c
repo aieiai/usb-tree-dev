@@ -884,7 +884,7 @@ static void _handle_calib_status_get(const rotcc_msg_t *msg)
         return;
     }
 
-    payload[0] = keycalib_get_status();
+    payload[0] = _keycal_get_status();
     payload[1] = 0U;
     (void)rotcc_proto_reply(msg, payload, sizeof(payload));
 }
@@ -898,7 +898,7 @@ static void _handle_calib_status_set(const rotcc_msg_t *msg)
         return;
     }
 
-    state = keycalib_set_status(msg->payload[0]);
+    state = keycal_set_status(msg->payload[0]);
     hal_dt_printf(TAG "calib set 0x%02x, result=0x%08x\r\n", (unsigned)msg->payload[0], (unsigned)state);
     _reply_status(msg, state);
 }

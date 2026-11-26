@@ -41,7 +41,7 @@ typedef struct {
     uint64_t ntf_tick;
     uint32_t ntf_time;
 
-    uint32_t run_time;
+    uint64_t run_time;
     uint32_t *frame;
     uint16_t buf[2][KBD_KEY_MAX];
     uint8_t  buf_idx;
@@ -122,6 +122,16 @@ static inline void keycore_process(uint16_t *p_buf)
 static void core_thread_entry(ULONG id)
 {
     (void)id;
+    keymap_t *p_map   = &g_keymap;
+    keycore_t *p_core = &g_keycore;
+    keyevt_t  *p_evt = NULL;
+    keymag_t  *p_mag = NULL;
+    keyattr_t *p_attr = NULL;
+    const keyaxis_para_t *p_axis = NULL;
+    uint64_t now = 0;
+    uint8_t ki = 0;
+    uint16_t cur_v = 0;
+    uint16_t *p_buf = NULL;
 
     for (;;) {
         ULONG events = 0U;
@@ -129,43 +139,60 @@ static void core_thread_entry(ULONG id)
             continue;
         }
 
-        uint64_t tick = hpm_csr_get_core_cycle();
-        keycore_t *p_core = &g_keycore;
-        keymap_t *p_map = &g_keymap;
-        
-        p_core->ntf_time = (tick - p_core->ntf_tick) / core_freq_mhz;
-        uint16_t val;
-        uint16_t *p_buf = p_core->buf[p_core->buf_idx];
+        now = hpm_csr_get_core_cycle();
+        p_core->ntf_time = (now - g_keycore.ntf_tick) / core_freq_mhz;
+
+        ki = 0;
+        cur_v = 0;
+        p_buf = p_core->buf[p_core->buf_idx];
         p_core->buf_idx = !p_core->buf_idx;
 
-        for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
-            val = GET_ADC_VALUE(p_core->frame, p_map->ks_list[ki]);
-            
+        do {
+            p_evt  = &g_keyevt[ki];
+            p_mag  = &g_keymag[ki];
+            p_attr = &g_obkp.attr[ki];
+            p_axis = p_evt->axis_para;
+            cur_v  = GET_ADC_VALUE(p_core->frame, p_map->ks_list[ki]);
 
-            //keymonitor_lmt(ki, val, p_buf[ki]);
-            //p_buf[ki] = p_core->is_filter ? keyfilter_update(ki, val) : val;
+            //keymonitor_lmt(ki, cur_v, p_buf[ki]);
+            //p_buf[ki] = p_core->is_filter ? keyfilter_update(ki, cur_v) : cur_v;
 
-            p_buf[ki] = val;
+            p_buf[ki] = cur_v;
 
             #if KI_EN
                 keycore_find_ki(i, p_buf[ki]);
             #elif KS_EN
                 keycore_find_ks(ki, i, p_buf[ki]);
             #endif
-        }
 
-        keycore_process(p_buf);
+            p_evt->valp  = p_evt->val;
+            p_evt->valdp = p_evt->vald;
+            p_evt->val   = cur_v;
+            p_evt->vald  = p_evt->val - p_evt->valp;
+
+            _keymag_pt2du(p_mag, p_axis, p_evt->val);
+            _keyevt_md_detect(p_evt);
+            _keyevt_pos_detect(p_evt, p_axis);
+            _keyevt_trg_detect(p_evt);
+            _keyevt_act_detect(p_evt, p_attr, ki);
+
+            //if (keyrt_is_en(ki)) {
+            //    keyrt_process(ki);
+            //}
+            //else {
+            //}
+        } while (++ki < KBD_KEY_MAX);
 
         // 校准期间不可以处理发送键码
-        if (keycalib_active()) {
+        if (_keycal_active()) {
             keyhid_suspend();
-            keycalib_post_adc(p_buf);
+            keycal_post_adc(p_buf);
             continue;
         }
         
         keyhid_process();
-        
-        p_core->run_time = (hpm_csr_get_core_cycle() - tick) / core_freq_mhz;
+
+        p_core->run_time = (hpm_csr_get_core_cycle() - now) / core_freq_mhz;
     }
 }
 
