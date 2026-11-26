@@ -137,7 +137,7 @@ static void core_thread_entry(ULONG id)
         uint16_t *p_buf = p_core->buf[p_core->buf_idx];
         p_core->buf_idx = !p_core->buf_idx;
 
-        for (uint8_t ki = 0; ki < SENSOR_TOTAL_SIZE; ki++) {
+        for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
             val = GET_ADC_VALUE(p_core->frame, p_map->ks_list[ki]);
             
 
