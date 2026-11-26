@@ -6,15 +6,24 @@ function kcCacheKey(layer, index) {
 }
 
 
-/* 渲染 40% 配列键盘，返回 key index -> { root, value }。 */
+/* 按当前配列渲染键盘，返回 key index -> { root, value }。 */
 function buildKeyboard(container, onKeyClick) {
+  const layout = activeKeyboardLayout;
   container.textContent = '';
+  container.style.gridTemplateColumns =
+    `repeat(${layout.units * 4}, calc(var(--u) / 4))`;
+  container.style.gridTemplateRows =
+    `repeat(${layout.rows.length}, var(--u))`;
   const keyEls = new Map();
 
-  for (let rowIndex = 0; rowIndex < KEY_ROWS.length; rowIndex++) {
+  for (let rowIndex = 0; rowIndex < layout.rows.length; rowIndex++) {
     let column = 0;
-    for (const [label, index, width] of KEY_ROWS[rowIndex]) {
+    for (const [label, index, width] of layout.rows[rowIndex]) {
       const span = Math.round(width * 4);
+      if (index === null) {
+        column += span;
+        continue;
+      }
       const keyEl = document.createElement('button');
       keyEl.type = 'button';
       keyEl.className = 'keycap';
@@ -50,7 +59,7 @@ function renderKeyboard() {
   syncKeycapSize();
 }
 
-/* 网格总宽 48 列（12U）、4 行；1U 取正方形，按卡片可用宽高收敛。 */
+/* 1U 取正方形，按当前配列的总宽/行数和卡片可用宽高收敛。 */
 const keyboardUnits = new WeakMap();
 
 function fitKeyboardSize(container) {
@@ -63,10 +72,38 @@ function fitKeyboardSize(container) {
     parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
   if (width <= 0 || height <= 0) return;
 
-  const unit = Math.min(55, Math.max(30, Math.floor(Math.min(width / 12, height / 4))));
+  const layout = activeKeyboardLayout;
+  const unit = Math.min(55, Math.max(20,
+    Math.floor(Math.min(width / layout.units, height / layout.rows.length))));
   if (keyboardUnits.get(container) === unit) return;
   keyboardUnits.set(container, unit);
   container.style.setProperty('--u', `${unit}px`);
+}
+
+/* 按设备上报的按键数量切换 40%/68%/80% 配列。 */
+function applyKeyboardLayout(keyCount) {
+  const layout = KEYBOARD_LAYOUTS[keyCount];
+  if (!layout) {
+    appendLine(
+      `[KC] 未定义 ${keyCount} 键配列，保持 ${activeKeyboardLayout.name}`,
+      'warn'
+    );
+    return false;
+  }
+  if (layout === activeKeyboardLayout) return false;
+
+  activeKeyboardLayout = layout;
+  kcValues.clear();
+  kcSelected.clear();
+  paramSelected.clear();
+  axisSelected.clear();
+
+  renderKeyboard();
+  renderParamKeyboard();
+  renderAxisKeyboard();
+  renderCalibKeyboard();
+  appendLine(`[KC] 键盘配列：${layout.name}（${keyCount} 键）`);
+  return true;
 }
 
 function syncKeycapSize() {
@@ -87,9 +124,9 @@ const KC_QUICK_GROUPS = [
 
 function labelIndices(label) {
   const indices = [];
-  for (const row of KEY_ROWS) {
+  for (const row of activeKeyboardLayout.rows) {
     for (const [name, index] of row) {
-      if (name === label) indices.push(index);
+      if ((index !== null) && (name === label)) indices.push(index);
     }
   }
   return indices;
@@ -99,22 +136,17 @@ function renderQuickSelect() {
   $kcQuickSelect.textContent = '';
 
   for (const group of KC_QUICK_GROUPS) {
-    const indices = group.all
-      ? [...kcKeyEls.keys()]
-      : group.clear
-        ? []
-        : group.labels.flatMap(labelIndices);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'kc-layer';
     btn.textContent = group.name;
-    btn.addEventListener('click', () => applyQuickGroup(group, indices));
+    btn.addEventListener('click', () => applyQuickGroup(group));
     $kcQuickSelect.appendChild(btn);
   }
 }
 
-/* 再次点击同一快捷组可整组取消选择。 */
-function applyQuickGroup(group, indices) {
+/* 再次点击同一快捷组可整组取消选择；索引按当前配列实时计算。 */
+function applyQuickGroup(group) {
   if (kcBusy || sysBusy || isFirmwareActive()) return;
 
   if (group.clear) {
@@ -123,6 +155,9 @@ function applyQuickGroup(group, indices) {
     return;
   }
 
+  const indices = group.all
+    ? [...kcKeyEls.keys()]
+    : group.labels.flatMap(labelIndices);
   const allSelected = indices.length > 0 &&
     indices.every(index => kcSelected.has(index));
   const added = [];

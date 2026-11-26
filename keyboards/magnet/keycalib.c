@@ -2,6 +2,7 @@
 #include "keyprop.h"
 #include "keyevt.h"
 #include "db.h"
+#include "rotcc_proto.h"
 
 #include <string.h>
 
@@ -15,6 +16,8 @@
 static TX_THREAD calib_thread;
 static uint8_t calib_thread_stack[CALIB_THREAD_STACK] __attribute__((aligned(8U)));
 static TX_EVENT_FLAGS_GROUP calib_events;
+/* Packed sensor entries, split across frames when one frame cannot hold them all. */
+static uint8_t sensor_pack_buf[ROTCC_SENSOR_DATA_LEN * KBD_KEY_MAX] __attribute__((aligned(4)));
 
 keycal_sta_t g_keycal_sta = {0};
 
@@ -101,16 +104,105 @@ static void _calib_task_suspend(void)
     }
 }
 
-/* Runs only while a calibration session is open; the thread is suspended otherwise. */
+static uint32_t _sensor_period_ticks(void)
+{
+    uint32_t freq = g_keycal_sta.rpt_freq;
+
+    if (freq == 0U) {
+        freq = KCALIB_SENSOR_FREQ_DFT;
+    }
+    return (TX_TIMER_TICKS_PER_SECOND + freq - 1U) / freq;
+}
+
+/* Wake up in time for the next report, or wait for an ADC frame only. */
+static ULONG _sensor_wait_ticks(void)
+{
+    uint32_t period;
+    uint32_t elapsed;
+
+    if (g_keycal_sta.rpt_en == 0U) {
+        return TX_WAIT_FOREVER;
+    }
+
+    period = _sensor_period_ticks();
+    elapsed = tx_time_get() - g_keycal_sta.rpt_last;
+    return (elapsed >= period) ? TX_NO_WAIT : (ULONG)(period - elapsed);
+}
+
+static bool _sensor_report_due(void)
+{
+    if (g_keycal_sta.rpt_en == 0U) {
+        return false;
+    }
+    return (uint32_t)(tx_time_get() - g_keycal_sta.rpt_last) >= _sensor_period_ticks();
+}
+
+static uint16_t _sensor_dist_um(uint8_t ki)
+{
+    float dist = g_keyevt[ki].dst;
+
+    if (!(dist > 0.0f)) {
+        return 0U;
+    }
+    if (dist >= 65535.0f) {
+        return 65535U;
+    }
+    return (uint16_t)(dist + 0.5f);
+}
+
+/*
+ * One report period: pack all keys into as few frames as the CC endpoint allows.
+ * The period itself does not depend on calibration.
+ */
+static void _sensor_report(void)
+{
+    uint16_t max_payload = rotcc_proto_notify_payload_max();
+    uint16_t offset = 0U;
+
+    g_keycal_sta.rpt_last = tx_time_get();
+    if (max_payload < ROTCC_SENSOR_DATA_LEN) {
+        return;
+    }
+
+    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
+        if ((uint32_t)offset + ROTCC_SENSOR_DATA_LEN > max_payload) {
+            if (rotcc_proto_notify(ROTCC_CMD_NOTIFY, ROTCC_NOTIFY_SENSOR, sensor_pack_buf, offset) != rotsta_success) {
+                return;
+            }
+            offset = 0U;
+        }
+
+        sensor_pack_buf[offset + 0U] = ki;
+        sensor_pack_buf[offset + 1U] = EVT_IS_D(g_keyevt[ki].trg) ? 1U : 0U;
+        rotutil_put_le16(&sensor_pack_buf[offset + 2U], g_keyevt[ki].val);
+        rotutil_put_le16(&sensor_pack_buf[offset + 4U], _sensor_dist_um(ki));
+        offset = (uint16_t)(offset + ROTCC_SENSOR_DATA_LEN);
+    }
+
+    if (offset != 0U) {
+        (void)rotcc_proto_notify(ROTCC_CMD_NOTIFY, ROTCC_NOTIFY_SENSOR, sensor_pack_buf, offset);
+    }
+}
+
+/*
+ * Thread is suspended when neither calibration nor sensor upload needs it. While
+ * a calibration session is open the frame event drives sampling; sensor upload
+ * uses the timeout to keep its own fixed period in both cases.
+ */
 static void calib_thread_entry(ULONG id)
 {
     (void)id;
 
     for (;;) {
         ULONG events = 0U;
-        if (tx_event_flags_get(&calib_events, KCALIB_EVT_FRAME, TX_OR_CLEAR, &events, TX_WAIT_FOREVER) == TX_SUCCESS) {
+        UINT status = tx_event_flags_get(&calib_events, KCALIB_EVT_FRAME, TX_OR_CLEAR, &events, _sensor_wait_ticks());
+
+        if ((status == TX_SUCCESS) && _keycal_active()) {
             keycal_sta_t *p_cal = &g_keycal_sta;
             _calib_accumulate((const uint16_t *)p_cal->frame);
+        }
+        if (_sensor_report_due()) {
+            _sensor_report();
         }
     }
 }
@@ -167,8 +259,54 @@ rotsta_t keycal_set_status(uint8_t sta)
         state = _calib_commit();
         p_cal->sta = (state == rotsta_success) ? KCAL_STA_FINISH : KCAL_STA_STOP;
     }
-    _calib_task_suspend();
+    if (p_cal->rpt_en == 0U) {
+        _calib_task_suspend();
+    }
     return state;
+}
+
+rotsta_t keycal_sensor_report_set(uint8_t en)
+{
+    keycal_sta_t *p_cal = &g_keycal_sta;
+
+    if (en > 1U) {
+        return rotsta_invalid_argument;
+    }
+
+    if (en != 0U) {
+        if (p_cal->rpt_en == 0U) {
+            /* Report the next period immediately, then keep a fixed cadence. */
+            p_cal->rpt_last = tx_time_get() - _sensor_period_ticks();
+        }
+        p_cal->rpt_en = 1U;
+        _calib_task_resume();
+        printf(TAG "sensor report on, %u Hz\r\n", (unsigned)p_cal->rpt_freq);
+        return rotsta_success;
+    }
+
+    if (p_cal->rpt_en == 0U) {
+        return rotsta_success;
+    }
+    p_cal->rpt_en = 0U;
+    if (!_keycal_active()) {
+        _calib_task_suspend();
+    }
+    printf(TAG "sensor report off\r\n");
+    return rotsta_success;
+}
+
+rotsta_t keycal_sensor_freq_set(uint16_t freq)
+{
+    keycal_sta_t *p_cal = &g_keycal_sta;
+
+    if ((freq < KCALIB_SENSOR_FREQ_MIN) || (freq > KCALIB_SENSOR_FREQ_MAX)) {
+        return rotsta_invalid_argument;
+    }
+
+    p_cal->rpt_freq = freq;
+    p_cal->rpt_last = tx_time_get() - _sensor_period_ticks();
+    printf(TAG "sensor report freq=%u Hz\r\n", (unsigned)freq);
+    return rotsta_success;
 }
 
 rotsta_t keycal_init(void)
@@ -178,6 +316,9 @@ rotsta_t keycal_init(void)
     
     p_cal->sta = KCAL_STA_STOP;
     p_cal->frame = NULL;
+    p_cal->rpt_en = 0U;
+    p_cal->rpt_freq = KCALIB_SENSOR_FREQ_DFT;
+    p_cal->rpt_last = 0U;
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         p_cal->acc[ki].max = 0U;
         p_cal->acc[ki].min = UINT16_MAX;

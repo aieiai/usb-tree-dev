@@ -8,7 +8,7 @@
 #define CST_THREAD_STACK        (1024U)     /* 峰值约 0.98KB，已被 hal_dt_printf 占满，勿再降 */
 #define CORE_THREAD_STACK       (1024U)     /* 峰值约 0.5KB */
 #define DT_THREAD_STACK         (1024U)     /* 峰值约 0.6KB，含 USB 发送链 */
-#define CALIB_THREAD_STACK      (768U)      /* 峰值约 0.4KB */
+#define CALIB_THREAD_STACK      (4096U)     /* 峰值约 0.4KB，sensor 上报复用 rotgen_send 的 1KB 组帧缓冲，留足余量 */
 #define HID_THREAD_STACK        (1024U)     /* 峰值约 0.7KB */
 
 #define HID_THREAD_PRIORITY     (TX_MAX_PRIORITIES - 1U)

@@ -76,6 +76,11 @@ function refreshCalibControls() {
   $btnAutoCalibRead.disabled = busy || !ready;
   $btnAutoCalibWrite.disabled = busy || !ready;
   $chkAutoCalib.disabled = busy || !ready;
+  /* 上报开关与频率可先在本机勾选/填写，写入仍要求设备在线。 */
+  $btnSensorRptWrite.disabled = busy || !ready;
+  $chkSensorRpt.disabled = busy;
+  $btnSensorFreqWrite.disabled = busy || !ready;
+  $numSensorFreq.disabled = busy;
 }
 
 function refreshParamControls() {

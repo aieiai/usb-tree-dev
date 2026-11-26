@@ -17,6 +17,9 @@ extern "C" {
 #define ROTCC_MSG_HEADER_SIZE       (4U)
 #define ROTCC_UPGRADE_INFO_LEN      (48U)
 #define ROTCC_UPGRADE_REQUEST_LEN   (14U)
+#define ROTCC_SENSOR_RPT_LEN        (2U)
+#define ROTCC_SENSOR_FREQ_LEN       (4U)
+#define ROTCC_SENSOR_DATA_LEN       (6U)
 
 /*
  * Per-key commands:
@@ -39,6 +42,7 @@ enum {
     ROTCC_CMD_KC = 0x02,
     ROTCC_CMD_AXIS = 0x03,
     ROTCC_CMD_CALIB = 0x04,
+    ROTCC_CMD_NOTIFY = 0x05,
 };
 
 enum {
@@ -87,6 +91,13 @@ enum {
     ROTCC_CALIB_STATUS_SET = 0x01,
     ROTCC_CALIB_AUTO_GET = 0x02,
     ROTCC_CALIB_AUTO_SET = 0x03,
+    ROTCC_CALIB_SENSOR_RPT_SET = 0x04,
+    ROTCC_CALIB_SENSOR_FREQ_SET = 0x05,
+};
+
+enum {
+    ROTCC_NOTIFY_EXCEPTION = 0x00,
+    ROTCC_NOTIFY_SENSOR = 0x01,
 };
 
 /* Request types carried by ROTCC_UPGRADE_REQUEST. */
@@ -122,6 +133,10 @@ rotsta_t rotcc_proto_init(void);
 
 // Builds a response with the request's cmd/subcmd/reserve.
 rotsta_t rotcc_proto_reply(const rotcc_msg_t *msg, const void *payload, uint16_t payload_len);
+// Sends an unsolicited notification with reserve 0. Thread context only, single producer.
+rotsta_t rotcc_proto_notify(uint8_t cmd, uint8_t subcmd, const void *payload, uint16_t payload_len);
+// Largest payload one notification frame can carry on the current CC endpoint.
+uint16_t rotcc_proto_notify_payload_max(void);
 rotsta_t rotcc_proto_register_cmd(uint8_t cmd, uint8_t subcmd, rotcc_cmd_handler_t handler);
 rotsta_t rotcc_proto_unregister_cmd(uint8_t cmd, uint8_t subcmd);
 

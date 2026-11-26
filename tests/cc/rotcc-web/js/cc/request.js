@@ -57,34 +57,64 @@ async function makeCcClient(target, { bytes = null, crc32 = 0, onProgress = null
   return new CcClient({ packetSize: target.packetSize, write, log });
 }
 
-/* 一次性请求：临时挂接收、发完即摘。 */
-async function ccCall(target, handler) {
+/*
+ * CC 接收分发：通知直接交给全局处理函数，其余响应交给当前客户端。
+ * 分发器常驻，避免 sensor 上报在两次请求之间被当成原始数据刷屏。
+ */
+let ccRxClient = null;
+
+function ccRxDispatch(data) {
+  const frame = parseRotGenFrame(data);
+  if (!frame || (frame.options & RG.OPT_REQUEST) !== 0) return;
+  const msg = parseCcMessage(frame.payload);
+  if (!msg) return;
+
+  if (msg.cmd === CC.CMD_NOTIFY) {
+    ccDispatchNotification(msg);
+    return;
+  }
+  if (ccRxClient) ccRxClient.receive(data);
+}
+
+function ccEnsureRx(target) {
   const key = endpointKey(target.epIn);
-  if (target.link.rxHandlers.has(key)) {
+  if (!target.link.rxHandlers.has(key)) {
+    target.link.rxHandlers.set(key, ccRxDispatch);
+  }
+  if (!target.link.reads.has(key)) {
+    startRead(target.link, target.epIn);
+  }
+}
+
+function ccAttachRxClient(target, client) {
+  ccEnsureRx(target);
+  ccRxClient = client;
+}
+
+function ccDetachRxClient(client) {
+  if (ccRxClient === client) ccRxClient = null;
+}
+
+/* 一次性请求：共用常驻分发器，结束只摘客户端，不摘分发器。 */
+async function ccCall(target, handler) {
+  if (ccRxClient) {
     throw new Error('CC 接收通道正在被其他功能使用');
   }
 
   let client = null;
   let result = null;
   let failure = null;
-  const forward = data => {
-    if (client) client.receive(data);
-  };
-
-  target.link.rxHandlers.set(key, forward);
-  if (!target.link.reads.has(key)) {
-    startRead(target.link, target.epIn);
-  }
 
   try {
     client = await makeCcClient(target);
+    ccAttachRxClient(target, client);
     result = await handler(client);
   } catch (error) {
     failure = error;
   } finally {
-    if (client) client.cancel();
-    if (target.link.rxHandlers.get(key) === forward) {
-      target.link.rxHandlers.delete(key);
+    if (client) {
+      ccDetachRxClient(client);
+      client.cancel();
     }
   }
 

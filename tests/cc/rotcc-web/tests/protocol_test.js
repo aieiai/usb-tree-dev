@@ -608,7 +608,8 @@ async function main() {
       'ROTCC_KC_RT_GET', 'ROTCC_KC_RT_SET',
       'ROTCC_AXIS_LIST', 'ROTCC_AXIS_GET', 'ROTCC_AXIS_SET',
       'ROTCC_CALIB_STATUS_GET', 'ROTCC_CALIB_STATUS_SET',
-      'ROTCC_CALIB_AUTO_GET', 'ROTCC_CALIB_AUTO_SET'
+      'ROTCC_CALIB_AUTO_GET', 'ROTCC_CALIB_AUTO_SET',
+      'ROTCC_CALIB_SENSOR_RPT_SET', 'ROTCC_CALIB_SENSOR_FREQ_SET'
     ];
     for (const name of handlers) {
       const inTable = new RegExp(`\\{[^\\n]*\\b${name}\\b`).test(source);

@@ -62,6 +62,7 @@ async function queryKeyCount({ silent = false } = {}) {
       })
     );
     const count = readLe32(payload, 0);
+    applyKeyboardLayout(count);
     const uiCount = kcKeyEls.size;
     $sysKeyCount.textContent = `按键数量 ${count}`;
     appendLine(`[SYS] 设备按键数量 ${count}`);

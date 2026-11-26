@@ -86,6 +86,42 @@ rotsta_t rotcc_proto_reply(const rotcc_msg_t *msg, const void *payload, uint16_t
     return rotcc_send_frame(0U, s_tx_payload, total);
 }
 
+/*
+ * Notifications are sent from the calibration thread, so they must not share
+ * the reply buffer above with the CC thread. Only one producer is allowed.
+ */
+static uint8_t s_notify_payload[ROTGEN_MAX_PAYLOAD_SIZE] __attribute__((aligned(4)));
+
+uint16_t rotcc_proto_notify_payload_max(void)
+{
+    uint32_t overhead = (uint32_t)ROTGEN_HEADER_SIZE + (uint32_t)ROTCC_MSG_HEADER_SIZE;
+
+    if ((uint32_t)INTF_CC_EP_SIZE <= overhead) {
+        return 0U;
+    }
+    return (uint16_t)((uint32_t)INTF_CC_EP_SIZE - overhead);
+}
+
+rotsta_t rotcc_proto_notify(uint8_t cmd, uint8_t subcmd, const void *payload, uint16_t payload_len)
+{
+    uint16_t total = (uint16_t)(ROTCC_MSG_HEADER_SIZE + payload_len);
+
+    if ((payload_len > rotcc_proto_notify_payload_max()) || (total > sizeof(s_notify_payload))) {
+        return rotsta_invalid_argument;
+    }
+    if ((payload == NULL) && (payload_len != 0U)) {
+        return rotsta_invalid_argument;
+    }
+
+    s_notify_payload[0] = cmd;
+    s_notify_payload[1] = subcmd;
+    rotutil_put_le16(&s_notify_payload[2], 0U);
+    if (payload_len != 0U) {
+        memcpy(&s_notify_payload[ROTCC_MSG_HEADER_SIZE], payload, payload_len);
+    }
+    return rotcc_send_frame(0U, s_notify_payload, total);
+}
+
 static rotsta_t _reply_status(const rotcc_msg_t *msg, rotsta_t state)
 {
     uint8_t status[sizeof(uint32_t)];
@@ -948,6 +984,36 @@ static void _handle_calib_auto_set(const rotcc_msg_t *msg)
     _reply_status(msg, state);
 }
 
+static void _handle_calib_sensor_rpt_set(const rotcc_msg_t *msg)
+{
+    rotsta_t state;
+
+    if (msg->payload_len != ROTCC_SENSOR_RPT_LEN) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    state = keycal_sensor_report_set(msg->payload[0]);
+    hal_dt_printf(TAG "sensor report set %u, result=0x%08x\r\n", (unsigned)msg->payload[0], (unsigned)state);
+    _reply_status(msg, state);
+}
+
+static void _handle_calib_sensor_freq_set(const rotcc_msg_t *msg)
+{
+    uint16_t freq;
+    rotsta_t state;
+
+    if (msg->payload_len != ROTCC_SENSOR_FREQ_LEN) {
+        _reply_status(msg, rotsta_invalid_argument);
+        return;
+    }
+
+    freq = rotutil_get_le16(&msg->payload[0]);
+    state = keycal_sensor_freq_set(freq);
+    hal_dt_printf(TAG "sensor report freq=%u, result=0x%08x\r\n", (unsigned)freq, (unsigned)state);
+    _reply_status(msg, state);
+}
+
 // External test hooks, only used when no built-in handler matches.
 static rotcc_cmd_entry_t ext_cmd_table[ROTCC_EXT_CMD_MAX];
 static const rotcc_cmd_entry_t cmd_table[] = {
@@ -984,6 +1050,8 @@ static const rotcc_cmd_entry_t cmd_table[] = {
     { ROTCC_CMD_CALIB,   ROTCC_CALIB_STATUS_SET,    _handle_calib_status_set     },
     { ROTCC_CMD_CALIB,   ROTCC_CALIB_AUTO_GET,      _handle_calib_auto_get       },
     { ROTCC_CMD_CALIB,   ROTCC_CALIB_AUTO_SET,      _handle_calib_auto_set       },
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_SENSOR_RPT_SET,  _handle_calib_sensor_rpt_set  },
+    { ROTCC_CMD_CALIB,   ROTCC_CALIB_SENSOR_FREQ_SET, _handle_calib_sensor_freq_set },
 
     { ROTCC_CMD_UPGRADE, ROTCC_UPGRADE_INFO,        _handle_upgrade_info         },
     { ROTCC_CMD_UPGRADE, ROTCC_UPGRADE_REQUEST,     _handle_upgrade_request      },

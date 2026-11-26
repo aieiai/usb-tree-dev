@@ -1,4 +1,4 @@
-# Rot\-CC 协议规范
+# Rot\-CC Message 协议规范
 
 # 背景
 
@@ -275,6 +275,40 @@
 |---|---|---|---|---|
 |0x04|0x03|0x0000||设置自校准 `auto_calib_t`|
 |0x04|0x03|0x0000|0\-3 byte|0x00: succeed|
+
+### 上传sensor数据
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x04|0x04|0x0000|0\-1 byte|typedef struct \{<br>    // 0：关闭sensor数据； 1：打开sensor数据<br>    uint8\_t en;<br>    uint8\_t rsv;<br>\} sensor\_data\_rpt\_t;|
+|0x04|0x04|0x0000|0\-3 byte|0x00: succeed，Note: 打开后设备会以固定周期上报，详细见|
+
+### 设置sensor数据上传频率
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x04|0x05|0x0000|0\-3 byte|typedef struct \{<br>    // unit: Hz<br>    uint16\_t freq;<br>    uint16\_t rsv;<br>\} sensor\_freq\_t;|
+|0x04|0x05|0x0000|0\-3 byte|0x00: succeed，Note: 打开后，设备会以固定周期上报通知目标，详细见**通知指令**|
+
+
+
+---
+
+# 通知
+
+设备主动上报，无需应答
+
+### 异常状态
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x05|0x00|0x0000|0\-3 byte|typedef struct \{<br>    uint32\_t sta; // 每bit代表一种异常状态<br>\} exception\_staa\_t;|
+
+### sensor数据
+
+|cmd|subcmd|reserve|payload|explain|
+|---|---|---|---|---|
+|0x05|0x01|0x0000|0\-MAX byte<br>|typedef struct \{<br>uint8\_t ki; // id<br>uint8\_t  trg\_sta; //触发状态，1：按下，0：释放<br>    uint16\_t val;<br>    uint16\_t dist; // um<br>\} sensor\_data\_t;<br>//每周期会上传 : pack\_num = payload MAX byte / sizeof\(sensor\_data\_t\) 包输出，一包装不下的话，下一包会继续上传剩余的数据，直到传完<br>sensor\_data\_t data\[pack\_num\];|
 
 
 

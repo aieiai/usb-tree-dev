@@ -140,10 +140,33 @@
   }
   #view-remap > .interface:not(.keyboard-card),
   #view-param > .interface:not(.keyboard-card),
-  #view-axis > .interface:not(.keyboard-card),
-  #view-calib > .interface:not(.keyboard-card) {
+  #view-axis > .interface:not(.keyboard-card) {
     flex: 6 1 0;
     min-height: 200px;
+  }
+  /* 校准页：键盘在上，下方按键校准与 sensor 曲线各占一半。 */
+  #view-calib > .calib-workspace {
+    flex: 6 1 0;
+    min-height: 220px;
+    display: flex;
+    gap: 10px;
+  }
+  .calib-workspace > .interface {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+  .calib-workspace > .calib-panel { overflow-y: auto; }
+  .calib-workspace > .sensor-panel {
+    display: flex;
+    flex-direction: column;
+  }
+  .sensor-panel .interface-head { flex: none; }
+  .sensor-chart-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    padding: 10px;
   }
   #layout-bottom {
     flex: 1 1 auto;
@@ -382,7 +405,7 @@
     border-color: #1f4b52;
   }
   .kc-toolbar #kcCode { flex: 1 1 140px; min-width: 0; }
-  /* 40base 42 键：按 1/4U 列网格摆放，每行 12U，1U 键帽为正方形 */
+  /* 配列由 data.js 决定；buildKeyboard 会按当前配列写入实际列数和行数。 */
   .keyboard {
     --u: 36px;
     flex: none;
@@ -419,6 +442,21 @@
     background: #143038;
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .keycap.pressed {
+    color: #e6fffb;
+    background: #143038;
+    border-color: var(--accent);
+  }
+  .sensor-freq { width: 84px; }
+  #sensorChartValue { font-size: 12px; }
+  #sensorChart {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #0a0e12;
+    border: 1px solid var(--line);
+    border-radius: 10px;
   }
   .keycap .kc-value {
     max-width: 100%;
@@ -585,4 +623,13 @@
     #layout-bottom { display: block; }
     #left { overflow: visible; }
     #right { height: 60vh; margin-top: 10px; }
+    #view-calib > .calib-workspace {
+      display: block;
+      flex: none;
+      min-height: 0;
+    }
+    .calib-workspace > .interface {
+      min-height: 320px;
+      margin-bottom: 10px;
+    }
   }

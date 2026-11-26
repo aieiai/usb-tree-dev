@@ -128,7 +128,6 @@ async function startFirmwareUpgrade() {
   startFirmwareDuration();
   let current = null;
   let target = null;
-  let handlerKey = null;
   let succeeded = false;
   refreshControls();
 
@@ -170,11 +169,7 @@ async function startFirmwareUpgrade() {
     firmwareSession = current;
     refreshControls();
 
-    handlerKey = endpointKey(target.epIn);
-    target.link.rxHandlers.set(handlerKey, data => current.receive(data));
-    if (!target.link.reads.has(handlerKey)) {
-      startRead(target.link, target.epIn);
-    }
+    ccAttachRxClient(target, current);
 
     setFirmwareState(`正在通过 CC 升级 ${file.name}（${formatByteCount(bytes.length)}）...`);
     await current.run();
@@ -217,9 +212,7 @@ async function startFirmwareUpgrade() {
     if (current && !succeeded) {
       await sendCcAbort(target);
     }
-    if (target && handlerKey !== null) {
-      target.link.rxHandlers.delete(handlerKey);
-    }
+    if (current) ccDetachRxClient(current);
     if (firmwareSession === current) firmwareSession = null;
     firmwareStarting = false;
     refreshControls();

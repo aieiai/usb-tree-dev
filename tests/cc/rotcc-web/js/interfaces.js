@@ -143,6 +143,10 @@ function renderInterfaces() {
 
 function destroyLinks() {
   session++;
+  resetSensorMonitor();
+  /* 设备复位或拔插后不让上一次请求的忙标志卡住页面。 */
+  sysBusy = false;
+  kcBusy = false;
   for (const link of links) {
     for (const state of link.reads.values()) state.active = false;
   }

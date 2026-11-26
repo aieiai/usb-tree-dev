@@ -10,6 +10,7 @@ renderParamForm(null);
 renderAxisKeyboard();
 renderAxisTabs();
 renderCalibKeyboard();
+ccSetNotificationHandler(handleCcNotification);
 if (globalThis.ResizeObserver) {
   const keyboardObserver = new ResizeObserver(syncKeycapSize);
   for (const keyboard of [$keyboard, $paramKeyboard, $axisKeyboard, $calibKeyboard]) {
@@ -33,6 +34,13 @@ function selectView(name) {
     requestAnimationFrame(scrollLogToBottom);
     setTimeout(scrollLogToBottom, 50);
     setTimeout(scrollLogToBottom, 200);
+  }
+  /* 校准页隐藏时画布尺寸为 0，显示后补画一次 sensor 曲线。 */
+  if (name === 'calib') {
+    requestAnimationFrame(() => {
+      updateSensorChartTitle();
+      drawSensorChart();
+    });
   }
 }
 for (const btn of navButtons) {
@@ -102,6 +110,8 @@ $btnAutoCalibRead.addEventListener('click', () => {
   queryAutoCalib().catch(() => {});
 });
 $btnAutoCalibWrite.addEventListener('click', writeAutoCalib);
+$btnSensorRptWrite.addEventListener('click', writeSensorReport);
+$btnSensorFreqWrite.addEventListener('click', writeSensorFreq);
 $btnParamSelectAll.addEventListener('click', selectAllParamKeys);
 $btnParamClear.addEventListener('click', clearParamSelection);
 $btnAxisRead.addEventListener('click', readAxisTypes);

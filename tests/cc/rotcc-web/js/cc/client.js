@@ -9,6 +9,23 @@ class CcAbortError extends Error {
   }
 }
 
+/* 设备主动通知（cmd=0x05）不参与请求/响应匹配，交给全局处理函数。 */
+let ccNotificationHandler = null;
+
+function ccSetNotificationHandler(handler) {
+  ccNotificationHandler = handler;
+}
+
+function ccDispatchNotification(msg) {
+  const handler = ccNotificationHandler;
+  if (!handler) return;
+  try {
+    handler(msg);
+  } catch (error) {
+    appendLine(`[CC 通知处理失败] ${error.message || error}`, 'err');
+  }
+}
+
 class CcClient {
   constructor({ packetSize, write, log }) {
     if (!Number.isInteger(packetSize) || packetSize < CC.MIN_FRAME_SIZE) {
@@ -33,6 +50,10 @@ class CcClient {
     const msg = parseCcMessage(frame.payload);
     if (!msg) {
       this.log('忽略缺少 Rot-CC 头的响应', 'warn');
+      return;
+    }
+    if (msg.cmd === CC.CMD_NOTIFY) {
+      ccDispatchNotification(msg);
       return;
     }
     this.responses.push(msg);

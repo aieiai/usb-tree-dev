@@ -10,7 +10,7 @@ const CC_RESPONSE_TIMEOUT_MS = 15000;
 const CC_START_TIMEOUT_MS = 60000;
 const CC_END_TIMEOUT_MS = 60000;
 const CC_MAX_RETRIES = 10;
-const CC_UI_VERSION = 8;
+const CC_UI_VERSION = 1;
 
 
 const INTERFACE_HINTS = {
@@ -81,6 +81,14 @@ const $btnCalibStop = document.getElementById('btnCalibStop');
 const $btnAutoCalibRead = document.getElementById('btnAutoCalibRead');
 const $btnAutoCalibWrite = document.getElementById('btnAutoCalibWrite');
 const $chkAutoCalib = document.getElementById('chkAutoCalib');
+const $chkSensorRpt = document.getElementById('chkSensorRpt');
+const $btnSensorRptWrite = document.getElementById('btnSensorRptWrite');
+const $numSensorFreq = document.getElementById('numSensorFreq');
+const $btnSensorFreqWrite = document.getElementById('btnSensorFreqWrite');
+const $calibSensorState = document.getElementById('calibSensorState');
+const $sensorChart = document.getElementById('sensorChart');
+const $sensorChartTitle = document.getElementById('sensorChartTitle');
+const $sensorChartValue = document.getElementById('sensorChartValue');
 const $chkResetKc = document.getElementById('chkResetKc');
 const $chkResetRgb = document.getElementById('chkResetRgb');
 const $chkResetAdv = document.getElementById('chkResetAdv');
