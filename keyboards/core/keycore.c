@@ -89,31 +89,32 @@ static inline void keycore_find_ks(uint8_t ki, uint8_t si, uint16_t data)
 ATTR_RAMFUNC
 static inline void keycore_process(uint16_t *p_buf)
 {
-    keyevt_t *p_evt;
-    keymag_t *p_mag;
+    keyevt_t  *p_evt;
+    keymag_t  *p_mag;
+    keyattr_t *p_attr;
     const keyaxis_para_t *p_axis;
 
     for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
-        p_evt = &g_keyevt[ki];
-        p_mag = &g_keymag[ki];
+        p_evt  = &g_keyevt[ki];
+        p_mag  = &g_keymag[ki];
+        p_attr = &g_obkp.attr[ki];
         p_axis = p_evt->axis_para;
-
 
         p_evt->valp  = p_evt->val;
         p_evt->valdp = p_evt->vald;
         p_evt->val   = p_buf[ki];
         p_evt->vald  = p_evt->val - p_evt->valp;
 
-        p_evt->dst = _keymag_pt2du(p_mag, p_axis, p_evt->val);
-        p_evt->md  = _keyevt_md_detect(p_evt);
-        p_evt->pos = _keyevt_pos_detect(p_evt, p_axis);
-        // p_evt->act = _act_detect(ki);
+        _keymag_pt2du(p_mag, p_axis, p_evt->val);
+        _keyevt_md_detect(p_evt);
+        _keyevt_pos_detect(p_evt, p_axis);
+        _keyevt_trg_detect(p_evt);
+        _keyevt_act_detect(p_evt, p_attr, ki);
 
         //if (keyrt_is_en(ki)) {
         //    keyrt_process(ki);
         //}
         //else {
-            p_evt->trg = _keyevt_trg_detect(p_evt);
         //}
     }
 }

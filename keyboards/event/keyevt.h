@@ -69,6 +69,9 @@ typedef struct {
     kevt_pos_ty pos;
     kevt_act_ty act;
 
+    kevt_act_ty sta;
+    uint32_t cnt;
+
     const void *axis_para;
     uint16_t act_tk;
     uint16_t val;  /* value */
@@ -82,6 +85,10 @@ typedef struct {
 
 extern keyevt_t g_keyevt[KBD_KEY_MAX];
 
+void keyevt_init(void);
+void keyevt_updete(uint8_t ki, uint16_t val);
+void keyevt_reload(void);
+
 
 /**
  * @brief:  Detect the move direction of the key.
@@ -94,7 +101,7 @@ extern keyevt_t g_keyevt[KBD_KEY_MAX];
  *            - KEVT_MD_D: Move down.
  *            - KEVT_MD_S: Stay still.
  */
-#define _keyevt_md_detect(ki)               ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S)
+#define _keyevt_md_detect(ki)               (p_evt->md = ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S))
 
 /**
  * @brief:  Detect the position event of the key.
@@ -107,7 +114,7 @@ extern keyevt_t g_keyevt[KBD_KEY_MAX];
  *            - KSTA_EVT_POS_BOT: The key is pressed and the position is at the bottom.
  *            - KSTA_EVT_POS_MID: The key is pressed and the position is between the top and the bottom.
  */
-#define _keyevt_pos_detect(p_evt, p_axis)   ((p_evt->dst <= 50.0f) ? KEVT_POS_TOP : (p_evt->dst > p_axis->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID)
+#define _keyevt_pos_detect(p_evt, p_axis)   (p_evt->pos = ((p_evt->dst <= 50.0f) ? KEVT_POS_TOP : (p_evt->dst > p_axis->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID))
 
 /**
  * @brief:  Detect the trigger event of the key.
@@ -122,12 +129,125 @@ extern keyevt_t g_keyevt[KBD_KEY_MAX];
  *            - KEVT_TRG_D2D: From down to down.
  *            - KEVT_TRG_D2U: From down to up.
  */
-#define _keyevt_trg_detect(p_evt)           (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U) : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D))
+#define _keyevt_trg_detect(p_evt)           (p_evt->trg = (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U) : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D)))
 
 
-void keyevt_init(void);
-void keyevt_updete(uint8_t ki, uint16_t val);
-void keyevt_reload(void);
+#define _keyevt_act_detect(p_evt, p_attr, ki) {                                     \
+    switch (p_evt->sta) {                                                           \
+        case KEVT_ACT_IDLE:                                                         \
+            if (EVT_IS_U(p_evt->trg)) {                                             \
+                p_evt->act = KEVT_ACT_IDLE;                                         \
+            }                                                                       \
+            else {                                                                  \
+                p_evt->sta = KEVT_ACT_SC;                                           \
+                p_evt->cnt = 0;                                                     \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_SC:                                                           \
+            if (EVT_IS_U(p_evt->trg)) {                                             \
+                p_evt->cnt = 0;                                                     \
+                p_evt->sta = KEVT_ACT_SCLTO; /* KEVT_ACT_SCN */                     \
+            }                                                                       \
+            else {                                                                  \
+                if (p_evt->cnt >= MS2TK(p_attr->act.sclt)) {                        \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_SCL;                                      \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt++;                                                   \
+                }                                                                   \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_SCLTO: /* KEVT_ACT_SCN */                                     \
+            if (EVT_IS_D(p_evt->trg)) {                                             \
+                p_evt->cnt = 0;                                                     \
+                p_evt->sta = KEVT_ACT_DC;                                           \
+            }                                                                       \
+            else {                                                                  \
+                if (p_evt->cnt >= MS2TK(p_attr->act.dclt)) {                        \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_IDLE;                                     \
+                    p_evt->act = KEVT_ACT_SC; /* click */                           \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt++;                                                   \
+                }                                                                   \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_DC:                                                           \
+            if (EVT_IS_U(p_evt->trg)) {                                             \
+                p_evt->cnt = 0;                                                     \
+                p_evt->sta = KEVT_ACT_IDLE;                                         \
+                p_evt->act = KEVT_ACT_DC; /* double click */                        \
+            }                                                                       \
+            else {                                                                  \
+                if (p_evt->cnt >= MS2TK(p_attr->act.dclt)) {                        \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_DCL;                                      \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt++;                                                   \
+                }                                                                   \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_SCL:                                                          \
+            if (EVT_IS_D(p_evt->trg)) {                                             \
+                if (p_evt->cnt >= MS2TK(p_attr->act.sclto)) {                       \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_UP;                                       \
+                    p_evt->act = KEVT_ACT_SCLTO; /* click long timeout */           \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt++;                                                   \
+                }                                                                   \
+            }                                                                       \
+            else {                                                                  \
+                if (p_evt->cnt >= MS2TK(p_attr->act.sclto)) {                       \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_IDLE;                                     \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_IDLE;                                     \
+                    p_evt->act = KEVT_ACT_SCL; /* click long */                     \
+                }                                                                   \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_DCL:                                                          \
+            if (EVT_IS_D(p_evt->trg)) {                                             \
+                if (p_evt->cnt >= MS2TK(p_attr->act.dclto)) {                       \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_UP;                                       \
+                    p_evt->act = KEVT_ACT_DCLTO; /* double click long timeout */    \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt++;                                                   \
+                }                                                                   \
+            }                                                                       \
+            else {                                                                  \
+                if (p_evt->cnt >= MS2TK(p_attr->act.dclto)) {                       \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_IDLE;                                     \
+                }                                                                   \
+                else {                                                              \
+                    p_evt->cnt = 0;                                                 \
+                    p_evt->sta = KEVT_ACT_IDLE;                                     \
+                    p_evt->act = KEVT_ACT_DCL; /* double click long */              \
+                }                                                                   \
+            }                                                                       \
+        break;                                                                      \
+        case KEVT_ACT_UP:                                                           \
+            if (EVT_IS_U(p_evt->trg)) {                                             \
+                p_evt->sta = KEVT_ACT_IDLE;                                         \
+                p_evt->act = KEVT_ACT_UP; /* up */                                  \
+            }                                                                       \
+        break;                                                                      \
+        default:                                                                    \
+            p_evt->sta = KEVT_ACT_IDLE;                                             \
+            p_evt->act = KEVT_ACT_UP; /* up */                                      \
+        break;                                                                      \
+    }                                                                               \
+}
 
 
 

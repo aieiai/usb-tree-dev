@@ -188,8 +188,9 @@ static inline kevt_act_ty _act_detect(uint8_t ki)
  */
 void keyevt_updete(uint8_t ki, uint16_t val)
 {
-    keyevt_t *p_evt = &g_keyevt[ki];
-    keymag_t *p_mag = &g_keymag[ki];
+    keyevt_t *p_evt   = &g_keyevt[ki];
+    keymag_t *p_mag   = &g_keymag[ki];
+    keyattr_t *p_attr = &g_obkp.attr[ki];
     const keyaxis_para_t *p_axis = p_evt->axis_para;
 
     p_evt->valp  = p_evt->val;
@@ -200,7 +201,7 @@ void keyevt_updete(uint8_t ki, uint16_t val)
     p_evt->dst = _keymag_pt2du(p_mag, p_axis, p_evt->val);
     p_evt->md  = _keyevt_md_detect(p_evt);
     p_evt->trg = _keyevt_trg_detect(p_evt);
-    // p_evt->act = _act_detect(ki);
+    _keyevt_act_detect(p_evt, p_attr, ki);
     p_evt->pos = _keyevt_pos_detect(p_evt, p_axis);
 }
 

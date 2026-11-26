@@ -26,10 +26,10 @@
 #define OBKP_DFT_AXIS_TY            (KAXIS_BB)
 #define OBKP_DFT_AXIS_UDEF_TY       (KAXIS_UDEF0)
 
-#define OBKP_DFT_ACT_SCLT           1
-#define OBKP_DFT_ACT_SCLTO          2
-#define OBKP_DFT_ACT_DCLT           3
-#define OBKP_DFT_ACT_DCLTO          4
+#define OBKP_DFT_ACT_SCLT           400
+#define OBKP_DFT_ACT_SCLTO          200
+#define OBKP_DFT_ACT_DCLT           400
+#define OBKP_DFT_ACT_DCLTO          200
 
 #define OBKP_DFT_DZ_DST_T           MM2UM(0.0f)
 #define OBKP_DFT_DZ_DST_B           MM2UM(0.0f)
