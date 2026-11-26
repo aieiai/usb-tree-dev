@@ -28,14 +28,13 @@
 
 _Static_assert(FLASH_BASE_ADDR == BOARD_FLASH_BASE_ADDRESS, "FLASH_BASE_ADDR must match BOARD_FLASH_BASE_ADDRESS");
 
-
 typedef struct {
-    bool             ready;
-    XPI_Type        *base;
-    uint32_t         total_siz;
-    uint32_t         page_siz;
-    uint32_t         sector_siz;
-    uint32_t         block_siz;
+    bool     ready;
+    XPI_Type *base;
+    uint32_t total_siz;
+    uint32_t page_siz;
+    uint32_t sector_siz;
+    uint32_t block_siz;
     xpi_nor_config_t nor_cfg;
 } hal_flash_msg_t;
 
@@ -107,17 +106,13 @@ static const void *_flash_get_mapped(uint32_t offset_addr)
     return (const void *)(uintptr_t)(FLASH_BASE_ADDR + offset_addr);
 }
 
-static rotsta_t _flash_program_page(uint32_t offset_addr, const void *buf, uint32_t buf_size)
+static rotsta_t _flash_program_sector(uint32_t offset_addr, const void *buf, uint32_t buf_size)
 {
-    uint32_t ctx, page_offset = offset_addr % hal_fm.page_siz;
+    uint32_t ctx;
 
-    if ((buf_size == 0U) ||
-        (buf_size > hal_fm.page_siz) ||
-        (buf_size > sizeof(_write_buffer)) ||
-        (buf_size > (hal_fm.page_siz - page_offset))) {
+    if ((buf_size == 0U) || (buf_size > sizeof(_write_buffer))) {
         return rotsta_flash_unaligned;
     }
-
     ctx = disable_global_irq(CSR_MSTATUS_MIE_MASK);
     memcpy(_write_buffer, buf, buf_size);
     _fencerw();
@@ -149,8 +144,7 @@ static hpm_stat_t _flash_erase_region(uint32_t offset_addr, uint32_t buf_size)
             if (st == status_success) {
                 erase_size = hal_fm.block_siz;
             } else {
-                printf(TAG "block erase failed at 0x%08x, retry by sector, st = %d\r\n",
-                       (unsigned)erase_addr, (int)st);
+                printf(TAG "block erase failed at 0x%08x, retry by sector, st = %d\r\n", (unsigned)erase_addr, (int)st);
                 block_erase_valid = false;
             }
         }
@@ -219,8 +213,7 @@ rotsta_t hal_flash_read(uint32_t offset_addr, void *buf, uint32_t buf_size)
     restore_global_irq(ctx);
 
     if (st != status_success) {
-        printf(TAG "read failed at 0x%08x, size %u, st = %d\r\n",
-               (unsigned)offset_addr, (unsigned)buf_size, (int)st);
+        printf(TAG "read failed at 0x%08x, size %u, st = %d\r\n", (unsigned)offset_addr, (unsigned)buf_size, (int)st);
         (void)_mutex_put();
         return rotsta_flash_read_fail;
     }
@@ -258,12 +251,7 @@ rotsta_t hal_flash_compare(uint32_t offset_addr, const void *buf, uint32_t buf_s
         uint32_t compare_size = (left < bytes_to_page_end) ? left : bytes_to_page_end;
         uint32_t compare_addr = off;
 
-        st = rom_xpi_nor_read(hal_fm.base,
-                              xpi_xfer_channel_auto,
-                              &hal_fm.nor_cfg,
-                              (uint32_t *)_write_buffer,
-                              compare_addr,
-                              compare_size);
+        st = rom_xpi_nor_read(hal_fm.base, xpi_xfer_channel_auto, &hal_fm.nor_cfg, (uint32_t *)_write_buffer, compare_addr, compare_size);
         if (st != status_success) {
             break;
         }
@@ -305,25 +293,20 @@ rotsta_t hal_flash_write(uint32_t offset_addr, const void *buf, uint32_t buf_siz
         return rotsta_flash_busy;
     }
 
-    const uint8_t *src = (const uint8_t *)buf;
-    uint32_t left = buf_size;
-    uint32_t off = offset_addr;
     rotsta_t ret = rotsta_success;
+    uint32_t written_size  = 0;
+    uint32_t program_chunk = hal_fm.sector_siz;
+    // uint32_t program_num   = ROT_DIV_CEIL(buf_size, program_chunk);
 
-    // Split one logical write into explicit page-sized ROM program calls.
-    while (left > 0U) {
-        uint32_t page_offset = off % hal_fm.page_siz;
-        uint32_t bytes_to_page_end = hal_fm.page_siz - page_offset;
-        uint32_t page_write_size = (left < bytes_to_page_end) ? left : bytes_to_page_end;
+    while (written_size < buf_size) {
+        uint32_t remain_size = buf_size - written_size;
+        uint32_t chunk_size  = (remain_size) < program_chunk ? (remain_size) : program_chunk;
 
-        ret = _flash_program_page(off, src, page_write_size);
+        ret = _flash_program_sector(offset_addr + written_size, buf + written_size, chunk_size);
         if (ret != rotsta_success) {
             break;
         }
-
-        off += page_write_size;
-        src += page_write_size;
-        left -= page_write_size;
+        written_size += chunk_size;
     }
 
     _flash_invalidate_dcache(offset_addr, buf_size);

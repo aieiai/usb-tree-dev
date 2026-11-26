@@ -12,6 +12,10 @@
 #ifndef DB_SNAPSHOT_SIZE
 #define DB_SNAPSHOT_SIZE       (FLASH_SECTOR_SIZ)
 #endif
+
+#ifndef DB_SNAPSHOT_ENABLE
+#define DB_SNAPSHOT_ENABLE     (0)
+#endif
 #define DB_SAVE_DELAY_MS       (5000U)
 #define DB_SAVE_DELAY_TICKS    ((DB_SAVE_DELAY_MS * TX_TIMER_TICKS_PER_SECOND + 999U) / 1000U)
 #define DB_SAVE_RETRY_MAX      (3U)
@@ -37,7 +41,9 @@ typedef struct {
 typedef struct {
     uint32_t now_mask;
     uint32_t dirty_mask;
+#if DB_SNAPSHOT_ENABLE
     uint8_t snapshot[DB_SNAPSHOT_SIZE] __attribute__((aligned(4)));
+#endif
     item_t item[DB_ITEM_MAX];
 } db_t;
 
@@ -170,7 +176,9 @@ static rotsta_t _save_type(db_item_ty type)
     uint32_t offset;
     const uint8_t *buf;
     rotsta_t result = rotsta_success;
+#if DB_SNAPSHOT_ENABLE
     bool buffer_changed = false;
+#endif
     bool dropped = false;
     TX_INTERRUPT_SAVE_AREA
 
@@ -186,34 +194,46 @@ static rotsta_t _save_type(db_item_ty type)
 
     for (offset = 0U; offset < size; offset += DB_SNAPSHOT_SIZE) {
         uint32_t chunk = size - offset;
+        const uint8_t *data;
 
         if (chunk > DB_SNAPSHOT_SIZE) {
             chunk = DB_SNAPSHOT_SIZE;
         }
 
+        data = buf + offset;
+
+#if DB_SNAPSHOT_ENABLE
         /* Snapshot this chunk with interrupts locked: no thread/ISR can modify the
          * live buffer meanwhile, so flash always gets a coherent copy. */
         TX_DISABLE
-        memcpy((void *)db.snapshot, buf + offset, chunk);
+        memcpy((void *)db.snapshot, data, chunk);
         TX_RESTORE
+        data = (const uint8_t *)db.snapshot;
+#endif
 
-        result = _item_write(type, offset, (void *)db.snapshot, chunk);
+        result = _item_write(type, offset, data, chunk);
         if (result != rotsta_success) {
             break;
         }
 
+#if DB_SNAPSHOT_ENABLE
         /* Keep the item dirty if the application changed this chunk while it was
          * being written, even if db_update() has not been called yet. */
-        if (memcmp(buf + offset, (void *)db.snapshot, chunk) != 0) {
+        if (memcmp(buf + offset, (const void *)db.snapshot, chunk) != 0) {
             buffer_changed = true;
         }
+#endif
     }
 
     TX_DISABLE
     if (result == rotsta_success) {
         item->retry = 0U;
         /* Only clear the pending flags when nothing changed during the write. */
+#if DB_SNAPSHOT_ENABLE
         if ((!buffer_changed) && (item->generation == generation)) {
+#else
+        if (item->generation == generation) {
+#endif
             db.dirty_mask &= ~type_bit;
             db.now_mask &= ~type_bit;
         }

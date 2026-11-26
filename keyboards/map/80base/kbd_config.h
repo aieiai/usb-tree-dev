@@ -16,7 +16,7 @@
 #endif
 
 #define KBD_ADC_BIT             (16)
-#define KBD_ADC_MVEF            (3300)
+#define KBD_ADC_MVEF            (2500)
 #define KBD_ADC2MVOL(val)       (((float)KBD_ADC_MVEF / (0x01 << KBD_ADC_BIT)) * val)
 
 #define KBD_PCB_THICKNESS       (1600)
