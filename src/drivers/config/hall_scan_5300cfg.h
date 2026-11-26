@@ -23,7 +23,7 @@
 
 
 #define SENSOR_MATRIX_TMR_SHOT_FREQ 8000  /* scan shot freq */
-#define SENSOR_MATRIX_TMR_SEL_FREQ 140000 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
+// #define SENSOR_MATRIX_TMR_SEL_FREQ 140000 /* sel freq，与 50MHz ADC + SENSOR_MATRIX_ADC_SAMPLES 次采样配套 */
 
 #define SENSOR_MATRIX_SOF_ST_TIME 2000 /* (sof to tmr irq margin time) */
 #define SENSOR_MATRIX_TMR_ST_TIME 70 /* tmr soft sync setup time default 350ns, DMA 握手，写 GPIO 切 mux  */
@@ -80,5 +80,30 @@
 #define SENSOR_MATRIX_ROUND_SELS_MAX 6 /* scan 40 sel in once shot, SENSOR_MATRIX_SELS_SEQUENCE */
 #define SENSOR_MATRIX_SELS_SEQUENCE  {2, 5, 1, 7, 0, 3}
 
+
+/* ==================== 自动计算 SEL 扫描频率 ==================== */
+#define SENSOR_MATRIX_TMR_CLK_HZ        100000000ULL /* GPTMR1 时钟: 100MHz */
+#define SENSOR_MATRIX_ADC_CLK_HZ        53333333ULL  /* ADC 工作时钟: 53.3MHz */
+#define SENSOR_MATRIX_SEL_MARGIN_TICKS  10ULL        /* 单周期尾部余量: 10 ticks = 0.10us @100MHz */
+
+/* 1. 单路最长 ADC 序列转换所需 GPTMR ticks（使用 ULL 防止 32 位平台乘法溢出） */
+#define SENSOR_MATRIX_ADC_CONV_TICKS                                                                            \
+    CEILING((SENSOR_MATRIX_TMR_CLK_HZ) * ((SENSOR_MATRIX_ADC_SAMPLE_CYCLE) + (SENSOR_MATRIX_ADC_CONVERT_CYCLE)) \
+                * (SENSOR_MATRIX_ADC_CHANNELS) * (SENSOR_MATRIX_ADC_SAMPLE_ROUNDS),                             \
+            (SENSOR_MATRIX_ADC_CLK_HZ))
+
+/* 2. 单路 SEL 所需最小 reload ticks = 70 + 1 + ADC_ST + ADC_CONV + MARGIN */
+#define SENSOR_MATRIX_SEL_RELOAD_TICKS                                                                          \
+    ((SENSOR_MATRIX_TMR_ST_TIME) + (SENSOR_MATRIX_SEL_HT_TIME1) + (SENSOR_MATRIX_ADC_ST_TIME)                   \
+     + (SENSOR_MATRIX_ADC_CONV_TICKS) + (SENSOR_MATRIX_SEL_MARGIN_TICKS))
+
+/* 3. 自动推导出 SENSOR_MATRIX_TMR_SEL_FREQ（向下取整，保证反算回 reload >= 目标值） */
+#define SENSOR_MATRIX_TMR_SEL_FREQ      ((SENSOR_MATRIX_TMR_CLK_HZ) / (SENSOR_MATRIX_SEL_RELOAD_TICKS))
+
+/* 4. 编译期防错：确保整帧（含 SOF 延时 + 8 路扫描 + 至少 20us 处理器余量）不超过 8kHz 周期 */
+#if ((10ULL + (SENSOR_MATRIX_SOF_ST_TIME) + (SENSOR_MATRIX_ROUND_SELS_MAX) * (SENSOR_MATRIX_SEL_RELOAD_TICKS)   \
+      + (SENSOR_MATRIX_TMR_ST_TIME) + 2000ULL) >= ((SENSOR_MATRIX_TMR_CLK_HZ) / (SENSOR_MATRIX_TMR_SHOT_FREQ)))
+#    error "Hall scan total time exceeds 8kHz frame budget! Reduce ADC_ST_TIME / SOF_ST_TIME / MARGIN."
+#endif
 
 #endif

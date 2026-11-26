@@ -19,11 +19,7 @@
 #define _INST_RCONCAT3(x, y, z) x##y##z
 #define INST_RCONCAT3(x, y, z) _INST_RCONCAT3(x, y, z)
 
-
-
-
 #define SENSOR_MATRIX_TMR_INST GPTMR1
-
 
 //#define SENSOR_MATRIX_MUX_EN A31
 //#define SENSOR_MATRIX_PWRL_PIN Y0

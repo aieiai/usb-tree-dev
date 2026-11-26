@@ -80,6 +80,7 @@ static inline void keycore_find_ks(uint8_t ki, uint8_t si, uint16_t data)
         view[ki] = si;
     }
 #else
+    (void)ki;
     (void)si;
     (void)data;
 #endif

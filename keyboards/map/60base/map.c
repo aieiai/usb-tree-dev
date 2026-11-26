@@ -157,6 +157,9 @@ static const uint8_t keymap2ki_table[] = {
     37,  38,  42,  40,  43,  41,  30,  31,  34,  32,  36,  33,  
 };
 
+static const uint8_t keymap2ks_table[KBD_KEY_MAX] = {0
+};
+
 const uint32_t *keymap_get_default(uint8_t sys, uint8_t map)
 {
     if ((sys >= KBD_SYS_MAX) || (map >= KBD_MAP_MAX)) {
@@ -165,7 +168,11 @@ const uint32_t *keymap_get_default(uint8_t sys, uint8_t map)
     return keymap[sys][map];
 }
 
-uint8_t *keymap_conv_ki_list(void)
+const uint8_t *keymap_conv_ki_list(void)
 {
     return keymap2ki_table;
+}
+const uint8_t *keymap_conv_ks_list(void)
+{
+    return keymap2ks_table;
 }
