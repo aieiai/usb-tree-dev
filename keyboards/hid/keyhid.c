@@ -27,7 +27,7 @@ static keyhid_key_t s_kbd[KBD_KEY_MAX];
 static bool s_dirty;
 
 /* KC_FN1..KC_FN7（0xF1..0xF7）与上位机下发的 1..7 都表示层号。 */
-static uint8_t _fn_layer(uint16_t co)
+static inline uint8_t _fn_layer(uint16_t co)
 {
     uint8_t layer = (co >= KC_FN0) ? (uint8_t)(co - KC_FN0) : (uint8_t)co;
 
@@ -38,7 +38,7 @@ static uint8_t _fn_layer(uint16_t co)
 }
 
 /* 同一键码是否还被其他物理按键持有（例如 Fn 层映射重叠）。 */
-static bool _code_held(uint8_t except, uint32_t code)
+static inline bool _code_held(uint8_t except, uint32_t code)
 {
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         if ((ki != except) && (s_kbd[ki].out == code)) {
@@ -48,7 +48,7 @@ static bool _code_held(uint8_t except, uint32_t code)
     return false;
 }
 
-static uint8_t _active_layer(void)
+static inline uint8_t _active_layer(void)
 {
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         if (s_kbd[ki].fn_layer != KEYHID_NO_FN) {
@@ -58,7 +58,7 @@ static uint8_t _active_layer(void)
     return keymap_get_active_layer();
 }
 
-static void _report_send(void)
+static inline void _report_send(void)
 {
     const uint8_t *buf = NULL;
     uint8_t id = (g_obi.fs.nkro != 0U) ? KRPT_ID_NKRO : KRPT_ID_6KRO;
@@ -70,7 +70,7 @@ static void _report_send(void)
 }
 
 /* Fn 键在按下时记录层号，不产生 HID 上报。 */
-static void _fn_press(uint8_t ki, uint8_t layer)
+static inline void _fn_press(uint8_t ki, uint8_t layer)
 {
     rotkc_t kc = { .code = keymap_get_key(layer, ki) };
 
@@ -80,7 +80,7 @@ static void _fn_press(uint8_t ki, uint8_t layer)
     }
 }
 
-static void _key_press(uint8_t ki, uint8_t layer)
+static inline void _key_press(uint8_t ki, uint8_t layer)
 {
     rotkc_t kc;
 
@@ -111,7 +111,7 @@ static void _key_press(uint8_t ki, uint8_t layer)
     s_dirty = true;
 }
 
-static void _key_release(uint8_t ki)
+static inline void _key_release(uint8_t ki)
 {
     uint32_t code = s_kbd[ki].out;
     rotkc_t kc = { .code = code };
@@ -141,23 +141,13 @@ void keyhid_process(void)
 {
     uint8_t layer;
 
-    /* 先登记本帧按下的 Fn 键，保证同帧的其他按键能使用对应层。 */
-    layer = _active_layer();
-    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        if (KEVT_TRG_U2D == g_keyevt[ki].trg) {
-            _fn_press(ki, layer);
-        }
-    }
-
     layer = _active_layer();
 
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         if (KEVT_TRG_D2U == g_keyevt[ki].trg) {
             _key_release(ki);
         }
-    }
-    for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        if (KEVT_TRG_U2D == g_keyevt[ki].trg) {
+        else if (KEVT_TRG_U2D == g_keyevt[ki].trg) {
             _key_press(ki, layer);
         }
     }

@@ -5,6 +5,7 @@ add_subdirectory(map)
 add_subdirectory(axis)
 add_subdirectory(property)
 add_subdirectory(magnet)
+add_subdirectory(filter)
 
 add_subdirectory(rgb)
 add_subdirectory(event)

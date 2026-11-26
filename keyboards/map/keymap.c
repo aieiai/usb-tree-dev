@@ -6,6 +6,10 @@
 #define TAG "keymap: "
 
 obm_t g_obm;
+keymap_t g_keymap = {0};
+
+const uint8_t *keymap_conv_ki_list(void);
+const uint8_t *keymap_conv_ks_list(void);
 
 static void _keymap_load_defaults(void)
 {
@@ -85,12 +89,6 @@ rotsta_t obm_db_register(void)
     return result;
 }
 
-rotsta_t keymap_init(void)
-{
-    return rotsta_success;
-}
-
-
 rotsta_t keymap_reset(void)
 {
     _keymap_load_defaults();
@@ -140,5 +138,15 @@ rotsta_t keymap_set_active_sys(uint8_t sys)
         return rotsta_invalid_argument;
     }
     g_obm.sys_cur = sys;
+    return rotsta_success;
+}
+
+
+rotsta_t keymap_init(void)
+{
+    keymap_t *p_map = &g_keymap;
+    p_map->ki_list = keymap_conv_ki_list();
+    p_map->ks_list = keymap_conv_ks_list();
+
     return rotsta_success;
 }

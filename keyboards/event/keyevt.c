@@ -172,61 +172,9 @@ static inline kevt_act_ty _act_detect(uint8_t ki)
     return p_evt->act;
 }
 
-/**
- * @brief:  Detect the move direction of the key.
- * @param:  The index of the key.
- * @return: The move direction of the key.
- *
- *          Detect the move direction of the key by comparing the current value
- *          with the previous value. The move direction can be one of the following:
- *            - KEVT_MD_U: Move up.
- *            - KEVT_MD_D: Move down.
- *            - KEVT_MD_S: Stay still.
- */
-static inline kevt_md_ty _md_detect(uint8_t ki)
-{
-    keyevt_t *p_evt = &g_keyevt[ki];
-    return ((p_evt->vald > 0) ? KEVT_MD_U : (p_evt->vald < 0) ? KEVT_MD_D : KEVT_MD_S);
-}
-
-/**
- * @brief:  Detect the position event of the key.
- * @param:  The index of the key.
- * @return: The position event of the key.
- *
- *          Detect the position event of the key by comparing the current value
- *          with the threshold. The position event can be one of the following:
- *            - KSTA_EVT_POS_TOP: The key is released and the position is at the top.
- *            - KSTA_EVT_POS_BOT: The key is pressed and the position is at the bottom.
- *            - KSTA_EVT_POS_MID: The key is pressed and the position is between the top and the bottom.
- */
-static inline kevt_pos_ty _pos_detect(uint8_t ki)
-{
-    keyevt_t *p_evt = &g_keyevt[ki];
-    const keyaxis_para_t *p_axis = p_evt->axis_para;
-    return ((p_evt->dst <= 50.0f) ? KEVT_POS_TOP : (p_evt->dst > p_axis->t2b_dst) ? KEVT_POS_BOT : KEVT_POS_MID);
-}
 
 
-/**
- * @brief:  Detect the trigger event of the key.
- * @param:  The index of the key.
- * @return: The trigger event of the key.
- *
- *          Detect the trigger event of the key by comparing the current value
- *          with the previous value and threshold. The trigger event can be one
- *          of the following:
- *            - KEVT_TRG_U2U: From up to up.
- *            - KEVT_TRG_U2D: From up to down.
- *            - KEVT_TRG_D2D: From down to down.
- *            - KEVT_TRG_D2U: From down to up.
- */
-kevt_trg_ty keyevt_trg_detect(uint8_t ki)
-{
-    keyevt_t *p_evt = &g_keyevt[ki];
-    return (EVT_IS_U(p_evt->trg) ? ((p_evt->val <= p_evt->pv) ? KEVT_TRG_U2D : KEVT_TRG_U2U)
-                                 : ((p_evt->val >= p_evt->rv) ? KEVT_TRG_D2U : KEVT_TRG_D2D));
-}
+
 
 /**
  * @brief:  Update the state of the key.
@@ -241,16 +189,19 @@ kevt_trg_ty keyevt_trg_detect(uint8_t ki)
 void keyevt_updete(uint8_t ki, uint16_t val)
 {
     keyevt_t *p_evt = &g_keyevt[ki];
+    keymag_t *p_mag = &g_keymag[ki];
+    const keyaxis_para_t *p_axis = p_evt->axis_para;
+
     p_evt->valp  = p_evt->val;
     p_evt->valdp = p_evt->vald;
     p_evt->val   = val;
     p_evt->vald  = p_evt->val - p_evt->valp;
 
-    p_evt->dst = keymag_pt2du(ki, p_evt->val);
-    p_evt->md  = _md_detect(ki);
-    // p_evt->trg = _trg_detect(ki);
-    p_evt->act = _act_detect(ki);
-    p_evt->pos = _pos_detect(ki);
+    p_evt->dst = _keymag_pt2du(p_mag, p_axis, p_evt->val);
+    p_evt->md  = _keyevt_md_detect(p_evt);
+    p_evt->trg = _keyevt_trg_detect(p_evt);
+    // p_evt->act = _act_detect(ki);
+    p_evt->pos = _keyevt_pos_detect(p_evt, p_axis);
 }
 
 /**

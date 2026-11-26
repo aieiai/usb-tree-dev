@@ -31,7 +31,13 @@ typedef struct {
     uint32_t keymap[KBD_SYS_MAX][KBD_MAP_MAX][KBD_KEY_MAX];
 } __attribute__ ((aligned (4))) obm_t;
 
+typedef struct {
+    const uint8_t *ki_list;
+    const uint8_t *ks_list;
+} __attribute__ ((aligned (4))) keymap_t;
+
 extern obm_t g_obm;
+extern keymap_t g_keymap;
 
 rotsta_t obm_db_register(void);
 rotsta_t keymap_init(void);

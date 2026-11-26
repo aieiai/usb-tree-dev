@@ -37,6 +37,9 @@ get_git_author(GIT_AUTHOR)
 set(HEAP_SIZE  0x800)
 set(STACK_SIZE 0x2000)
 
+set(RV_ABI  "ilp32f")
+set(RV_ARCH "rv32imafc_zicsr_zifencei")
+
 find_package(hpm-sdk REQUIRED HINTS $ENV{HPM_SDK_BASE})
 project(${APP_NAME})
 

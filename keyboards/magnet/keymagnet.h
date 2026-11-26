@@ -55,14 +55,36 @@ typedef struct {
     keymag_cal_t cal_bak;
 } obmag_t;
 
+typedef struct {
+    float k;
+    float b;
+} keymag_t;
+
+
 extern obmag_t g_obmag;
+extern keymag_t g_keymag[KBD_KEY_MAX];
+
 
 rotsta_t obmag_db_register(void);
 rotsta_t keymag_init(void);
 bool     keymag_lmt_valid(const keymag_lmt_t *p_lmt);
 void     keymag_update_factor(uint8_t ki);
-float    keymag_pt2du(uint8_t ki, uint16_t point);
 uint16_t keymag_du2pt(uint8_t ki, float dist_um);
+
+
+/**
+ * @brief:  Convert the point location to the distance from the top of the key to the bottom.
+ * @param:  The index of the key.
+ * @param:  The point location to convert.
+ * @return: The distance from the top of the key to the bottom in um.
+ *
+ *          The distance is calculated by the following formula.
+ *          distance = (point - b) / k
+ *          where b is the y-intercept of the line and k is the slope of the line.
+ *          The line is defined by the key's attribute, such as the top and bottom values.
+ */
+
+#define  _keymag_pt2du(p_mag, p_axis, point)  (p_axis->t2h_dst - (p_mag->k / ((float)point - p_mag->b)))
 
 
 #endif  /* KEY_MAGNET_H */

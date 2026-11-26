@@ -196,11 +196,19 @@ static const uint32_t keymap[KBD_SYS_MAX][KBD_MAP_MAX][KBD_KEY_MAX] = {
     },
 };
 
-static const uint8_t ks2ki[] = {
+static const uint8_t ks2ki_table[] = {
     68, 50, 64, 76, 43, 6, 70, 28, 20, 35, 67, 49, 63, 77, 42, 5, 13, 27, 19, 34,
     66, 48, 62, 78, 41, 4, 12, 26, 18, 33, 69, 51, 65, 75, 56, 7, 79, 57, 21, 36,
     74, 47, 61, 55, 40, 3, 11, 25, 17, 32, 71, 44, 58, 52, 37, 0,  8, 22, 14, 29,
     73, 46, 60, 54, 39, 2, 10, 24, 16, 31, 72, 45, 59, 53, 38, 1,  9, 23, 15, 30,
+};
+
+
+static const uint8_t ki2ks_table[KBD_KEY_MAX] = {
+    55, 75, 65, 45, 25, 15, 5,  35, 56, 76, 66, 46, 26, 16, 58, 78, 68, 48, 28, 18,
+    8,  38, 57, 77, 67, 47, 27, 17, 7,  59, 79, 69, 49, 29, 19, 9,  39, 54, 74, 64,
+    44, 24, 14, 4,  51, 71, 61, 41, 21, 11, 1,  31, 53, 73, 63, 43, 34, 37, 52, 72,
+    62, 42, 22, 12, 2,  32, 20, 10, 0,  30, 6,  50, 70, 60, 40, 33, 3,  13, 23, 36,
 };
 
 const uint32_t *keymap_get_default(uint8_t sys, uint8_t map)
@@ -211,10 +219,12 @@ const uint32_t *keymap_get_default(uint8_t sys, uint8_t map)
     return keymap[sys][map];
 }
 
-uint8_t keymap_get_ki(uint8_t si)
+const uint8_t *keymap_conv_ki_list(void)
 {
-    if (si >= sizeof(ks2ki)) {
-        return 0xff;
-    }
-    return ks2ki[si];
+    return ks2ki_table;
+}
+
+const uint8_t *keymap_conv_ks_list(void)
+{
+    return ki2ks_table;
 }
