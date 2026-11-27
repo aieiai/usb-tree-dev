@@ -10,12 +10,16 @@
 
 #define TAG "keymouse: "
 
-#define MS_FRAMES_PER_MS        (8U)    /* 扫描帧率 8kHz */
-#define MS_RPT_PERIOD_FRAMES    (MS_RPT_PERIOD_MS * MS_FRAMES_PER_MS)
+#define MS_FRAME_US             (125U)
+#define MS_FRAMES_PER_MS        (1000U / MS_FRAME_US)
+#define MS_RPT_PERIOD_FRAMES    (MS_RPT_PERIOD_US / MS_FRAME_US)
 #define MS_AXIS_MAX_OUTPUT      (120)
 #define MS_AXIS_Q16_ONE         (65536U)
 
-#define MS_BTN_NUM              (5U)
+_Static_assert((MS_RPT_PERIOD_US % MS_FRAME_US) == 0U,
+               "MS_RPT_PERIOD_US must be a multiple of the HS frame interval");
+
+#define MS_BTN_NUM              (8U)
 #define MS_CH_NUM               (6U)
 #define MS_AXIS_NUM             (3U)
 
@@ -43,35 +47,48 @@ typedef struct {
 
 static keymouse_t s_ms;
 
-/* 按钮功能下标 -> 报告按钮位（bit0..4 左/右/中/后退/前进） */
-static const uint8_t s_btn_bit[MS_BTN_NUM] = {
-    MS_BTN1, MS_BTN2, MS_BTN3, MS_BTN4, MS_BTN5
-};
-
-static int8_t _btn_index(uint8_t sy)
+/* 按键位 MS_BTNL..MS_BTN3 与 HID 报告按钮位一一对应（bit0 = 按钮 1）。
+ * 按位增减持有计数：同一按钮被多个物理键映射时，全部抬起才清除报告位。 */
+static bool _btn_apply(uint8_t mask, bool press)
 {
-    switch (sy) {
-    case MS_BL: return 0;
-    case MS_BR: return 1;
-    case MS_BM: return 2;
-    case MS_BB: return 3;
-    case MS_BP: return 4;
-    default:    return -1;
+    bool changed = false;
+
+    for (uint8_t i = 0U; i < MS_BTN_NUM; i++) {
+        uint8_t bit = (uint8_t)(1U << i);
+
+        if ((mask & bit) == 0U) {
+            continue;
+        }
+        if (press) {
+            if (s_ms.btn_cnt[i] == 0U) {
+                keyrpt_ms_add_btn(bit);
+                changed = true;
+            }
+            if (s_ms.btn_cnt[i] < 0xFFU) {
+                s_ms.btn_cnt[i]++;
+            }
+        }
+        else if (s_ms.btn_cnt[i] == 0U) {
+            hal_dt_printf(TAG "release underflow btn=%u\r\n", (unsigned)i);
+        }
+        else {
+            s_ms.btn_cnt[i]--;
+            if (s_ms.btn_cnt[i] == 0U) {
+                keyrpt_ms_del_btn(bit);
+                changed = true;
+            }
+        }
     }
+    return changed;
 }
 
 /* 移动/滚轮通道下标：X+/X-/Y+/Y-/W+/W-，同轴正反为相邻通道 */
 static int8_t _ch_index(uint8_t sy)
 {
-    switch (sy) {
-    case MS_XP: return 0;
-    case MS_XN: return 1;
-    case MS_YP: return 2;
-    case MS_YN: return 3;
-    case MS_WP: return 4;
-    case MS_WN: return 5;
-    default:    return -1;
+    if ((sy < MS_XP) || (sy > MS_WN)) {
+        return -1;
     }
+    return (int8_t)(sy - MS_XP);
 }
 
 static bool _any_active(void)
@@ -118,7 +135,7 @@ static int16_t _axis_output(uint8_t axis)
     }
 
     dq16 = (uint32_t)(((uint64_t)_ch_speed(pos_act ? &s_ms.ch[pos_ch] : &s_ms.ch[neg_ch]) *
-                       MS_RPT_PERIOD_MS * MS_AXIS_Q16_ONE) / 1000U);
+                       MS_RPT_PERIOD_US * MS_AXIS_Q16_ONE) / 1000000U);
 
     accum = s_ms.axis[axis].accum + (pos_act ? (int32_t)dq16 : -(int32_t)dq16);
     out = accum / (int32_t)MS_AXIS_Q16_ONE;
@@ -152,7 +169,7 @@ static int16_t _wheel_output(void)
         return 0;
     }
 
-    dq16 = (uint32_t)(((uint32_t)s_ms.cfg.wheel_rate * MS_RPT_PERIOD_MS * MS_AXIS_Q16_ONE) / 1000U);
+    dq16 = (uint32_t)(((uint64_t)s_ms.cfg.wheel_rate * MS_RPT_PERIOD_US * MS_AXIS_Q16_ONE) / 1000000U);
 
     accum = s_ms.axis[2].accum + (pos_act ? (int32_t)dq16 : -(int32_t)dq16);
     out = accum / (int32_t)MS_AXIS_Q16_ONE;
@@ -183,9 +200,9 @@ static void _axis_clear_if_idle(uint8_t axis)
 void keymouse_init(void)
 {
     keymouse_reset();
-    s_ms.cfg.v0 = 800U;
-    s_ms.cfg.vmax = 4000U;
-    s_ms.cfg.t_acc_ms = 500U;
+    s_ms.cfg.v0 = 80U;
+    s_ms.cfg.vmax = 8000U;
+    s_ms.cfg.t_acc_ms = 10U;
     s_ms.cfg.wheel_rate = 12U;
 }
 
@@ -203,16 +220,17 @@ void keymouse_reset(void)
 void keymouse_press(uint8_t ki, const rotkc_t *kc)
 {
     uint8_t sy = (uint8_t)kc->ms.sy;
+    uint8_t mask;
     int8_t idx;
 
-    idx = _btn_index(sy);
-    if (idx >= 0) {
-        if (s_ms.btn_cnt[idx] == 0U) {
-            keyrpt_ms_add_btn(s_btn_bit[idx]);
-            s_ms.immediate = 1U;
+    if (sy == MS_BTN) {
+        mask = (uint8_t)kc->ms.co;
+        if (mask == 0U) {
+            hal_dt_printf(TAG "press invalid btn=0 ki=%u\r\n", (unsigned)ki);
+            return;
         }
-        if (s_ms.btn_cnt[idx] < 0xFFU) {
-            s_ms.btn_cnt[idx]++;
+        if (_btn_apply(mask, true)) {
+            s_ms.immediate = 1U;
         }
         return;
     }
@@ -235,17 +253,16 @@ void keymouse_press(uint8_t ki, const rotkc_t *kc)
 void keymouse_release(uint8_t ki, const rotkc_t *kc)
 {
     uint8_t sy = (uint8_t)kc->ms.sy;
+    uint8_t mask;
     int8_t idx;
 
-    idx = _btn_index(sy);
-    if (idx >= 0) {
-        if (s_ms.btn_cnt[idx] == 0U) {
-            hal_dt_printf(TAG "release underflow btn=%d ki=%u\r\n", (int)idx, (unsigned)ki);
+    if (sy == MS_BTN) {
+        mask = (uint8_t)kc->ms.co;
+        if (mask == 0U) {
+            hal_dt_printf(TAG "release invalid btn=0 ki=%u\r\n", (unsigned)ki);
             return;
         }
-        s_ms.btn_cnt[idx]--;
-        if (s_ms.btn_cnt[idx] == 0U) {
-            keyrpt_ms_del_btn(s_btn_bit[idx]);
+        if (_btn_apply(mask, false)) {
             s_ms.immediate = 1U;
         }
         return;
@@ -311,6 +328,13 @@ bool keymouse_process(void)
     dx = _axis_output(0U);
     dy = _axis_output(1U);
     dw = _wheel_output();
+
+    /* 只有按键沿（immediate）、重发（pending）或产生非零位移时才上报；
+     * 按住按键但不动时不发重复报告，报告内容无变化就没有发送必要。 */
+    if (!had_immediate && (s_ms.pending == 0U) &&
+        (dx == 0) && (dy == 0) && (dw == 0)) {
+        return false;
+    }
 
     keyrpt_ms_set_move(dx, dy);
     keyrpt_ms_set_wheel(dw);

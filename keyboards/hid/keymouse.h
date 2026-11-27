@@ -7,8 +7,7 @@
 #include "keycode.h"
 #include "rotsta.h"
 
-/* 鼠标移动/滚轮上报周期（ms），按键沿经 immediate 旁路节流。 */
-#define MS_RPT_PERIOD_MS    (8U)
+#define MS_RPT_PERIOD_US    (125U)
 
 typedef struct {
     uint16_t v0;          /* 初始速度, 计数/s, [1, vmax] */

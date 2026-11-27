@@ -97,11 +97,16 @@ const KC_SYS_NAMES = {
   0x85: 'MainMenu', 0x86: 'AppMenu', 0x87: 'Help', 0x88: 'Exit',
 };
 
-/* 鼠标功能类型（sy 位域），与 keycode.h 的 MS_* 枚举顺序一致。 */
+/* 鼠标功能类型（sy 位域），与 keycode.h 的 MS_* 枚举顺序一致；
+ * 按键统一为 sy = MS_BTN，具体按钮写在 co 位域（MS_BTNL..MS_BTN3）。 */
 const KC_MS_NAMES = {
-  0x00: '左键', 0x01: '右键', 0x02: '中键', 0x03: '前进', 0x04: '后退',
-  0x05: '右移', 0x06: '左移', 0x07: '下移', 0x08: '上移',
-  0x09: '上滚', 0x0a: '下滚',
+  0x01: '右移', 0x02: '左移', 0x03: '下移', 0x04: '上移',
+  0x05: '上滚', 0x06: '下滚',
+};
+
+const KC_MS_BTN_NAMES = {
+  0x01: '左键', 0x02: '右键', 0x04: '中键', 0x08: '后退', 0x10: '前进',
+  0x20: '键6', 0x40: '键7', 0x80: '键8',
 };
 
 function kcDescribe(code) {
@@ -118,6 +123,14 @@ function kcDescribe(code) {
       return `ADV 0x${((code >>> 16) & 0xffff).toString(16).padStart(4, '0')}`;
     case 4: {
       const sy = (code >>> 6) & 0x1f;
+      if (sy === 0) {
+        const co = (code >>> 16) & 0xffff;
+        const names = [];
+        for (let bit = 0; bit < 8; bit++) {
+          if (co & (1 << bit)) names.push(KC_MS_BTN_NAMES[1 << bit]);
+        }
+        return names.length > 0 ? names.join('+') : `MS 按键 0x${co.toString(16)}`;
+      }
       return KC_MS_NAMES[sy] || `MS 0x${sy.toString(16).padStart(2, '0')}`;
     }
     case 5:
@@ -137,6 +150,7 @@ const KC_BUILDERS = {
   SYS: usage => ((usage << 24) | (1 << 1)) >>> 0,
   CSM: usage => ((usage << 16) | (2 << 1)) >>> 0,
   MS: sy => ((sy << 6) | (4 << 1)) >>> 0,
+  MS_BTN: btn => (((btn & 0xffff) << 16) | (0 << 6) | (4 << 1)) >>> 0,
   FN_KEY: usage => ((usage << 16) | (0 << 6) | (6 << 1)) >>> 0,
   FN_LIGHT: usage => ((usage << 16) | (1 << 6) | (6 << 1)) >>> 0,
   FN_BT: usage => ((usage << 16) | (2 << 6) | (6 << 1)) >>> 0,
@@ -242,14 +256,15 @@ const KC_PICKER = [
     id: 'mouse',
     name: '鼠标',
     groups: [
-      ['按键', 'MS', [
-        ['左键', 0x00], ['右键', 0x01], ['中键', 0x02], ['前进', 0x03], ['后退', 0x04],
+      ['按键', 'MS_BTN', [
+        ['左键', 0x01], ['右键', 0x02], ['中键', 0x04], ['后退', 0x08],
+        ['前进', 0x10], ['键6', 0x20], ['键7', 0x40], ['键8', 0x80],
       ]],
       ['移动', 'MS', [
-        ['右移', 0x05], ['左移', 0x06], ['下移', 0x07], ['上移', 0x08],
+        ['右移', 0x01], ['左移', 0x02], ['下移', 0x03], ['上移', 0x04],
       ]],
       ['滚轮', 'MS', [
-        ['上滚', 0x09], ['下滚', 0x0a],
+        ['上滚', 0x05], ['下滚', 0x06],
       ]],
     ],
   },

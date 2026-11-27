@@ -488,14 +488,14 @@ typedef enum {
  *          Mouse button bits for the supplied report format
  */
 enum {
-    MS_BTN1 = (1u << 0),
-    MS_BTN2 = (1u << 1),
-    MS_BTN3 = (1u << 2),
-    MS_BTN4 = (1u << 3),
-    MS_BTN5 = (1u << 4),
-    MS_BTN6 = (1u << 5),
-    MS_BTN7 = (1u << 6),
-    MS_BTN8 = (1u << 7)
+    MS_BTNL = (1u << 0), // left
+    MS_BTNR = (1u << 1), // right
+    MS_BTNM = (1u << 2), // middle
+    MS_BTNB = (1u << 3), // back
+    MS_BTNF = (1u << 4), // front
+    MS_BTN6 = (1u << 5), // extra button 6
+    MS_BTN7 = (1u << 6), // extra button 7
+    MS_BTN8 = (1u << 7), // extra button 8
 };
 
 /**
@@ -541,11 +541,7 @@ enum {
 
 // mouse type
 enum {
-    MS_BL = 0x00, 
-    MS_BR,
-    MS_BM,
-    MS_BP,
-    MS_BB,
+    MS_BTN = 0x00, 
     MS_XP,
     MS_XN,
     MS_YP,
@@ -611,7 +607,8 @@ _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 #define _MP(sy, c)      (((uint32_t)(c) << 16) | (_M(sy))) /* Mouse with 16-bit parameter */
 #define _KC_VALID(pkc)  (((pkc->ty >= KCT_MAX) || \
                         ((pkc->ty == KCT_ADV)  && (pkc->sy >= ADV_MAX)) || \
-                        ((pkc->ty == KCT_MS)   && (pkc->sy >= MS_MAX))  || \
+                        ((pkc->ty == KCT_MS)   && ((pkc->sy >= MS_MAX) || \
+                                                  ((pkc->sy == MS_BTN) && ((pkc->co == 0U) || ((pkc->co & ~0xFFU) != 0U))))) || \
                         ((pkc->ty == KCT_GP)   && (pkc->sy >= GP_MAX))  || \
                         ((pkc->ty == KCT_FN)   && (pkc->sy >= FN_MAX)/* && (pkc->fy >= 0xff) */)) ? false : true)
 

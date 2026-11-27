@@ -106,7 +106,36 @@ uint32_t keymap_get_key(uint8_t layer, uint8_t key)
 rotsta_t keymap_set_key(uint8_t layer, uint8_t key, uint32_t code)
 {
     obm_t *p_obm = &g_obm;
-    rotkc_t *pkc = (rotkc_t *)code;
+    rotkc_t *pkc = (rotkc_t *)&code;
+
+#if 1
+    switch (pkc->ty) {
+        case KCT_KBD:
+            printf(TAG "KBD - co: 0x%02x\r\n", (unsigned)pkc->co);
+            break;
+        case KCT_SYS:
+            printf(TAG "SYS - co: 0x%02x\r\n", (unsigned)pkc->co);
+            break;
+        case KCT_CSM:
+            printf(TAG "CSM - co: 0x%04x\r\n", (unsigned)pkc->co);
+            break;
+        case KCT_ADV:
+            printf(TAG "ADV - sy: %d, co: 0x%02x\r\n", pkc->sy, (unsigned)pkc->co);
+            break;
+        case KCT_MS:
+            printf(TAG "MS - sy: %d, co: 0x%04x\r\n", pkc->sy, (unsigned)pkc->co);
+            break;
+        case KCT_GP:
+            printf(TAG "GP - sy: %d, co: 0x%04x\r\n", pkc->sy, (unsigned)pkc->co);
+            break;
+        case KCT_FN:
+            printf(TAG "FN - sy: %d, fy: %d, co: 0x%04x\r\n", pkc->sy, pkc->fy, (unsigned)pkc->co);
+            break;
+        default:
+            printf(TAG "kc Exception: kc:0x%08x\r\n", (unsigned)code);
+            break;
+    }
+#endif
 
     if (!_KC_VALID(pkc)) {
         return rotsta_invalid_argument;
