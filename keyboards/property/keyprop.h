@@ -33,7 +33,7 @@
 
 #define OBKP_DFT_DZ_DST_T           MM2UM(0.0f)
 #define OBKP_DFT_DZ_DST_B           MM2UM(0.0f)
-#define OBKP_DFT_NOM_DST_P          MM2UM(1.0f)
+#define OBKP_DFT_NOM_DST_P          MM2UM(2.5f)
 #define OBKP_DFT_NOM_DST_R_OFFSET   MM2UM(-0.1f)
 #define OBKP_DFT_NOM_DST_R          (OBKP_DFT_NOM_DST_P + OBKP_DFT_NOM_DST_R_OFFSET)
 #define OBKP_DFT_RT_DST_P           MM2UM(0.2f)

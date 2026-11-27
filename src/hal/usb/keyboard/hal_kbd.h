@@ -19,5 +19,9 @@ int hal_kbd_send(const uint8_t *report, uint16_t len, uint32_t timeout_ms);
 /* 主机下发的 LED 位图：bit0..4 = Num/Caps/Scroll/Compose/Kana */
 uint8_t hal_kbd_get_leds(void);
 
+/* USB 世代计数：RESET/DISCONNECTED/CONFIGURED 事件时递增，
+ * 供 keycore 线程检测重枚举并清零 HID 状态。 */
+uint32_t hal_kbd_usb_generation(void);
+
 
 #endif
