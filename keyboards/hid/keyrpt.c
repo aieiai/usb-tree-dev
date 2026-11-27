@@ -3,6 +3,7 @@
 #include "rotutil.h"
 
 #include <stddef.h>
+#include <string.h>
 
 keyrpt_ctx_t g_keyrpt_ctx = {
     .kro.id  = KRPT_ID_6KRO,
@@ -17,13 +18,22 @@ static inline uint8_t keyrpt_mod_bit(uint8_t kc)
     return (uint8_t)(0x01U << (kc - KC_LCTL));
 }
 
-/* System Control usage 0x81..0x83 映射到描述符 Logical 1..3，0 表示无动作 */
-static inline uint8_t keyrpt_sys_action(uint8_t sc)
+/* System Control usage 按描述符里的 4 个区间分字段，返回字段下标，-1 表示不支持 */
+static inline int8_t keyrpt_sys_field(uint8_t sc)
 {
-    if ((sc >= SC_POWER_DOWN) && (sc <= SC_WAKE_UP)) {
-        return (uint8_t)(sc - SC_POWER_DOWN + 1U);
+    if ((sc >= SC_POWER_DOWN) && (sc <= SC_DO_NOT_DISTURB)) {
+        return 0;
     }
-    return 0U;
+    if ((sc >= SC_DOCK) && (sc <= SC_ACCESSIBILITY_BINDING)) {
+        return 1;
+    }
+    if ((sc >= SC_DISPLAY_INVERT) && (sc <= SC_DISPLAY_LCD_AUTOSCALE)) {
+        return 2;
+    }
+    if ((sc >= SC_DISPLAY_ROTATION_LOCK_BUTTON) && (sc <= SC_DISPLAY_ROTATION_LOCK_SLIDER)) {
+        return 3;
+    }
+    return -1;
 }
 
 /** ---------------- Report ID 4: 6KRO ---------------- */
@@ -139,24 +149,32 @@ bool keyrpt_csm_get(uint16_t cc)
 
 void keyrpt_sys_add(uint8_t sc)
 {
-    uint8_t action = keyrpt_sys_action(sc);
-    if (action != 0U) {
-        g_keyrpt_ctx.sys.action = action;
+    int8_t field = keyrpt_sys_field(sc);
+    keyrpt_sys_t *p_sys = &g_keyrpt_ctx.sys;
+
+    if (field < 0) {
+        return;
     }
+    /* 同一时刻只保留一个系统控制动作 */
+    memset(p_sys->usage, 0, sizeof(p_sys->usage));
+    p_sys->usage[field] = sc;
 }
 
 void keyrpt_sys_del(uint8_t sc)
 {
-    keyrpt_sys_t *p_sys= &g_keyrpt_ctx.sys;
-    if ((keyrpt_sys_action(sc) != 0U) && (p_sys->action == keyrpt_sys_action(sc))) {
-        p_sys->action = 0U;
+    keyrpt_sys_t *p_sys = &g_keyrpt_ctx.sys;
+    int8_t field = keyrpt_sys_field(sc);
+
+    if ((field >= 0) && (p_sys->usage[field] == sc)) {
+        p_sys->usage[field] = 0U;
     }
 }
 
 bool keyrpt_sys_get(uint8_t sc)
 {
-    uint8_t action = keyrpt_sys_action(sc);
-    return (action != 0U) && (g_keyrpt_ctx.sys.action == action);
+    int8_t field = keyrpt_sys_field(sc);
+
+    return (field >= 0) && (g_keyrpt_ctx.sys.usage[field] == sc);
 }
 
 /** ---------------- Report ID 5: Mouse ---------------- */

@@ -324,11 +324,34 @@
     HID_USAGE      ( HID_USAGE_DESKTOP_SYSTEM_CONTROL          ),           \
     HID_COLLECTION ( HID_COLLECTION_APPLICATION                ),           \
         HID_REPORT_ID  ( REPORT_ID_SYSTEM                      )            \
-        HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_POWER_DOWN ),           \
-        HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_SLEEP      ),           \
-        HID_USAGE        ( HID_USAGE_DESKTOP_SYSTEM_WAKE_UP    ),           \
-        HID_LOGICAL_MIN  ( 0x81                                ),           \
-        HID_LOGICAL_MAX  ( 0x83                                ),           \
+        /* HUT 1.7 System Control 拆成 4 个 usage 区间，每个区间一个数组字段（1 字节）。  \
+         * 0x81..0x9B / 0xA0..0xAA / 0xB0..0xB7 / 0xC9..0xCA。Logical 用 2 字节正值，    \
+         * 避免 0x81 被当成单字节有符号 -127。 */                                       \
+        HID_USAGE_MIN    ( 0x81                                ),           \
+        HID_USAGE_MAX    ( 0x9B                                ),           \
+        HID_LOGICAL_MIN_N( 0x0081, 2                           ),           \
+        HID_LOGICAL_MAX_N( 0x009B, 2                           ),           \
+        HID_REPORT_SIZE  ( 8                                   ),           \
+        HID_REPORT_COUNT ( 1                                   ),           \
+        HID_INPUT        ( HID_DATA | HID_ARRAY | HID_ABSOLUTE ),           \
+        HID_USAGE_MIN    ( 0xA0                                ),           \
+        HID_USAGE_MAX    ( 0xAA                                ),           \
+        HID_LOGICAL_MIN_N( 0x00A0, 2                           ),           \
+        HID_LOGICAL_MAX_N( 0x00AA, 2                           ),           \
+        HID_REPORT_SIZE  ( 8                                   ),           \
+        HID_REPORT_COUNT ( 1                                   ),           \
+        HID_INPUT        ( HID_DATA | HID_ARRAY | HID_ABSOLUTE ),           \
+        HID_USAGE_MIN    ( 0xB0                                ),           \
+        HID_USAGE_MAX    ( 0xB7                                ),           \
+        HID_LOGICAL_MIN_N( 0x00B0, 2                           ),           \
+        HID_LOGICAL_MAX_N( 0x00B7, 2                           ),           \
+        HID_REPORT_SIZE  ( 8                                   ),           \
+        HID_REPORT_COUNT ( 1                                   ),           \
+        HID_INPUT        ( HID_DATA | HID_ARRAY | HID_ABSOLUTE ),           \
+        HID_USAGE_MIN    ( 0xC9                                ),           \
+        HID_USAGE_MAX    ( 0xCA                                ),           \
+        HID_LOGICAL_MIN_N( 0x00C9, 2                           ),           \
+        HID_LOGICAL_MAX_N( 0x00CA, 2                           ),           \
         HID_REPORT_SIZE  ( 8                                   ),           \
         HID_REPORT_COUNT ( 1                                   ),           \
         HID_INPUT        ( HID_DATA | HID_ARRAY | HID_ABSOLUTE ),           \

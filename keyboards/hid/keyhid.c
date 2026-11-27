@@ -24,9 +24,15 @@ typedef struct {
     uint8_t  fn_layer;  /* FN_KEY 对应的层，KEYHID_NO_FN 表示不是 Fn 键 */
 } keyhid_key_t;
 
-static keyhid_key_t s_kbd[KBD_KEY_MAX];
-static bool s_dirty_kbd;
-static uint32_t s_usb_gen;
+typedef struct {
+    keyhid_key_t kbd[KBD_KEY_MAX];
+    bool dirty_kbd;
+    bool dirty_csm;
+    bool dirty_sys;
+    uint32_t usb_gen;
+} keyhid_t;
+
+static keyhid_t keyhid;
 
 /* KC_FN1..KC_FN7（0xF1..0xF7）与上位机下发的 1..7 都表示层号。 */
 static inline uint8_t _fn_layer(uint16_t co)
@@ -43,7 +49,7 @@ static inline uint8_t _fn_layer(uint16_t co)
 static inline bool _code_held(uint8_t except, uint32_t code)
 {
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        if ((ki != except) && (s_kbd[ki].out == code)) {
+        if ((ki != except) && (keyhid.kbd[ki].out == code)) {
             return true;
         }
     }
@@ -52,23 +58,28 @@ static inline bool _code_held(uint8_t except, uint32_t code)
 
 static inline uint8_t _active_layer(void)
 {
+    keyhid_t *p_hid = &keyhid;
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        if (s_kbd[ki].fn_layer != KEYHID_NO_FN) {
-            return s_kbd[ki].fn_layer;
+        if (p_hid->kbd[ki].fn_layer != KEYHID_NO_FN) {
+            return p_hid->kbd[ki].fn_layer;
         }
     }
     return keymap_get_active_layer();
 }
 
-static inline void _report_send(void)
+static inline void _report_send_id(uint8_t id)
 {
     const uint8_t *buf = NULL;
-    uint8_t id = (g_obi.fs.nkro != 0U) ? KRPT_ID_NKRO : KRPT_ID_6KRO;
     uint16_t len = keyrpt_get_raw(id, &buf);
 
     if ((buf != NULL) && (len != 0U)) {
         (void)hal_kbd_send(buf, len, KEYHID_TX_TIMEOUT_MS);
     }
+}
+
+static inline void _report_send(void)
+{
+    _report_send_id((g_obi.fs.nkro != 0U) ? KRPT_ID_NKRO : KRPT_ID_6KRO);
 }
 
 /* 鼠标报告经同一 IN 端点发送，失败结果交由 keymouse 决定重发。 */
@@ -100,49 +111,103 @@ static inline void _ms_zero_report_send(void)
  * 再做计数清零，避免随后的抬起沿对已清零计数递减造成下溢。 */
 static inline void _ms_state_clear(void)
 {
+    keyhid_t *p_hid = &keyhid;
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        rotkc_t kc = { .code = s_kbd[ki].out };
+        rotkc_t kc = { .code = p_hid->kbd[ki].out };
 
-        if ((s_kbd[ki].out != 0U) && (kc.ty == KCT_MS)) {
-            s_kbd[ki].out = 0U;
+        if ((p_hid->kbd[ki].out != 0U) && (kc.ty == KCT_MS)) {
+            p_hid->kbd[ki].out = 0U;
         }
     }
     keymouse_reset();
     keyrpt_ms_clr();
 }
 
-/* Fn 键在按下时记录层号，不产生 HID 上报。 */
-static inline void _fn_press(uint8_t ki, uint8_t layer)
+/* Fn 键在按下时记录层号，不产生 HID 上报。
+ * 其余 FN_* 子类型（灯效/蓝牙/2.4G/显示/快捷键）暂无固件后端。 */
+static inline void _fn_press(uint8_t ki, const rotkc_t *kc)
 {
-    rotkc_t kc = { .code = keymap_get_key(layer, ki) };
-
     /* _FN()/_FL()... 把功能类型写在 sy 位域，co 保存层号或功能号 */
-    if ((kc.ty == KCT_FN) && (kc.fn.sy == FN_KEY)) {
-        s_kbd[ki].fn_layer = _fn_layer((uint16_t)kc.fn.co);
+    if (kc->fn.sy == FN_KEY) {
+        keyhid.kbd[ki].fn_layer = _fn_layer((uint16_t)kc->fn.co);
     }
+}
+
+/* 多媒体/系统键松开：当前上报值正好是它时，改成仍按住的同类键。 */
+static inline void _csm_release(uint16_t cc)
+{
+    keyrpt_csm_del(cc);
+    keyhid_t *p_hid = &keyhid;
+    for (uint8_t i = 0U; i < KBD_KEY_MAX; i++) {
+        rotkc_t held = { .code = p_hid->kbd[i].out };
+
+        if (held.ty == KCT_CSM) {
+            keyrpt_csm_add(held.csm.co);
+            break;
+        }
+    }
+    p_hid->dirty_csm = true;
+}
+
+static inline void _sys_release(uint8_t sc)
+{
+    keyrpt_sys_del(sc);
+    keyhid_t *p_hid = &keyhid;
+    for (uint8_t i = 0U; i < KBD_KEY_MAX; i++) {
+        rotkc_t held = { .code = p_hid->kbd[i].out };
+
+        if (held.ty == KCT_SYS) {
+            keyrpt_sys_add((uint8_t)held.sys.co);
+            break;
+        }
+    }
+    p_hid->dirty_sys = true;
 }
 
 static inline void _key_press(uint8_t ki, uint8_t layer)
 {
     rotkc_t kc;
+    keyhid_t *p_hid = &keyhid;
 
-    s_kbd[ki].out = 0U;
+    p_hid->kbd[ki].out = 0U;
 
     /* 已识别为 Fn 的按键不产生 HID 上报 */
-    if (s_kbd[ki].fn_layer != KEYHID_NO_FN) {
+    if (p_hid->kbd[ki].fn_layer != KEYHID_NO_FN) {
         return;
     }
 
     kc.code = keymap_get_key(layer, ki);
 
+    /* Fn 键只切换层，不产生 HID 上报。 */
+    if (kc.ty == KCT_FN) {
+        _fn_press(ki, &kc);
+        return;
+    }
+
     /* 鼠标键码：记录按下键码后交给 keymouse 计数，不进入键盘打字路径。 */
     if (kc.ty == KCT_MS) {
-        s_kbd[ki].out = kc.code;
+        p_hid->kbd[ki].out = kc.code;
         keymouse_press(ki, &kc);
         return;
     }
 
-    /* 普通键盘键码之外的键码不参与打字。 */
+    /* 多媒体键：报告只装一个 usage，后按下的覆盖先按下的。 */
+    if (kc.ty == KCT_CSM) {
+        p_hid->kbd[ki].out = kc.code;
+        keyrpt_csm_add(kc.csm.co);
+        p_hid->dirty_csm = true;
+        return;
+    }
+
+    /* 系统键：关机/睡眠/唤醒/菜单类 usage。 */
+    if (kc.ty == KCT_SYS) {
+        p_hid->kbd[ki].out = kc.code;
+        keyrpt_sys_add((uint8_t)kc.sys.co);
+        p_hid->dirty_sys = true;
+        return;
+    }
+
+    /* 其余键码（高级/手柄等）暂不参与上报。 */
     if (kc.ty != KCT_KBD) {
         return;
     }
@@ -150,23 +215,24 @@ static inline void _key_press(uint8_t ki, uint8_t layer)
         return;
     }
 
-    s_kbd[ki].out = kc.code;
+    p_hid->kbd[ki].out = kc.code;
     if (_code_held(ki, kc.code)) {
         return;
     }
 
     keyrpt_6kro_add(kc.kbd.co);
     keyrpt_nkro_add(kc.kbd.co);
-    s_dirty_kbd = true;
+    p_hid->dirty_kbd = true;
 }
 
 static inline void _key_release(uint8_t ki)
 {
-    uint32_t code = s_kbd[ki].out;
+    keyhid_t *p_hid = &keyhid;
+    uint32_t code = p_hid->kbd[ki].out;
     rotkc_t kc = { .code = code };
 
-    s_kbd[ki].out = 0U;
-    s_kbd[ki].fn_layer = KEYHID_NO_FN;
+    p_hid->kbd[ki].out = 0U;
+    p_hid->kbd[ki].fn_layer = KEYHID_NO_FN;
 
     if (code == 0U) {
         return;
@@ -178,35 +244,49 @@ static inline void _key_release(uint8_t ki)
         return;
     }
 
+    if (kc.ty == KCT_CSM) {
+        _csm_release(kc.csm.co);
+        return;
+    }
+
+    if (kc.ty == KCT_SYS) {
+        _sys_release((uint8_t)kc.sys.co);
+        return;
+    }
+
     if ((kc.ty != KCT_KBD) || _code_held(ki, code)) {
         return;
     }
 
     keyrpt_6kro_del(kc.kbd.co);
     keyrpt_nkro_del(kc.kbd.co);
-    s_dirty_kbd = true;
+    p_hid->dirty_kbd = true;
 }
 
 void keyhid_init(void)
 {
-    memset(s_kbd, 0, sizeof(s_kbd));
+    keyhid_t *p_hid = &keyhid;
+    memset(p_hid->kbd, 0, sizeof(p_hid->kbd));
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        s_kbd[ki].fn_layer = KEYHID_NO_FN;
+        p_hid->kbd[ki].fn_layer = KEYHID_NO_FN;
     }
-    s_dirty_kbd = false;
+    p_hid->dirty_kbd = false;
+    p_hid->dirty_csm = false;
+    p_hid->dirty_sys = false;
 
     keymouse_init();
-    s_usb_gen = hal_kbd_usb_generation();
+    p_hid->usb_gen = hal_kbd_usb_generation();
 }
 
 void keyhid_process(void)
 {
     uint8_t layer;
     uint32_t usb_gen;
+    keyhid_t *p_hid = &keyhid;
 
     usb_gen = hal_kbd_usb_generation();
-    if (usb_gen != s_usb_gen) {
-        s_usb_gen = usb_gen;
+    if (usb_gen != p_hid->usb_gen) {
+        p_hid->usb_gen = usb_gen;
         _ms_state_clear();
         _ms_zero_report_send();
     }
@@ -223,9 +303,19 @@ void keyhid_process(void)
     }
 
     /* 键盘报告先行，保证打字延迟不受鼠标周期上报影响。 */
-    if (s_dirty_kbd) {
-        s_dirty_kbd = false;
+    if (p_hid->dirty_kbd) {
+        p_hid->dirty_kbd = false;
         _report_send();
+    }
+
+    if (p_hid->dirty_csm) {
+        p_hid->dirty_csm = false;
+        _report_send_id(KRPT_ID_CSM);
+    }
+
+    if (p_hid->dirty_sys) {
+        p_hid->dirty_sys = false;
+        _report_send_id(KRPT_ID_SYS);
     }
 
     if (keymouse_process()) {
@@ -235,7 +325,8 @@ void keyhid_process(void)
 
 void keyhid_suspend(void)
 {
-    bool ms_active = keymouse_active();
+    bool active = keymouse_active();
+    keyhid_t *p_hid = &keyhid;
 
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         _key_release(ki);
@@ -244,13 +335,23 @@ void keyhid_suspend(void)
     keymouse_reset();
     keyrpt_ms_clr();
 
-    if (s_dirty_kbd) {
-        s_dirty_kbd = false;
+    if (p_hid->dirty_kbd) {
+        p_hid->dirty_kbd = false;
         _report_send();
     }
 
+    if (p_hid->dirty_csm) {
+        p_hid->dirty_csm = false;
+        _report_send_id(KRPT_ID_CSM);
+    }
+
+    if (p_hid->dirty_sys) {
+        p_hid->dirty_sys = false;
+        _report_send_id(KRPT_ID_SYS);
+    }
+
     /* 校准挂起期间本函数每帧被调用，仅首次（存在鼠标状态时）补发全零报告。 */
-    if (ms_active) {
+    if (active) {
         _ms_zero_report_send();
     }
 }

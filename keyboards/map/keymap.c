@@ -126,7 +126,7 @@ rotsta_t keymap_set_key(uint8_t layer, uint8_t key, uint32_t code)
             printf(TAG "MS - sy: %d, co: 0x%04x\r\n", pkc->sy, (unsigned)pkc->co);
             break;
         case KCT_GP:
-            printf(TAG "GP - sy: %d, co: 0x%04x\r\n", pkc->sy, (unsigned)pkc->co);
+            printf(TAG "GP - md: %d, sy: %d, co: 0x%04x\r\n", pkc->gp.md, pkc->sy, (unsigned)pkc->co);
             break;
         case KCT_FN:
             printf(TAG "FN - sy: %d, fy: %d, co: 0x%04x\r\n", pkc->sy, pkc->fy, (unsigned)pkc->co);

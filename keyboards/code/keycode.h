@@ -205,14 +205,54 @@ typedef enum {
  * @brief:  GenericDesktopPage(0x01), Usage: SystemControl, 0x80...
  */
 typedef enum {
-    SC_POWER_DOWN   = 0x81u,    // 关机 
-    SC_SLEEP        = 0x82u,    // 睡眠 
-    SC_WAKE_UP      = 0x83u,    // 唤醒 
-    SC_CONTEXT_MENU = 0x84u,    // 上下文菜单（右键菜单） 
-    SC_MAIN_MENU    = 0x85u,    // 主菜单 
-    SC_APP_MENU     = 0x86u,    // 应用菜单 
-    SC_MENU_HELP    = 0x87u,    // 菜单：帮助 
-    SC_MENU_EXIT    = 0x88u     // 菜单：退出 
+    SC_POWER_DOWN       = 0x81u,    // 关机
+    SC_SLEEP            = 0x82u,    // 睡眠
+    SC_WAKE_UP          = 0x83u,    // 唤醒
+    SC_CONTEXT_MENU     = 0x84u,    // 上下文菜单（右键菜单）
+    SC_MAIN_MENU        = 0x85u,    // 主菜单
+    SC_APP_MENU         = 0x86u,    // 应用菜单
+    SC_MENU_HELP        = 0x87u,    // 菜单：帮助
+    SC_MENU_EXIT        = 0x88u,    // 菜单：退出
+    SC_MENU_SELECT      = 0x89u,    // 菜单：选择
+    SC_MENU_RIGHT       = 0x8Au,    // 菜单：右
+    SC_MENU_LEFT        = 0x8Bu,    // 菜单：左
+    SC_MENU_UP          = 0x8Cu,    // 菜单：上
+    SC_MENU_DOWN        = 0x8Du,    // 菜单：下
+    SC_COLD_RESTART     = 0x8Eu,    // 冷重启
+    SC_WARM_RESTART     = 0x8Fu,    // 热重启
+    SC_DPAD_UP          = 0x90u,    // 方向键上
+    SC_DPAD_DOWN        = 0x91u,    // 方向键下
+    SC_DPAD_RIGHT       = 0x92u,    // 方向键右
+    SC_DPAD_LEFT        = 0x93u,    // 方向键左
+    SC_INDEX_TRIGGER    = 0x94u,    // 食指扳机
+    SC_PALM_TRIGGER     = 0x95u,    // 掌托扳机
+    SC_THUMBSTICK       = 0x96u,    // 摇杆按下
+    SC_FUNCTION_SHIFT   = 0x97u,    // 功能切换
+    SC_FUNCTION_SHIFT_LOCK = 0x98u, // 功能切换锁定
+    SC_FUNCTION_SHIFT_LOCK_IND = 0x99u, // 功能切换锁指示灯
+    SC_DISMISS_NOTIFICATION = 0x9Au,    // 关闭通知
+    SC_DO_NOT_DISTURB   = 0x9Bu,    // 勿扰模式
+    SC_DOCK             = 0xA0u,    // 系统停靠
+    SC_UNDOCK           = 0xA1u,    // 系统脱离停靠
+    SC_SETUP            = 0xA2u,    // 进入系统设置（BIOS）
+    SC_BREAK            = 0xA3u,    // 系统中断
+    SC_DEBUGGER_BREAK   = 0xA4u,    // 系统调试中断
+    SC_APP_BREAK        = 0xA5u,    // 应用中断
+    SC_APP_DEBUGGER_BREAK = 0xA6u,  // 应用调试中断
+    SC_SPEAKER_MUTE     = 0xA7u,    // 系统扬声器静音
+    SC_HIBERNATE        = 0xA8u,    // 系统休眠
+    SC_MICROPHONE_MUTE  = 0xA9u,    // 系统麦克风静音
+    SC_ACCESSIBILITY_BINDING = 0xAAu, // 辅助功能绑定
+    SC_DISPLAY_INVERT   = 0xB0u,    // 显示反色
+    SC_DISPLAY_INTERNAL = 0xB1u,    // 仅内置显示
+    SC_DISPLAY_EXTERNAL = 0xB2u,    // 仅外接显示
+    SC_DISPLAY_BOTH     = 0xB3u,    // 内外屏同时显示（复制）
+    SC_DISPLAY_DUAL     = 0xB4u,    // 内外屏独立显示（扩展）
+    SC_DISPLAY_TOGGLE_INT_EXT = 0xB5u, // 切换内外屏
+    SC_DISPLAY_SWAP_PRIMARY   = 0xB6u, // 交换主副屏
+    SC_DISPLAY_LCD_AUTOSCALE  = 0xB7u, // 切换 LCD 自动缩放
+    SC_DISPLAY_ROTATION_LOCK_BUTTON = 0xC9u, // 屏幕旋转锁定按钮
+    SC_DISPLAY_ROTATION_LOCK_SLIDER = 0xCAu  // 屏幕旋转锁定滑块
 } usage_sc_ty;
 
 /**
@@ -521,6 +561,14 @@ enum {
     KC_MOD_RGUI   = (1u << 7),
 };
 
+// ranges of key code types
+enum {
+    KCT_MRG = 5, // How many bits does it occupy?
+    KCS_MRG = 5,
+    KCF_MRG = 5,
+    GPM_MRG = 3, // How many bits does the gamepad mode occupy?
+};
+
 // key code type
 enum { 
     KCT_KBD = 0x00, 
@@ -532,12 +580,19 @@ enum {
     KCT_FN, 
     KCT_MAX 
 };
+_Static_assert((KCT_MAX-1) <= (0x01 << KCT_MRG), "KCT_MAX must be 'KCT_MRG' bits!");
 
 // advanced type
 enum {
-    ADV_ = 0x00, 
+    ADV_MT = 0x00, 
+    ADV_TGL,
+    ADV_MPT,
+    ADV_SOCD,
+    ADV_RS,
+    ADV_DKS,
     ADV_MAX,
 };
+_Static_assert((ADV_MAX-1) <= (0x01 << KCS_MRG), "ADV_MAX must be 'KCS_MRG' bits!");
 
 // mouse type
 enum {
@@ -550,12 +605,7 @@ enum {
     MS_WN,
     MS_MAX,
 };
-
-// Gamepad type
-enum {
-    GP_ = 0x00, 
-    GP_MAX,
-};
+_Static_assert((MS_MAX-1) <= (0x01 << KCS_MRG), "MS_MAX must be 'KCS_MRG' bits!");
 
 // function customization type
 enum { 
@@ -567,24 +617,58 @@ enum {
     FN_SHCT, 
     FN_MAX 
 };
+_Static_assert((FN_MAX-1) <= (0x01 << KCS_MRG), "FN_MAX must be 'KCS_MRG' bits!");
+
+// Gamepad mode
+enum {
+    GP_CLASSIC = 0x00, // Classic Gamepad
+    GP_XBOX,
+    GP_MODE_MAX,
+};
+_Static_assert((GP_MODE_MAX-1) <= (0x01 << GPM_MRG), "GP_MODE_MAX must be 'GPM_MRG' bits!");
+
+// Xbox Gamepad type
+enum {
+    GP_XBOX_LS = 0x00, //  left stick
+    GP_XBOX_RS, //  right stick
+    GP_XBOX_SYS = 0x00, // system key
+    GP_XBOX_SHOULDER, // shoulder buttons
+    GP_XBOX_FUNC, // function key, A/B/X/Y
+    GP_XBOX_CROSS, // cross direction key
+    GP_XBOX_MAX,
+};
+_Static_assert((GP_XBOX_MAX-1) <= (0x01 << KCS_MRG), "GP_XBOX_MAX must be 'KCS_MRG' bits!");
+
+// Classic Gamepad type
+enum {
+    GP_CLS_LS = 0x00, //  left stick
+    GP_CLS_RS, //  right stick
+    GP_CLS_SYS, // system key
+    GP_CLS_SHOULDER, // shoulder buttons
+    GP_CLS_FUNC, // function key, △/◯/□/╳
+    GP_CLS_CROSS, // cross direction key
+    GP_CLS_EXPAND, // expansion key
+    GP_CLS_MAX,
+};
+_Static_assert((GP_CLS_MAX-1) <= (0x01 << KCS_MRG), "GP_CLS_MAX must be 'KCS_MRG' bits!");
 
 // key code
 typedef union {
     uint32_t code;
     struct __attribute__((packed)) {
         uint32_t lk: 1; // Lock
-        uint32_t ty: 5; // Easy to search/query
-        uint32_t sy: 5; // Only some types are supported
-        uint32_t fy: 5; // Only function customization is supported
+        uint32_t ty: KCT_MRG; // Easy to search/query
+        uint32_t sy: KCS_MRG; // Only some types are supported
+        uint32_t fy: KCF_MRG; // Only function customization is supported
         uint32_t co: 16;
     };
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 10; uint32_t co: 16; } csm; // Consumer
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 13; uint32_t co: 8;  } adv; // Advanced
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } ms;  // Mouse
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t rv: 5;  uint32_t co: 16; } gp;  // Gamepad
-    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t sy: 5;  uint32_t fy: 5;  uint32_t co: 16; } fn;  // Function customization
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t rv: 18; uint32_t co: 8;  } sys; // System
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t rv: 10; uint32_t co: 16; } csm; // Consumer
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t sy: KCS_MRG; uint32_t rv: 13; uint32_t co: 8;  } adv; // Advanced
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t sy: KCS_MRG; uint32_t rv: 5;  uint32_t co: 16; } ms;  // Mouse
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t sy: KCS_MRG; uint32_t fy: KCF_MRG; uint32_t co: 16; } fn;  // Function customization
+    struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: KCT_MRG; uint32_t sy: KCS_MRG; uint32_t md: GPM_MRG; uint32_t rv: 2; uint32_t co: 16; } gp;  // Gamepad
 } __attribute__((aligned(4))) rotkc_t;
 _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 
@@ -607,10 +691,9 @@ _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 #define _MP(sy, c)      (((uint32_t)(c) << 16) | (_M(sy))) /* Mouse with 16-bit parameter */
 #define _KC_VALID(pkc)  (((pkc->ty >= KCT_MAX) || \
                         ((pkc->ty == KCT_ADV)  && (pkc->sy >= ADV_MAX)) || \
-                        ((pkc->ty == KCT_MS)   && ((pkc->sy >= MS_MAX) || \
-                                                  ((pkc->sy == MS_BTN) && ((pkc->co == 0U) || ((pkc->co & ~0xFFU) != 0U))))) || \
-                        ((pkc->ty == KCT_GP)   && (pkc->sy >= GP_MAX))  || \
-                        ((pkc->ty == KCT_FN)   && (pkc->sy >= FN_MAX)/* && (pkc->fy >= 0xff) */)) ? false : true)
+                        ((pkc->ty == KCT_MS)   && ((pkc->sy >= MS_MAX) || ((pkc->sy == MS_BTN) && ((pkc->co == 0U) || ((pkc->co & ~0xFFU) != 0U))))) || \
+                        ((pkc->ty == KCT_GP)   && (pkc->gp.md >= GP_MODE_MAX))  || \
+                        ((pkc->ty == KCT_FN)   && (pkc->sy >= FN_MAX) /*&& (pkc->fy >= 0xff)*/ )) ? false : true)
 
 #ifdef __cplusplus
 }

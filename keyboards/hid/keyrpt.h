@@ -59,9 +59,13 @@ typedef struct {
     uint16_t usage;
 } __attribute__((packed)) keyrpt_csm_t;
 
+/* System Control 按 HUT 1.7 的 usage 区间拆成 4 个数组字段，每个字段 1 字节：
+ *   [0] 0x81..0x9B  [1] 0xA0..0xAA  [2] 0xB0..0xB7  [3] 0xC9..0xCA */
+#define KEYRPT_SYS_FIELD_NUM    (4U)
+
 typedef struct {
     uint8_t id;
-    uint8_t action;
+    uint8_t usage[KEYRPT_SYS_FIELD_NUM];
 } __attribute__((packed)) keyrpt_sys_t;
 
 typedef struct {
