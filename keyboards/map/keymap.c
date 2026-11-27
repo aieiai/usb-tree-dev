@@ -40,7 +40,7 @@ static bool _keymap_codes_valid(const obm_t *p_obm)
         for (uint32_t layer = 0U; layer < KBD_MAP_MAX; layer++) {
             for (uint32_t key = 0U; key < KBD_KEY_MAX; key++) {
                 rotkc_t *pkc = (rotkc_t *)&p_obm->keymap[sys][layer][key];
-                if (pkc->ty >= (uint32_t)KCT_MAX) {
+                if (!_KC_VALID(pkc)) {
                     return false;
                 }
             }
@@ -106,6 +106,12 @@ uint32_t keymap_get_key(uint8_t layer, uint8_t key)
 rotsta_t keymap_set_key(uint8_t layer, uint8_t key, uint32_t code)
 {
     obm_t *p_obm = &g_obm;
+    rotkc_t *pkc = (rotkc_t *)code;
+
+    if (!_KC_VALID(pkc)) {
+        return rotsta_invalid_argument;
+    }
+
     p_obm->keymap[p_obm->sys_cur][layer][key] = code;
     return rotsta_success;
 }

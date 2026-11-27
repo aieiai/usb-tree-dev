@@ -532,6 +532,35 @@ enum {
     KCT_FN, 
     KCT_MAX 
 };
+
+// advanced type
+enum {
+    ADV_ = 0x00, 
+    ADV_MAX,
+};
+
+// mouse type
+enum {
+    MS_BL = 0x00, 
+    MS_BR,
+    MS_BM,
+    MS_BP,
+    MS_BB,
+    MS_XP,
+    MS_XN,
+    MS_YP,
+    MS_YN,
+    MS_WP,
+    MS_WN,
+    MS_MAX,
+};
+
+// Gamepad type
+enum {
+    GP_ = 0x00, 
+    GP_MAX,
+};
+
 // function customization type
 enum { 
     FN_KEY = 0x00, 
@@ -543,14 +572,15 @@ enum {
     FN_MAX 
 };
 
-
 // key code
 typedef union {
     uint32_t code;
     struct __attribute__((packed)) {
         uint32_t lk: 1; // Lock
         uint32_t ty: 5; // Easy to search/query
-        uint32_t rv: 26;
+        uint32_t sy: 5; // Only some types are supported
+        uint32_t fy: 5; // Only function customization is supported
+        uint32_t co: 16;
     };
     struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } kbd; // Keyboard
     struct __attribute__((packed)) { uint32_t lk: 1; uint32_t ty: 5; uint32_t rv: 18; uint32_t co: 8;  } sys; // System
@@ -563,13 +593,13 @@ typedef union {
 _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 
 
-#define _K(c)       (((uint32_t)(c) << 24) | ((uint32_t)KCT_KBD << 1))  /* Keyboard */
-#define _S(c)       (((uint32_t)(c) << 24) | ((uint32_t)KCT_SYS << 1))  /* System */
-#define _C(c)       (((uint32_t)(c) << 16) | ((uint32_t)KCT_CSM << 1))  /* Consumer */
-#define _A(c)       (((uint32_t)(c) << 24) | ((uint32_t)KCT_ADV << 1))  /* Advanced */
-#define _M(c)       (((uint32_t)(c) << 16) | ((uint32_t)KCT_MS  << 1))  /* Mouse */
-#define _G(c)       (((uint32_t)(c) << 16) | ((uint32_t)KCT_GP  << 1))  /* Gamepad */
-#define _L(t, c)    (((uint32_t)(c) << 24) | ((uint32_t)(t) << 1) | 1u) /* lock */
+#define _K(c)       (((uint32_t)(c)  << 24) | ((uint32_t)KCT_KBD << 1))  /* Keyboard */
+#define _S(c)       (((uint32_t)(c)  << 24) | ((uint32_t)KCT_SYS << 1))  /* System */
+#define _C(c)       (((uint32_t)(c)  << 16) | ((uint32_t)KCT_CSM << 1))  /* Consumer */
+#define _A(c)       (((uint32_t)(c)  << 24) | ((uint32_t)KCT_ADV << 1))  /* Advanced */
+#define _M(sy)      (((uint32_t)(sy) << 6)  | ((uint32_t)KCT_MS  << 1))  /* Mouse */
+#define _G(c)       (((uint32_t)(c)  << 16) | ((uint32_t)KCT_GP  << 1))  /* Gamepad */
+#define _L(t, c)    (((uint32_t)(c)  << 24) | ((uint32_t)(t) << 1) | 1u) /* lock */
 #define ___         (_K(KC_UNDEFINED))                                  /* Keyboard Unvarnished transmission */
 
 #define _FN(c)      (((uint32_t)(c) << 16) | ((uint32_t)FN_KEY   << 6) | ((uint32_t)KCT_FN << 1)) /* fn Key */
@@ -578,8 +608,13 @@ _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
 #define _FR(c)      (((uint32_t)(c) << 16) | ((uint32_t)FN_RADIO << 6) | ((uint32_t)KCT_FN << 1)) /* fn Radio */
 #define _FD(c)      (((uint32_t)(c) << 16) | ((uint32_t)FN_DISP  << 6) | ((uint32_t)KCT_FN << 1)) /* fn Display */
 #define _FS(c)      (((uint32_t)(c) << 16) | ((uint32_t)FN_SHCT  << 6) | ((uint32_t)KCT_FN << 1)) /* fn Shortcut */
+#define _MP(sy, c)  (((uint32_t)(c) << 16) | (_M(sy))) /* Mouse with 16-bit parameter */
 
-
+#define _KC_VALID(pkc)  (((pkc->ty >= KCT_MAX) || \
+                        ((pkc->ty == KCT_ADV)  && (pkc->sy >= ADV_MAX)) || \
+                        ((pkc->ty == KCT_MS)   && (pkc->sy >= MS_MAX))  || \
+                        ((pkc->ty == KCT_GP)   && (pkc->sy >= GP_MAX))  || \
+                        ((pkc->ty == KCT_FN)   && (pkc->sy >= FN_MAX)/* && (pkc->fy >= 0xff) */)) ? false : true)
 
 #ifdef __cplusplus
 }

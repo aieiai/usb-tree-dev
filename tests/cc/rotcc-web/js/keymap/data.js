@@ -97,6 +97,13 @@ const KC_SYS_NAMES = {
   0x85: 'MainMenu', 0x86: 'AppMenu', 0x87: 'Help', 0x88: 'Exit',
 };
 
+/* 鼠标功能类型（sy 位域），与 keycode.h 的 MS_* 枚举顺序一致。 */
+const KC_MS_NAMES = {
+  0x00: '左键', 0x01: '右键', 0x02: '中键', 0x03: '前进', 0x04: '后退',
+  0x05: '右移', 0x06: '左移', 0x07: '下移', 0x08: '上移',
+  0x09: '上滚', 0x0a: '下滚',
+};
+
 function kcDescribe(code) {
   const type = (code >>> 1) & 0x1f;
   const usage = (code >>> 24) & 0xff;
@@ -109,8 +116,10 @@ function kcDescribe(code) {
       return `CSM 0x${((code >>> 16) & 0xffff).toString(16).padStart(4, '0')}`;
     case 3:
       return `ADV 0x${((code >>> 16) & 0xffff).toString(16).padStart(4, '0')}`;
-    case 4:
-      return `MS 0x${((code >>> 16) & 0xffff).toString(16).padStart(4, '0')}`;
+    case 4: {
+      const sy = (code >>> 6) & 0x1f;
+      return KC_MS_NAMES[sy] || `MS 0x${sy.toString(16).padStart(2, '0')}`;
+    }
     case 5:
       return `GP 0x${((code >>> 16) & 0xffff).toString(16).padStart(4, '0')}`;
     case 6: {
@@ -127,7 +136,7 @@ const KC_BUILDERS = {
   KBD: usage => ((usage << 24) | (0 << 1)) >>> 0,
   SYS: usage => ((usage << 24) | (1 << 1)) >>> 0,
   CSM: usage => ((usage << 16) | (2 << 1)) >>> 0,
-  MS: usage => ((usage << 16) | (4 << 1)) >>> 0,
+  MS: sy => ((sy << 6) | (4 << 1)) >>> 0,
   FN_KEY: usage => ((usage << 16) | (0 << 6) | (6 << 1)) >>> 0,
   FN_LIGHT: usage => ((usage << 16) | (1 << 6) | (6 << 1)) >>> 0,
   FN_BT: usage => ((usage << 16) | (2 << 6) | (6 << 1)) >>> 0,
@@ -227,9 +236,20 @@ const KC_PICKER = [
         ['F18', 0x6d], ['F19', 0x6e], ['F20', 0x6f], ['F21', 0x70], ['F22', 0x71],
         ['F23', 0x72], ['F24', 0x73],
       ]],
-      ['鼠标', 'MS', [
-        ['MouseL', 0x01], ['MouseR', 0x02], ['MouseM', 0x04],
-        ['Mouse4', 0x08], ['Mouse5', 0x10],
+    ],
+  },
+  {
+    id: 'mouse',
+    name: '鼠标',
+    groups: [
+      ['按键', 'MS', [
+        ['左键', 0x00], ['右键', 0x01], ['中键', 0x02], ['前进', 0x03], ['后退', 0x04],
+      ]],
+      ['移动', 'MS', [
+        ['右移', 0x05], ['左移', 0x06], ['下移', 0x07], ['上移', 0x08],
+      ]],
+      ['滚轮', 'MS', [
+        ['上滚', 0x09], ['下滚', 0x0a],
       ]],
     ],
   },
