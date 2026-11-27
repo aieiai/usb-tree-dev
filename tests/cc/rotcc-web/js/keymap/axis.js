@@ -176,20 +176,25 @@ async function readAxisTypes() {
   const indices = [...axisSelected].sort((a, b) => a - b);
   const start = indices[0];
   const end = indices[indices.length - 1];
-  const count = end - start + 1;
 
   kcBusy = true;
   refreshControls();
   setAxisState('读取轴体...');
   try {
     await ccCall(target, async client => {
-      const payload = await client.readPayload(CC.CMD_AXIS, CC.AXIS_GET, count * 4, {
-        payload: Uint8Array.of(start & 0xff, end & 0xff, 0, 0),
-        label: `读取轴体 K${start}-${end}`,
-        timeoutMs: 3000
-      });
-      for (let i = 0; i < count; i++) {
-        axisValues.set(start + i, readLe32(payload, i * 4));
+      const entrySize = 4;
+      const step = ccMaxEntries(client.packetSize, entrySize);
+      for (let first = start; first <= end; first += step) {
+        const last = Math.min(first + step - 1, end);
+        const count = last - first + 1;
+        const payload = await client.readPayload(CC.CMD_AXIS, CC.AXIS_GET, count * entrySize, {
+          payload: Uint8Array.of(first & 0xff, last & 0xff, 0, 0),
+          label: `读取轴体 K${first}-${last}`,
+          timeoutMs: 3000
+        });
+        for (let i = 0; i < count; i++) {
+          axisValues.set(first + i, readLe32(payload, i * entrySize));
+        }
       }
     });
 

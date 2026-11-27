@@ -135,8 +135,8 @@ rotsta_t rotcc_proto_init(void);
 rotsta_t rotcc_proto_reply(const rotcc_msg_t *msg, const void *payload, uint16_t payload_len);
 // Sends an unsolicited notification with reserve 0. Thread context only, single producer.
 rotsta_t rotcc_proto_notify(uint8_t cmd, uint8_t subcmd, const void *payload, uint16_t payload_len);
-// Largest payload one notification frame can carry on the current CC endpoint.
-uint16_t rotcc_proto_notify_payload_max(void);
+// Largest Rot-CC payload one frame can carry on the current CC endpoint.
+uint16_t rotcc_proto_payload_max(void);
 rotsta_t rotcc_proto_register_cmd(uint8_t cmd, uint8_t subcmd, rotcc_cmd_handler_t handler);
 rotsta_t rotcc_proto_unregister_cmd(uint8_t cmd, uint8_t subcmd);
 

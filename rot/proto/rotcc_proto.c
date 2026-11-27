@@ -59,8 +59,8 @@ static uint32_t s_received_size;
 static bool s_initialized;
 
 static uint8_t s_tx_payload[ROTGEN_MAX_PAYLOAD_SIZE] __attribute__((aligned(4)));
-/* One entry per key in the requested range; the tick entry is the largest. */
-static uint8_t s_key_payload[ROTCC_KC_TICK_LEN * KBD_KEY_MAX] __attribute__((aligned(4)));
+/* One entry per key in the requested range; ranges are limited to one frame. */
+static uint8_t s_key_payload[ROTGEN_MAX_PAYLOAD_SIZE - ROTCC_MSG_HEADER_SIZE] __attribute__((aligned(4)));
 
 _Static_assert(sizeof(s_key_payload) <= ROTGEN_MAX_PAYLOAD_SIZE, "per-key reply exceeds one frame");
 
@@ -92,7 +92,7 @@ rotsta_t rotcc_proto_reply(const rotcc_msg_t *msg, const void *payload, uint16_t
  */
 static uint8_t s_notify_payload[ROTGEN_MAX_PAYLOAD_SIZE] __attribute__((aligned(4)));
 
-uint16_t rotcc_proto_notify_payload_max(void)
+uint16_t rotcc_proto_payload_max(void)
 {
     uint32_t overhead = (uint32_t)ROTGEN_HEADER_SIZE + (uint32_t)ROTCC_MSG_HEADER_SIZE;
 
@@ -106,7 +106,7 @@ rotsta_t rotcc_proto_notify(uint8_t cmd, uint8_t subcmd, const void *payload, ui
 {
     uint16_t total = (uint16_t)(ROTCC_MSG_HEADER_SIZE + payload_len);
 
-    if ((payload_len > rotcc_proto_notify_payload_max()) || (total > sizeof(s_notify_payload))) {
+    if ((payload_len > rotcc_proto_payload_max()) || (total > sizeof(s_notify_payload))) {
         return rotsta_invalid_argument;
     }
     if ((payload == NULL) && (payload_len != 0U)) {
@@ -446,7 +446,7 @@ static void _handle_upgrade_data(const rotcc_msg_t *msg)
 }
 
 /* Query payload is {start, end, rsv, rsv}; every key in the range gets its own reply entry. */
-static rotsta_t _key_query(const rotcc_msg_t *msg, uint8_t *start, uint8_t *end, uint32_t *count)
+static rotsta_t _key_query(const rotcc_msg_t *msg, uint16_t entry_len, uint8_t *start, uint8_t *end, uint32_t *count)
 {
     if (msg->payload_len != ROTCC_KC_QUERY_LEN) {
         return rotsta_invalid_argument;
@@ -459,6 +459,10 @@ static rotsta_t _key_query(const rotcc_msg_t *msg, uint8_t *start, uint8_t *end,
     }
 
     *count = (uint32_t)(*end - *start) + 1U;
+    /* A reply must fit in one CC frame; the host splits larger ranges itself. */
+    if ((*count * (uint32_t)entry_len) > rotcc_proto_payload_max()) {
+        return rotsta_invalid_argument;
+    }
     return rotsta_success;
 }
 
@@ -487,7 +491,8 @@ static void _handle_kc_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if ((layer >= KBD_MAP_MAX) || (_key_query(msg, &start, &end, &count) != rotsta_success)) {
+    if ((layer >= KBD_MAP_MAX) ||
+        (_key_query(msg, ROTCC_KC_CODE_LEN, &start, &end, &count) != rotsta_success)) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -575,7 +580,7 @@ static void _handle_kc_tick_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_TICK_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -625,7 +630,7 @@ static void _handle_kc_trg_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_TRG_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -671,7 +676,7 @@ static void _handle_kc_dz_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_DZ_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -717,7 +722,7 @@ static void _handle_kc_nom_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_NOM_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -777,7 +782,7 @@ static void _handle_kc_rt_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_RT_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }
@@ -862,7 +867,7 @@ static void _handle_axis_get(const rotcc_msg_t *msg)
     uint32_t count;
     uint32_t offset = 0U;
 
-    if (_key_query(msg, &start, &end, &count) != rotsta_success) {
+    if (_key_query(msg, ROTCC_KC_AXIS_LEN, &start, &end, &count) != rotsta_success) {
         _reply_status(msg, rotsta_invalid_argument);
         return;
     }

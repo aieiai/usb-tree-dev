@@ -198,11 +198,11 @@ void keyevt_updete(uint8_t ki, uint16_t val)
     p_evt->val   = val;
     p_evt->vald  = p_evt->val - p_evt->valp;
 
-    p_evt->dst = _keymag_pt2du(p_mag, p_axis, p_evt->val);
-    p_evt->md  = _keyevt_md_detect(p_evt);
-    p_evt->trg = _keyevt_trg_detect(p_evt);
+    _keymag_pt2du(p_mag, p_axis, p_evt->val);
+    _keyevt_md_detect(p_evt);
+    _keyevt_trg_detect(p_evt);
     _keyevt_act_detect(p_evt, p_attr, ki);
-    p_evt->pos = _keyevt_pos_detect(p_evt, p_axis);
+    _keyevt_pos_detect(p_evt, p_axis);
 }
 
 /**

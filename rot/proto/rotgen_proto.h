@@ -11,6 +11,7 @@ extern "C" {
 
 #include "rotsta.h"
 #include "rotutil.h"
+#include "usb_config.h"
 
 
 /*
@@ -52,7 +53,7 @@ _Static_assert((ROTGEN_PLD_IDX) == ROTGEN_HEADER_SIZE, "");
 
 /* Upper bound for one frame, the transport decides the real buffer size. */
 #ifndef ROTGEN_MAX_FRAME_SIZE
-#define ROTGEN_MAX_FRAME_SIZE       (1024U)
+#define ROTGEN_MAX_FRAME_SIZE       ROT_CC_SIZE
 #endif
 #define ROTGEN_MAX_PAYLOAD_SIZE     (ROTGEN_MAX_FRAME_SIZE - ROTGEN_HEADER_SIZE)
 

@@ -69,6 +69,12 @@
 /* Enable USB SOF */
 #define CONFIG_USBDEV_SOF_ENABLE
 
+#if defined(CONFIG_USB_HS)
+#   define ROT_CC_SIZE  (512)
+#else
+#   define ROT_CC_SIZE  (64)
+#endif
+
 /* Setup packet log for debug */
 /* #define CONFIG_USBDEV_SETUP_LOG_PRINT */
 

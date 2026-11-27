@@ -224,20 +224,27 @@ function selectKey(index) {
   readKeycode(index);
 }
 
-/* 按设备协议读取 [start, end] 范围内的键码：查询帧为 {start, end, rsv, rsv}。 */
+/* 按设备协议读取 [start, end] 范围内的键码：查询帧为 {start, end, rsv, rsv}。
+   端点较小时按单帧可容纳的条目数自动分片。 */
 async function readKeycodeRange(client, layer, start, end) {
-  const count = end - start + 1;
-  const query = Uint8Array.of(start & 0xff, end & 0xff, 0, 0);
+  const entrySize = 4;
+  const step = ccMaxEntries(client.packetSize, entrySize);
 
-  const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, count * 4, {
-    reserve: (layer & 0xff) << 8,
-    payload: query,
-    label: `读取键码 Fn${layer} K${start}-${end}`,
-    timeoutMs: 3000
-  });
+  for (let first = start; first <= end; first += step) {
+    const last = Math.min(first + step - 1, end);
+    const count = last - first + 1;
+    const query = Uint8Array.of(first & 0xff, last & 0xff, 0, 0);
 
-  for (let i = 0; i < count; i++) {
-    kcValues.set(kcCacheKey(layer, start + i), readLe32(payload, i * 4));
+    const payload = await client.readPayload(CC.CMD_KC, CC.KC_GET, count * entrySize, {
+      reserve: (layer & 0xff) << 8,
+      payload: query,
+      label: `读取键码 Fn${layer} K${first}-${last}`,
+      timeoutMs: 3000
+    });
+
+    for (let i = 0; i < count; i++) {
+      kcValues.set(kcCacheKey(layer, first + i), readLe32(payload, i * entrySize));
+    }
   }
 }
 

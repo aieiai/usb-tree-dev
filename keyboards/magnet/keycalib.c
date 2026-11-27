@@ -156,7 +156,7 @@ static uint16_t _sensor_dist_um(uint8_t ki)
  */
 static void _sensor_report(void)
 {
-    uint16_t max_payload = rotcc_proto_notify_payload_max();
+    uint16_t max_payload = rotcc_proto_payload_max();
     uint16_t offset = 0U;
 
     g_keycal_sta.rpt_last = tx_time_get();

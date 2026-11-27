@@ -113,11 +113,7 @@ typedef struct {
 
 #define INTF_CC_NUM                     (0x01) /* Interface number for Upper computer control center */
 #define INTF_CC_EPI                     (0x82) /* Endpoint number and attributes for Upper computer input control center */
-#if defined(CONFIG_USB_HS)
-    #define INTF_CC_EP_SIZE             (1024)
-#else
-    #define INTF_CC_EP_SIZE             (64)
-#endif
+#define INTF_CC_EP_SIZE                 (ROT_CC_SIZE)
 #define INTF_CC_EP_INTERVAL             (USBD_INTERVAL_MS(0.125))
 #define INTF_CC_EPO                     (0x02) /* Endpoint number and attributes for Upper computer output control center */
 
@@ -135,7 +131,7 @@ typedef struct {
 #define INTF_DT_EPI                     (0x84) /* Endpoint number and attributes for Diagnostic Tracking input */
 #define INTF_DT_EPO                     (0x04) /* Endpoint number and attributes for Diagnostic Tracking output */
 #if HAL_USB_DT_WINUSB_ENABLE
-    #define INTF_DT_EP_TYPE             (0x02)
+    #define INTF_DT_EP_TYPE             (0x02) /* Bulk endpoint */
     #define INTF_DT_EPI_INTERVAL        (USBD_INTERVAL_MS(0))    /* 批量端点不使用轮询间隔 */
     #define INTF_DT_EPO_INTERVAL        (USBD_INTERVAL_MS(0))
     #if defined(CONFIG_USB_HS)
@@ -144,7 +140,7 @@ typedef struct {
         #define INTF_DT_EP_SIZE         USB_BULK_EP_MPS_FS  /* The full speed can only be 8/16/32/64 */
     #endif
 #else
-    #define INTF_DT_EP_TYPE             (0x03)
+    #define INTF_DT_EP_TYPE             (0x03) /* Interrupt endpoint */
     #define INTF_DT_EPI_INTERVAL        (USBD_INTERVAL_MS(1))
     #define INTF_DT_EPO_INTERVAL        (USBD_INTERVAL_MS(1))
     #define INTF_DT_EP_SIZE             (64)

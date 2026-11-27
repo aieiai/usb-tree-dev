@@ -84,6 +84,11 @@ function ccMaxDataSize(packetSize) {
   return packetSize - RG.HEADER_SIZE - CC.HEADER_SIZE;
 }
 
+/* 单帧最多能返回多少个定长条目（用于按键参数等批量读取的分片）。 */
+function ccMaxEntries(packetSize, entrySize) {
+  return Math.max(1, Math.floor(ccMaxDataSize(packetSize) / entrySize));
+}
+
 /* 标准 CRC-32（poly 0xEDB88320，初值/结果取反），与设备 upgrade 模块一致。 */
 function ccCrc32(data) {
   let crc = 0xffffffff;
