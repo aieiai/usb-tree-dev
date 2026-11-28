@@ -84,7 +84,8 @@ uint16_t keymag_du2pt(uint8_t ki, float dist_um);
  *          The line is defined by the key's attribute, such as the top and bottom values.
  */
 
-#define  _keymag_pt2du(p_mag, p_axis, point)    (p_evt->dst = (p_axis->t2h_dst - (p_mag->k / ((float)point - p_mag->b))))
-
+#define  _keymag_pt2du(p_evt, p_mag, p_axis)        ((p_evt)->dst = ((p_axis)->t2h_dst - ((p_mag)->k / ((float)((p_evt)->val) - (p_mag)->b))))
+#define  _keymag_pt2du_lmt(p_evt, p_mag, p_axis)    (_keymag_pt2du(p_evt, p_mag, p_axis), \
+                                                        (p_evt)->dst = ((p_evt)->dst > (KAXIS_STROKE_MAX * 1.1f)) ? (KAXIS_STROKE_MAX * 1.1f) : (p_evt)->dst)
 
 #endif  /* KEY_MAGNET_H */

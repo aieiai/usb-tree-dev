@@ -3,13 +3,14 @@
 
 #include "keymagnet.h"
 
-#define KAXIS_BB_STROKE             ( 3500 )
-#define KAXIS_GDL_STROKE            ( 3950 )
-#define KAXIS_TTC_STROKE            ( 3350 )
+#define KAXIS_STROKE_MAX            ( 4000 )
+#define KAXIS_STROKE_BB             ( 3500 )
+#define KAXIS_STROKE_GDL            ( 3950 )
+#define KAXIS_STROKE_TTC            ( 3350 )
 
-#define KAXIS_BB_STROKE_DFT_VAL     ( 12000 )
-#define KAXIS_GDL_STROKE_DFT_VAL    ( 12000 )
-#define KAXIS_TTC_STROKE_DFT_VAL    ( 12000 )
+#define KAXIS_STROKE_BB_DFT_VAL     ( 12000 )
+#define KAXIS_STROKE_GDL_DFT_VAL    ( 12000 )
+#define KAXIS_STROKE_TTC_DFT_VAL    ( 12000 )
 
 
 typedef enum {

@@ -450,6 +450,15 @@
   }
   .sensor-freq { width: 84px; }
   #sensorChartValue { font-size: 12px; }
+  .sensor-toolbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 8px;
+  }
+  .sensor-toolbar button { padding: 4px 10px; }
+  #sensorZoomState { margin-left: auto; font-size: 12px; }
   #sensorChart {
     display: block;
     width: 100%;
@@ -457,6 +466,8 @@
     background: #0a0e12;
     border: 1px solid var(--line);
     border-radius: 10px;
+    cursor: crosshair;
+    touch-action: none;
   }
   .keycap .kc-value {
     max-width: 100%;

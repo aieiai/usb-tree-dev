@@ -86,39 +86,6 @@ static inline void keycore_find_ks(uint8_t ki, uint8_t si, uint16_t data)
 #endif
 }
 
-ATTR_RAMFUNC
-static inline void keycore_process(uint16_t *p_buf)
-{
-    keyevt_t  *p_evt;
-    keymag_t  *p_mag;
-    keyattr_t *p_attr;
-    const keyaxis_para_t *p_axis;
-
-    for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
-        p_evt  = &g_keyevt[ki];
-        p_mag  = &g_keymag[ki];
-        p_attr = &g_obkp.attr[ki];
-        p_axis = p_evt->axis_para;
-
-        p_evt->valp  = p_evt->val;
-        p_evt->valdp = p_evt->vald;
-        p_evt->val   = p_buf[ki];
-        p_evt->vald  = p_evt->val - p_evt->valp;
-
-        _keymag_pt2du(p_mag, p_axis, p_evt->val);
-        _keyevt_md_detect(p_evt);
-        _keyevt_pos_detect(p_evt, p_axis);
-        _keyevt_trg_detect(p_evt);
-        _keyevt_act_detect(p_evt, p_attr, ki);
-
-        //if (keyrt_is_en(ki)) {
-        //    keyrt_process(ki);
-        //}
-        //else {
-        //}
-    }
-}
-
 static void core_thread_entry(ULONG id)
 {
     (void)id;
@@ -170,7 +137,7 @@ static void core_thread_entry(ULONG id)
             p_evt->val   = cur_v;
             p_evt->vald  = p_evt->val - p_evt->valp;
 
-            _keymag_pt2du(p_mag, p_axis, p_evt->val);
+            _keymag_pt2du_lmt(p_evt, p_mag, p_axis);
             _keyevt_md_detect(p_evt);
             _keyevt_pos_detect(p_evt, p_axis);
             _keyevt_trg_detect(p_evt);
@@ -183,11 +150,13 @@ static void core_thread_entry(ULONG id)
             //}
         } while (++ki < KBD_KEY_MAX);
 
-        // 校准期间不可以处理发送键码
-        if (_keycal_active()) {
-            keyhid_suspend();
-            keycal_post_adc(p_buf);
-            continue;
+        if (__builtin_expect(_keycal_busy(), 0)) {
+            keycal_post_data(p_buf);
+            if (_keycal_active()) {
+                // 校准期间不可以处理发送键码
+                keyhid_suspend();
+                continue;
+            }
         }
         
         keyhid_process();

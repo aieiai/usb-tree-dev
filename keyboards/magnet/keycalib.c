@@ -21,11 +21,11 @@ static uint8_t sensor_pack_buf[ROTCC_SENSOR_DATA_LEN * KBD_KEY_MAX] __attribute_
 
 keycal_sta_t g_keycal_sta = {0};
 
-static void _calib_accumulate(const uint16_t *adc)
+static void _calib_accumulate(const uint16_t *p_buf)
 {
     keycal_sta_t *p_cal = &g_keycal_sta;
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
-        uint16_t point = adc[ki];
+        uint16_t point = p_buf[ki];
         keymag_lmt_t *p_acc = &p_cal->acc[ki];
 
         if (point > p_acc->max) {
@@ -104,37 +104,19 @@ static void _calib_task_suspend(void)
     }
 }
 
-static uint32_t _sensor_period_ticks(void)
+/* 一帧 ADC 的周期固定 125us（8kHz），按帧数分频得到上报周期。 */
+static uint16_t _sensor_div(uint16_t freq)
 {
-    uint32_t freq = g_keycal_sta.rpt_freq;
+    uint32_t div;
 
     if (freq == 0U) {
         freq = KCALIB_SENSOR_FREQ_DFT;
     }
-    return (TX_TIMER_TICKS_PER_SECOND + freq - 1U) / freq;
-}
-
-/* Wake up in time for the next report, or wait for an ADC frame only. */
-static ULONG _sensor_wait_ticks(void)
-{
-    uint32_t period;
-    uint32_t elapsed;
-
-    if (g_keycal_sta.rpt_en == 0U) {
-        return TX_WAIT_FOREVER;
+    if (freq > KCALIB_SENSOR_FRAME_HZ) {
+        freq = KCALIB_SENSOR_FRAME_HZ;
     }
-
-    period = _sensor_period_ticks();
-    elapsed = tx_time_get() - g_keycal_sta.rpt_last;
-    return (elapsed >= period) ? TX_NO_WAIT : (ULONG)(period - elapsed);
-}
-
-static bool _sensor_report_due(void)
-{
-    if (g_keycal_sta.rpt_en == 0U) {
-        return false;
-    }
-    return (uint32_t)(tx_time_get() - g_keycal_sta.rpt_last) >= _sensor_period_ticks();
+    div = (KCALIB_SENSOR_FRAME_HZ + freq - 1U) / freq;
+    return (uint16_t)((div == 0U) ? 1U : div);
 }
 
 static uint16_t _sensor_dist_um(uint8_t ki)
@@ -159,7 +141,6 @@ static void _sensor_report(void)
     uint16_t max_payload = rotcc_proto_payload_max();
     uint16_t offset = 0U;
 
-    g_keycal_sta.rpt_last = tx_time_get();
     if (max_payload < ROTCC_SENSOR_DATA_LEN) {
         return;
     }
@@ -185,9 +166,8 @@ static void _sensor_report(void)
 }
 
 /*
- * Thread is suspended when neither calibration nor sensor upload needs it. While
- * a calibration session is open the frame event drives sampling; sensor upload
- * uses the timeout to keep its own fixed period in both cases.
+ * Thread waits for one ADC frame event. Frames arrive at 8kHz; sensor upload
+ * decimates them by rpt_div so any frequency up to the frame rate is possible.
  */
 static void calib_thread_entry(ULONG id)
 {
@@ -195,30 +175,34 @@ static void calib_thread_entry(ULONG id)
 
     for (;;) {
         ULONG events = 0U;
-        UINT status = tx_event_flags_get(&calib_events, KCALIB_EVT_FRAME, TX_OR_CLEAR, &events, _sensor_wait_ticks());
+        UINT status = tx_event_flags_get(&calib_events, KCALIB_EVT_FRAME, TX_OR_CLEAR, &events, TX_WAIT_FOREVER);
 
-        if ((status == TX_SUCCESS) && _keycal_active()) {
-            keycal_sta_t *p_cal = &g_keycal_sta;
+        if (status != TX_SUCCESS) {
+            continue;
+        }
+        keycal_sta_t *p_cal = &g_keycal_sta;
+        if (_keycal_active()) {
             _calib_accumulate((const uint16_t *)p_cal->frame);
         }
-        if (_sensor_report_due()) {
+        if ((p_cal->rpt_en != 0U) && (++p_cal->rpt_cnt >= p_cal->rpt_div)) {
+            p_cal->rpt_cnt = 0U;
             _sensor_report();
         }
     }
 }
 
 
-void keycal_post_adc(uint16_t *p_buf)
+void keycal_post_data(uint16_t *p_buf)
 {
-    if (!_keycal_active()) {
-        return;
-    }
     /*
      * The core thread hands the frame over here and only signals the task; the
-     * calibration copy stays private to the consumer. Calibration only needs a
-     * steady stream, the newest frame wins.
+     * calibration copy stays private to the consumer. Calibration and sensor
+     * upload both consume frames, so signal when either one is active.
      */
     keycal_sta_t *p_cal = &g_keycal_sta;
+    if (p_cal->busy == 0U) {
+        return;
+    }
     p_cal->frame = p_buf;
     (void)tx_event_flags_set(&calib_events, KCALIB_EVT_FRAME, TX_OR);
 }
@@ -234,6 +218,7 @@ rotsta_t keycal_set_status(uint8_t sta)
             p_cal->acc[ki].min = UINT16_MAX;
         }
         (void)tx_event_flags_set(&calib_events, 0U, TX_AND);
+        p_cal->busy = 1U;
         p_cal->sta = KCAL_STA_START;
         _calib_task_resume();
         printf(TAG "start\r\n");
@@ -251,6 +236,7 @@ rotsta_t keycal_set_status(uint8_t sta)
     }
 
     p_cal->sta = sta;
+    p_cal->busy = (p_cal->rpt_en != 0U) ? 1U : 0U;
     if (sta == KCAL_STA_STOP) {
         printf(TAG "stop, samples discarded\r\n");
         state = rotsta_success;
@@ -259,7 +245,8 @@ rotsta_t keycal_set_status(uint8_t sta)
         state = _calib_commit();
         p_cal->sta = (state == rotsta_success) ? KCAL_STA_FINISH : KCAL_STA_STOP;
     }
-    if (p_cal->rpt_en == 0U) {
+    if (p_cal->busy == 0U) {
+        (void)tx_event_flags_set(&calib_events, 0U, TX_AND);
         _calib_task_suspend();
     }
     return state;
@@ -275,10 +262,11 @@ rotsta_t keycal_sensor_report_set(uint8_t en)
 
     if (en != 0U) {
         if (p_cal->rpt_en == 0U) {
-            /* Report the next period immediately, then keep a fixed cadence. */
-            p_cal->rpt_last = tx_time_get() - _sensor_period_ticks();
+            /* Report on the next ADC frame, then keep the frame cadence. */
+            p_cal->rpt_cnt = (uint16_t)(p_cal->rpt_div - 1U);
         }
         p_cal->rpt_en = 1U;
+        p_cal->busy = 1U;
         _calib_task_resume();
         printf(TAG "sensor report on, %u Hz\r\n", (unsigned)p_cal->rpt_freq);
         return rotsta_success;
@@ -288,7 +276,9 @@ rotsta_t keycal_sensor_report_set(uint8_t en)
         return rotsta_success;
     }
     p_cal->rpt_en = 0U;
-    if (!_keycal_active()) {
+    p_cal->busy = _keycal_active() ? 1U : 0U;
+    if (p_cal->busy == 0U) {
+        (void)tx_event_flags_set(&calib_events, 0U, TX_AND);
         _calib_task_suspend();
     }
     printf(TAG "sensor report off\r\n");
@@ -304,8 +294,10 @@ rotsta_t keycal_sensor_freq_set(uint16_t freq)
     }
 
     p_cal->rpt_freq = freq;
-    p_cal->rpt_last = tx_time_get() - _sensor_period_ticks();
-    printf(TAG "sensor report freq=%u Hz\r\n", (unsigned)freq);
+    p_cal->rpt_div = _sensor_div(freq);
+    p_cal->rpt_cnt = (uint16_t)(p_cal->rpt_div - 1U);
+    printf(TAG "sensor report freq=%u Hz, frame div=%u\r\n",
+           (unsigned)freq, (unsigned)p_cal->rpt_div);
     return rotsta_success;
 }
 
@@ -315,10 +307,12 @@ rotsta_t keycal_init(void)
     keycal_sta_t *p_cal = &g_keycal_sta;
     
     p_cal->sta = KCAL_STA_STOP;
+    p_cal->busy = 0U;
     p_cal->frame = NULL;
     p_cal->rpt_en = 0U;
     p_cal->rpt_freq = KCALIB_SENSOR_FREQ_DFT;
-    p_cal->rpt_last = 0U;
+    p_cal->rpt_div = _sensor_div(KCALIB_SENSOR_FREQ_DFT);
+    p_cal->rpt_cnt = 0U;
     for (uint8_t ki = 0U; ki < KBD_KEY_MAX; ki++) {
         p_cal->acc[ki].max = 0U;
         p_cal->acc[ki].min = UINT16_MAX;

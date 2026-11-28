@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 <title> USB Debug Tool </title>
-  <link rel="stylesheet" href="./css/app.css?v=1">
+  <link rel="stylesheet" href="./css/app.css?v=2">
 </head>
 <body>
 <header>
@@ -213,7 +213,7 @@
           量程；点击完成校准时保存量程并重新计算触发曲线，停止校准则放弃
           本次采样。自校准是设备上电后的自动校准开关，保存在板载信息里。
           sensor 上报开启后，设备按固定频率把所有按键sensor的数据发到上位机，
-          键盘上会实时显示行程（mm）；点击按键可查看该键最近 5 秒的 dist 曲线，
+          键盘上会实时显示行程（mm）；点击按键可查看该键最近 3 秒的 dist 曲线，
           曲线按下为蓝色、释放为粉红色，状态切换处按下打绿点、释放打红点。
         </div>
         <div class="upgrade-body">
@@ -233,7 +233,7 @@
             <button id="btnSensorRptWrite" class="secondary" disabled>写入上报</button>
             <label>频率
               <input id="numSensorFreq" class="sensor-freq" type="number"
-                     min="1" max="1000" step="1" value="50" disabled> Hz
+                     min="1" max="8000" step="1" value="50" disabled> Hz
             </label>
             <button id="btnSensorFreqWrite" class="secondary" disabled>写入频率</button>
             <span id="calibSensorState" class="muted">sensor 上报未开启</span>
@@ -245,6 +245,13 @@
           <div class="interface-head">
             <strong id="sensorChartTitle" class="grow">sensor 曲线</strong>
             <span id="sensorChartValue" class="muted">选择按键查看 dist</span>
+          </div>
+          <div class="sensor-toolbar">
+            <button id="btnSensorPause" class="secondary" disabled>暂停</button>
+            <button id="btnSensorZoomOut" class="secondary" disabled>缩小</button>
+            <button id="btnSensorZoomIn" class="secondary" disabled>放大</button>
+            <button id="btnSensorReset" class="secondary" disabled>复位</button>
+            <span id="sensorZoomState" class="muted">滚轮缩放 / 拖动平移</span>
           </div>
           <div class="sensor-chart-body">
             <canvas id="sensorChart"></canvas>
@@ -275,7 +282,7 @@
   </main>
 </div>
 
-  <script src="./js/core.js?v=1"></script>
+  <script src="./js/core.js?v=2"></script>
   <script src="./js/protocol/rotgen.js"></script>
   <script src="./js/protocol/rotcc.js?v=1"></script>
   <script src="./js/cc/client.js?v=1"></script>
@@ -283,7 +290,7 @@
   <script src="./js/cc/request.js?v=1"></script>
   <script src="./js/cc/device-info.js"></script>
   <script src="./js/cc/system.js?v=1"></script>
-  <script src="./js/cc/calib.js?v=1"></script>
+  <script src="./js/cc/calib.js?v=11"></script>
   <script src="./js/keymap/data.js?v=1"></script>
   <script src="./js/keymap/picker.js"></script>
   <script src="./js/keymap/keyboard.js?v=1"></script>
@@ -293,6 +300,6 @@
   <script src="./js/ui.js?v=1"></script>
   <script src="./js/interfaces.js?v=1"></script>
   <script src="./js/keymap/layers.js"></script>
-  <script src="./js/app.js?v=1"></script>
+  <script src="./js/app.js?v=2"></script>
 </body>
 </html>

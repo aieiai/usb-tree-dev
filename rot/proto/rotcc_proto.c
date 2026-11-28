@@ -925,7 +925,7 @@ static void _handle_calib_status_get(const rotcc_msg_t *msg)
         return;
     }
 
-    payload[0] = _keycal_get_status();
+    payload[0] = _keycal_get_state();
     payload[1] = 0U;
     (void)rotcc_proto_reply(msg, payload, sizeof(payload));
 }

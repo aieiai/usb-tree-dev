@@ -112,6 +112,17 @@ $btnAutoCalibRead.addEventListener('click', () => {
 $btnAutoCalibWrite.addEventListener('click', writeAutoCalib);
 $btnSensorRptWrite.addEventListener('click', writeSensorReport);
 $btnSensorFreqWrite.addEventListener('click', writeSensorFreq);
+$btnSensorPause.addEventListener('click', () => setSensorPaused(!sensorPaused));
+$btnSensorZoomIn.addEventListener('click', () => zoomSensorView(0.5));
+$btnSensorZoomOut.addEventListener('click', () => zoomSensorView(2));
+$btnSensorReset.addEventListener('click', resetSensorView);
+$sensorChart.addEventListener('wheel', onSensorChartWheel, { passive: false });
+$sensorChart.addEventListener('pointerdown', onSensorChartPointerDown);
+$sensorChart.addEventListener('pointermove', onSensorChartPointerMove);
+$sensorChart.addEventListener('pointerup', onSensorChartPointerUp);
+$sensorChart.addEventListener('pointercancel', onSensorChartPointerUp);
+$sensorChart.addEventListener('pointerleave', onSensorChartPointerLeave);
+$sensorChart.addEventListener('dblclick', resetSensorView);
 $btnParamSelectAll.addEventListener('click', selectAllParamKeys);
 $btnParamClear.addEventListener('click', clearParamSelection);
 $btnAxisRead.addEventListener('click', readAxisTypes);

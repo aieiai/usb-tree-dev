@@ -149,30 +149,48 @@ async function writeAutoCalib() {
 
 const SENSOR_FREQ_DEFAULT = 50;
 const SENSOR_FREQ_MIN = 1;
-const SENSOR_FREQ_MAX = 1000;
+const SENSOR_FREQ_MAX = 8000;
 const SENSOR_RENDER_MS = 100;
-const SENSOR_HISTORY_MS = 5000;
-const SENSOR_HISTORY_MAX = 2400;
+const SENSOR_HISTORY_MS = 3000;
+/* 8kHz 上报下保留完整 3s 窗口需要 24000 个采样点。 */
+const SENSOR_HISTORY_MAX = 24000;
 const SENSOR_Y_MAX_UM = 4000;
 const SENSOR_PRESSED_COLOR = '#4c9aff';
 const SENSOR_RELEASED_COLOR = '#ff7ab6';
 const SENSOR_TRANSITION_PRESS_COLOR = '#48bb78';
 const SENSOR_TRANSITION_RELEASE_COLOR = '#e53e3e';
+const SENSOR_ZOOM_MIN_MS = 10;
+const SENSOR_PAD_L = 46;
+const SENSOR_PAD_R = 12;
+const SENSOR_PAD_T = 16;
+const SENSOR_PAD_B = 20;
 
 let sensorRptEnabled = false;
 let sensorFreqHz = SENSOR_FREQ_DEFAULT;
 let sensorRenderTimer = 0;
 let sensorPacketCount = 0;
+let sensorNotifyCount = 0;
+let sensorRateCount = 0;
+let sensorRateStamp = 0;
+let sensorRateHz = 0;
 let sensorLastException = null;
 let sensorSelectedKey = null;
 let sensorHistory = [];
 let sensorChartRaf = 0;
+let sensorPaused = false;
+let sensorPausedAtMs = 0;
+let sensorViewSpanMs = SENSOR_HISTORY_MS;
+let sensorViewEndMs = 0;
+let sensorHover = null;
+let sensorChartEdges = [];
+let sensorDrag = null;
+let sensorViewCache = null;
 const sensorValues = new Map();
 
 function updateSensorState(text, className = 'muted') {
   if (text === undefined) {
     text = sensorRptEnabled
-      ? `上报 ${sensorFreqHz} Hz · 已接收 ${sensorPacketCount} 条`
+      ? `上报 ${sensorFreqHz} Hz · 实测 ${Math.round(sensorRateHz)} Hz · 已接收 ${sensorPacketCount} 条`
       : 'sensor 上报未开启';
   }
   $calibSensorState.textContent = text;
@@ -192,9 +210,10 @@ function handleCcNotification(msg) {
       const val = readLe16(msg.payload, offset + 2);
       const dist = readLe16(msg.payload, offset + 4);
       sensorValues.set(ki, { val, dist, trg });
-      if (ki === sensorSelectedKey) pushSensorSample(dist, trg);
+      if (ki === sensorSelectedKey) pushSensorSample(dist, trg, val);
     }
     sensorPacketCount += count;
+    sensorNotifyCount++;
     return;
   }
 
@@ -209,14 +228,23 @@ function handleCcNotification(msg) {
 function toggleCalibKey(index) {
   sensorSelectedKey = (sensorSelectedKey === index) ? null : index;
   sensorHistory = [];
+  sensorHover = null;
+  if (sensorSelectedKey !== null) {
+    sensorPaused = false;
+    sensorPausedAtMs = 0;
+    sensorViewSpanMs = SENSOR_HISTORY_MS;
+    sensorViewEndMs = performance.now();
+  }
   const current = (sensorSelectedKey === null)
     ? null
     : sensorValues.get(sensorSelectedKey);
   if (current) {
-    pushSensorSample(current.dist, current.trg);
+    pushSensorSample(current.dist, current.trg, current.val);
   }
   syncCalibSelection();
   updateSensorChartTitle();
+  updateSensorZoomState();
+  startSensorChart();
   drawSensorChart();
 }
 
@@ -251,8 +279,9 @@ function updateSensorChartTitle() {
     : '等待数据...';
 }
 
-function pushSensorSample(dist, trg) {
-  sensorHistory.push({ t: performance.now(), dist, trg });
+function pushSensorSample(dist, trg, val) {
+  if (sensorPaused) return;
+  sensorHistory.push({ t: performance.now(), dist, trg, val });
 }
 
 function trimSensorHistory(now) {
@@ -273,18 +302,287 @@ function drawChartMessage(ctx, width, height, text) {
   ctx.fillText(text, width / 2, height / 2);
 }
 
-function sensorChartPoint(sample, padL, padT, plotW, plotH, t0) {
+function formatSensorSpan(ms) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
+}
+
+function formatSensorOffset(ms) {
+  const abs = Math.abs(ms);
+  if (abs >= 1000) return `${(ms / 1000).toFixed(2)} s`;
+  if (abs >= 10) return `${Math.round(ms)} ms`;
+  return `${ms.toFixed(2)} ms`;
+}
+
+/* 点位提示需要看到 0.125ms 级的采样间隔。 */
+function formatSensorPointOffset(ms) {
+  return Math.abs(ms) >= 1000
+    ? `${(ms / 1000).toFixed(3)} s`
+    : `${ms.toFixed(3)} ms`;
+}
+
+function updateSensorZoomState() {
+  const ready = sensorRptEnabled && (sensorSelectedKey !== null);
+  if ($sensorZoomState) {
+    $sensorZoomState.textContent =
+      `${sensorPaused ? '已暂停' : '实时'} · 窗口 ${formatSensorSpan(sensorViewSpanMs)}` +
+      ' · 滚轮缩放 / 拖动平移';
+  }
+  $btnSensorPause.textContent = sensorPaused ? '继续' : '暂停';
+  $btnSensorPause.disabled = !ready;
+  $btnSensorZoomIn.disabled = !ready || (sensorViewSpanMs <= SENSOR_ZOOM_MIN_MS);
+  $btnSensorZoomOut.disabled = !ready || (sensorViewSpanMs >= SENSOR_HISTORY_MS);
+  $btnSensorReset.disabled = !ready;
+}
+
+function resetSensorViewState() {
+  sensorPaused = false;
+  sensorPausedAtMs = 0;
+  sensorViewSpanMs = SENSOR_HISTORY_MS;
+  sensorViewEndMs = performance.now();
+  sensorHover = null;
+  sensorDrag = null;
+  sensorViewCache = null;
+  updateSensorZoomState();
+}
+
+function setSensorPaused(paused) {
+  if (paused === sensorPaused) return;
+  sensorPaused = paused;
+  sensorHover = null;
+  if (paused) {
+    sensorPausedAtMs = sensorHistory.length
+      ? sensorHistory[sensorHistory.length - 1].t
+      : performance.now();
+    sensorViewEndMs = sensorPausedAtMs;
+  } else {
+    sensorPausedAtMs = 0;
+    sensorHistory = [];
+    sensorViewEndMs = performance.now();
+    startSensorChart();
+  }
+  updateSensorZoomState();
+  drawSensorChart();
+}
+
+function zoomSensorView(factor, anchorX) {
+  if (!sensorRptEnabled || (sensorSelectedKey === null)) return;
+  const next = Math.min(Math.max(sensorViewSpanMs * factor, SENSOR_ZOOM_MIN_MS),
+                        SENSOR_HISTORY_MS);
+  if (next === sensorViewSpanMs) return;
+  if (!sensorPaused) setSensorPaused(true);
+
+  let ratio = 1;
+  if ((anchorX !== undefined) && sensorViewCache) {
+    ratio = Math.min(Math.max((anchorX - SENSOR_PAD_L) / sensorViewCache.plotW, 0), 1);
+  }
+  const anchorT = sensorViewEndMs - sensorViewSpanMs + ratio * sensorViewSpanMs;
+  sensorViewSpanMs = next;
+  sensorViewEndMs = anchorT + (1 - ratio) * sensorViewSpanMs;
+  sensorHover = null;
+  updateSensorZoomState();
+  drawSensorChart();
+}
+
+function resetSensorView() {
+  if (!sensorRptEnabled || (sensorSelectedKey === null)) return;
+  resetSensorViewState();
+  startSensorChart();
+  drawSensorChart();
+}
+
+function sensorChartLayout() {
+  const cssW = $sensorChart.clientWidth;
+  const cssH = $sensorChart.clientHeight;
   return {
-    x: padL + ((sample.t - t0) / SENSOR_HISTORY_MS) * plotW,
-    y: padT + plotH -
-      (Math.min(Math.max(sample.dist, 0), SENSOR_Y_MAX_UM) / SENSOR_Y_MAX_UM) * plotH
+    padL: SENSOR_PAD_L,
+    padT: SENSOR_PAD_T,
+    plotW: Math.max(1, cssW - SENSOR_PAD_L - SENSOR_PAD_R),
+    plotH: Math.max(1, cssH - SENSOR_PAD_T - SENSOR_PAD_B)
   };
 }
 
-/* 选中按键后绘制最近 5 秒的 dist 曲线，纵轴固定 0~4 mm。 */
+function findSensorHover(x, y) {
+  const cache = sensorViewCache;
+  if (!cache || (sensorHistory.length === 0) || !sensorPaused) return null;
+  if ((x < cache.padL) || (x > cache.padL + cache.plotW) ||
+      (y < cache.padT) || (y > cache.padT + cache.plotH)) {
+    return null;
+  }
+
+  /* 优先吸附按下/释放切换点，保证绿点/红点也能定位查看数据。 */
+  let edgeBest = null;
+  let edgeDist = 49;
+  for (const edge of sensorChartEdges) {
+    const dx = x - edge.x;
+    const dy = y - edge.y;
+    const d = (dx * dx) + (dy * dy);
+    if (d <= edgeDist) {
+      edgeDist = d;
+      edgeBest = edge;
+    }
+  }
+  if (edgeBest) {
+    return {
+      edge: true,
+      index: edgeBest.index,
+      sample: {
+        t: edgeBest.t,
+        dist: edgeBest.dist,
+        val: edgeBest.val,
+        trg: edgeBest.trg
+      },
+      x: edgeBest.x,
+      y: edgeBest.y
+    };
+  }
+
+  const t = cache.viewStart + ((x - cache.padL) / cache.plotW) * cache.span;
+  let lo = 0;
+  let hi = sensorHistory.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sensorHistory[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  let best = lo;
+  if ((lo > 0) &&
+      (Math.abs(sensorHistory[lo - 1].t - t) < Math.abs(sensorHistory[lo].t - t))) {
+    best = lo - 1;
+  }
+  const sample = sensorHistory[best];
+  const px = cache.padL + ((sample.t - cache.viewStart) / cache.span) * cache.plotW;
+  return {
+    edge: false,
+    index: best,
+    sample,
+    x: px,
+    y: cache.padT + cache.plotH -
+      (Math.min(Math.max(sample.dist, 0), SENSOR_Y_MAX_UM) / SENSOR_Y_MAX_UM) * cache.plotH
+  };
+}
+
+function updateSensorHover(x, y) {
+  const hover = findSensorHover(x, y);
+  const same = ((hover === null) && (sensorHover === null)) ||
+    (hover && sensorHover &&
+     (hover.edge === sensorHover.edge) &&
+     (hover.index === sensorHover.index));
+  if (same) return;
+  sensorHover = hover;
+  drawSensorChart();
+}
+
+function sensorCanvasPoint(ev) {
+  const rect = $sensorChart.getBoundingClientRect();
+  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+}
+
+function onSensorChartWheel(ev) {
+  if (!sensorRptEnabled || (sensorSelectedKey === null)) return;
+  ev.preventDefault();
+  const { x } = sensorCanvasPoint(ev);
+  zoomSensorView(ev.deltaY > 0 ? 1.25 : 0.8, x);
+}
+
+function onSensorChartPointerDown(ev) {
+  if (!sensorRptEnabled || (sensorSelectedKey === null)) return;
+  if (!sensorPaused) setSensorPaused(true);
+  sensorDrag = { pointerId: ev.pointerId, x: sensorCanvasPoint(ev).x };
+  $sensorChart.setPointerCapture(ev.pointerId);
+  $sensorChart.style.cursor = 'grabbing';
+}
+
+function onSensorChartPointerMove(ev) {
+  const { x, y } = sensorCanvasPoint(ev);
+  if (sensorDrag && (ev.pointerId === sensorDrag.pointerId)) {
+    const cache = sensorViewCache;
+    if (cache) {
+      const dt = ((x - sensorDrag.x) / cache.plotW) * sensorViewSpanMs;
+      sensorViewEndMs -= dt;
+      sensorDrag.x = x;
+      sensorHover = null;
+      drawSensorChart();
+    }
+    return;
+  }
+  updateSensorHover(x, y);
+}
+
+function onSensorChartPointerUp(ev) {
+  if (!sensorDrag || (ev.pointerId !== sensorDrag.pointerId)) return;
+  sensorDrag = null;
+  try {
+    $sensorChart.releasePointerCapture(ev.pointerId);
+  } catch (error) {
+    /* 指针已释放时忽略 */
+  }
+  $sensorChart.style.cursor = '';
+}
+
+function onSensorChartPointerLeave() {
+  if (sensorDrag || !sensorHover) return;
+  sensorHover = null;
+  drawSensorChart();
+}
+
+function drawSensorHover(ctx, cache, cssW, cssH) {
+  const hover = sensorHover;
+  const sample = hover.sample;
+
+  ctx.strokeStyle = '#5a6b7b';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(hover.x, cache.padT);
+  ctx.lineTo(hover.x, cache.padT + cache.plotH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = sample.trg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
+  ctx.beginPath();
+  ctx.arc(hover.x, hover.y, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#e6fffb';
+  ctx.stroke();
+
+  const lines = [
+    `#${hover.index + 1}${hover.edge ? ' 切换点' : ''}  ${formatSensorPointOffset(sample.t - sensorViewEndMs)}`,
+    `dist ${(sample.dist / 1000).toFixed(3)} mm`,
+    `val ${sample.val}`,
+    sample.trg ? '按下' : '释放'
+  ];
+  if (hover.edge) {
+    lines[3] = sample.trg ? '按下事件' : '释放事件';
+  }
+  ctx.font = '11px Consolas, monospace';
+  let textW = 0;
+  for (const line of lines) textW = Math.max(textW, ctx.measureText(line).width);
+  const boxW = Math.ceil(textW) + 12;
+  const boxH = lines.length * 14 + 8;
+  let bx = hover.x + 8;
+  if (bx + boxW > cssW - 4) bx = hover.x - boxW - 8;
+  let by = hover.y - boxH - 8;
+  if (by < 4) by = hover.y + 8;
+  by = Math.min(Math.max(by, 4), Math.max(4, cssH - boxH - 4));
+  bx = Math.min(Math.max(bx, 4), Math.max(4, cssW - boxW - 4));
+
+  ctx.fillStyle = 'rgba(10, 16, 22, 0.94)';
+  ctx.fillRect(bx, by, boxW, boxH);
+  ctx.strokeStyle = '#2c3a47';
+  ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillStyle = i === 0 ? '#e6fffb' : '#a7b4c2';
+    ctx.fillText(lines[i], bx + 6, by + 4 + i * 14);
+  }
+}
+
+/* 选中按键后绘制可见窗口内的 dist 曲线；暂停后支持滚轮缩放、拖动平移、悬停查看点位。 */
 function drawSensorChart() {
   const canvas = $sensorChart;
   if (!canvas) return;
+  sensorChartEdges = [];
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -315,15 +613,28 @@ function drawSensorChart() {
     return;
   }
 
-  const now = performance.now();
-  trimSensorHistory(now);
-  const t0 = now - SENSOR_HISTORY_MS;
-  const padL = 46;
-  const padR = 12;
-  const padT = 16;
-  const padB = 20;
-  const plotW = Math.max(1, cssW - padL - padR);
-  const plotH = Math.max(1, cssH - padT - padB);
+  const now = sensorPaused ? (sensorPausedAtMs || performance.now()) : performance.now();
+  if (!sensorPaused) {
+    /* 窗口按墙钟匀速滚动：如果改成跟随最新采样时间，USB 到达抖动会让整条曲线
+     * 一顿一顿地跳，看起来同样像闪频。 */
+    trimSensorHistory(now);
+    sensorViewEndMs = now;
+  } else if (sensorHistory.length > 0) {
+    const firstT = sensorHistory[0].t;
+    const lastT = sensorHistory[sensorHistory.length - 1].t;
+    const minEnd = firstT + sensorViewSpanMs;
+    const maxEnd = Math.max(sensorPausedAtMs || now, lastT);
+    sensorViewEndMs = Math.min(Math.max(sensorViewEndMs, minEnd), maxEnd);
+  }
+
+  const layout = sensorChartLayout();
+  const padL = layout.padL;
+  const padT = layout.padT;
+  const plotW = layout.plotW;
+  const plotH = layout.plotH;
+  const span = sensorViewSpanMs;
+  const viewStart = sensorViewEndMs - span;
+  sensorViewCache = { padL, padT, plotW, plotH, span, viewStart };
 
   const yMax = SENSOR_Y_MAX_UM;
 
@@ -343,88 +654,255 @@ function drawSensorChart() {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  for (let s = 0; s <= 5; s++) {
-    const px = padL + (s / 5) * plotW;
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const ratio = i / tickCount;
+    const px = padL + ratio * plotW;
+    const t = viewStart + ratio * span;
     ctx.strokeStyle = '#1d2630';
     ctx.beginPath();
     ctx.moveTo(px, padT);
     ctx.lineTo(px, padT + plotH);
     ctx.stroke();
     ctx.fillStyle = '#8b98a5';
-    ctx.fillText(s === 5 ? '现在' : `-${5 - s}s`, px, padT + plotH + 5);
+    const label = (i === tickCount)
+      ? (sensorPaused ? '暂停' : '现在')
+      : formatSensorOffset(t - sensorViewEndMs);
+    ctx.fillText(label, px, padT + plotH + 5);
   }
 
   if (sensorHistory.length > 0) {
-    const transitions = [];
+    const xScale = plotW / span;
+    const yScale = plotH / SENSOR_Y_MAX_UM;
+    const clampDist = (d) => Math.min(Math.max(d, 0), SENSOR_Y_MAX_UM);
 
-    /*
-     * 相邻采样状态不同时，状态切换发生在两点之间：在时间/行程中点把线段
-     * 分成两段，前半段用旧状态颜色，后半段用新状态颜色，切换点即打点位置。
-     */
-    for (let i = 1; i < sensorHistory.length; i++) {
-      const prev = sensorHistory[i - 1];
-      const curr = sensorHistory[i];
-      const a = sensorChartPoint(prev, padL, padT, plotW, plotH, t0);
-      const b = sensorChartPoint(curr, padL, padT, plotW, plotH, t0);
+    /* 二分定位可见窗口 [startIdx, endIdx]，缩放后只处理可见采样点。 */
+    let lo = 0;
+    let hi = sensorHistory.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sensorHistory[mid].t < viewStart) lo = mid + 1;
+      else hi = mid;
+    }
+    const startIdx = Math.max(0, lo - 1);
 
-      ctx.lineWidth = 1;
-      if (prev.trg === curr.trg) {
-        ctx.strokeStyle = curr.trg
-          ? SENSOR_PRESSED_COLOR
-          : SENSOR_RELEASED_COLOR;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+    let loEnd = lo;
+    let hiEnd = sensorHistory.length;
+    while (loEnd < hiEnd) {
+      const mid = (loEnd + hiEnd) >> 1;
+      if (sensorHistory[mid].t <= sensorViewEndMs) loEnd = mid + 1;
+      else hiEnd = mid;
+    }
+    const endIdx = Math.min(sensorHistory.length - 1, Math.max(startIdx, loEnd - 1));
+    const visibleCount = endIdx - startIdx + 1;
+
+    ctx.lineWidth = 1;
+
+    if (visibleCount > plotW * 2) {
+      /*
+       * 高密度：按绝对时间桶取每桶最后一个采样。桶边界只由时间决定，与窗口
+       * 滚动位置无关，代表点不会在相邻采样间换人，因此滚动时曲线不会闪；
+       * 绘制量也从每像素几十个点降到约 2 个点。
+       */
+      const bucketMs = span / (plotW * 2);
+      const transitions = [];
+      let bucket = -1;
+      let repT = 0;
+      let repD = 0;
+      let repTrg = false;
+      let haveRep = false;
+      let prevT = sensorHistory[startIdx].t;
+      let prevD = sensorHistory[startIdx].dist;
+      let prevTrg = sensorHistory[startIdx].trg;
+      let px = 0;
+      let py = 0;
+      let pTrg = false;
+      let pathOpen = false;
+      let edgeT = 0;
+      let edgeD = 0;
+      let edgeTrg = false;
+      let edgeVal = 0;
+      let edgeIdx = 0;
+      let hasEdge = false;
+
+      const flushRep = () => {
+        if (!haveRep) {
+          return;
+        }
+        const x = padL + (repT - viewStart) * xScale;
+        const y = padT + plotH - clampDist(repD) * yScale;
+        if (!pathOpen) {
+          ctx.strokeStyle = repTrg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          pathOpen = true;
+        } else {
+          if (repTrg !== pTrg) {
+            /* 切换点本身就是代表点：先用旧颜色画到它，再从这里开始用新颜色，
+             * 避免切换点之前的线段提前变色。 */
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.strokeStyle = repTrg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        px = x;
+        py = y;
+        pTrg = repTrg;
+        haveRep = false;
+      };
+
+      for (let i = startIdx; i <= endIdx; i++) {
+        const sample = sensorHistory[i];
+        const b = Math.floor(sample.t / bucketMs);
+        if (b !== bucket) {
+          flushRep();
+          bucket = b;
+          hasEdge = false;
+        }
+
+        if (sample.trg !== prevTrg) {
+          edgeT = (prevT + sample.t) / 2;
+          edgeD = (prevD + sample.dist) / 2;
+          edgeTrg = sample.trg;
+          edgeVal = sample.val;
+          edgeIdx = i;
+          hasEdge = true;
+          transitions.push({
+            x: padL + (edgeT - viewStart) * xScale,
+            y: padT + plotH - clampDist(edgeD) * yScale,
+            t: edgeT,
+            dist: edgeD,
+            val: edgeVal,
+            trg: edgeTrg,
+            index: edgeIdx
+          });
+        }
+        prevT = sample.t;
+        prevD = sample.dist;
+        prevTrg = sample.trg;
+
+        if (hasEdge) {
+          repT = edgeT;
+          repD = edgeD;
+          repTrg = edgeTrg;
+        } else {
+          repT = sample.t;
+          repD = sample.dist;
+          repTrg = sample.trg;
+        }
+        haveRep = true;
+      }
+      flushRep();
+      if (pathOpen) {
         ctx.stroke();
-        continue;
       }
 
-      const mid = sensorChartPoint({
-        t: (prev.t + curr.t) / 2,
-        dist: (prev.dist + curr.dist) / 2
-      }, padL, padT, plotW, plotH, t0);
+      for (const dot of transitions) {
+        ctx.fillStyle = dot.trg
+          ? SENSOR_TRANSITION_PRESS_COLOR
+          : SENSOR_TRANSITION_RELEASE_COLOR;
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      sensorChartEdges = transitions;
+    } else {
+      /* 低密度：每个采样点都画，状态切换在中点分段并打点。 */
+      const edges = [];
+      let px = padL + (sensorHistory[startIdx].t - viewStart) * xScale;
+      let py = padT + plotH - clampDist(sensorHistory[startIdx].dist) * yScale;
+      let pTrg = sensorHistory[startIdx].trg;
 
-      ctx.strokeStyle = prev.trg
-        ? SENSOR_PRESSED_COLOR
-        : SENSOR_RELEASED_COLOR;
+      ctx.strokeStyle = pTrg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(mid.x, mid.y);
+      ctx.moveTo(px, py);
+
+      for (let i = startIdx + 1; i <= endIdx; i++) {
+        const sample = sensorHistory[i];
+        const x = padL + (sample.t - viewStart) * xScale;
+        const y = padT + plotH - clampDist(sample.dist) * yScale;
+
+        if (sample.trg === pTrg) {
+          ctx.lineTo(x, y);
+        } else {
+          const prevSample = sensorHistory[i - 1];
+          const mx = (px + x) / 2;
+          const my = (py + y) / 2;
+
+          edges.push({
+            x: mx,
+            y: my,
+            t: (prevSample.t + sample.t) / 2,
+            dist: (prevSample.dist + sample.dist) / 2,
+            val: sample.val,
+            trg: sample.trg,
+            index: i
+          });
+
+          ctx.lineTo(mx, my);
+          ctx.stroke();
+
+          ctx.fillStyle = sample.trg
+            ? SENSOR_TRANSITION_PRESS_COLOR
+            : SENSOR_TRANSITION_RELEASE_COLOR;
+          ctx.beginPath();
+          ctx.arc(mx, my, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = sample.trg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(x, y);
+          pTrg = sample.trg;
+        }
+        px = x;
+        py = y;
+      }
       ctx.stroke();
 
-      ctx.strokeStyle = curr.trg
-        ? SENSOR_PRESSED_COLOR
-        : SENSOR_RELEASED_COLOR;
-      ctx.beginPath();
-      ctx.moveTo(mid.x, mid.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-
-      transitions.push({ point: mid, trg: curr.trg });
+      /* 放大到采样点分得开时，补画每个采样点。 */
+      let lastDotX = -Infinity;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const sample = sensorHistory[i];
+        const x = padL + (sample.t - viewStart) * xScale;
+        if (x - lastDotX < 3) {
+          continue;
+        }
+        lastDotX = x;
+        const y = padT + plotH - clampDist(sample.dist) * yScale;
+        ctx.fillStyle = sample.trg ? SENSOR_PRESSED_COLOR : SENSOR_RELEASED_COLOR;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      sensorChartEdges = edges;
     }
+  }
 
-    /* 状态切换点在颜色变化处打小点：按下绿点，释放红点。 */
-    for (const item of transitions) {
-      ctx.fillStyle = item.trg
-        ? SENSOR_TRANSITION_PRESS_COLOR
-        : SENSOR_TRANSITION_RELEASE_COLOR;
-      ctx.beginPath();
-      ctx.arc(item.point.x, item.point.y, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  if (sensorHover) {
+    drawSensorHover(ctx, sensorViewCache, cssW, cssH);
   }
 
   ctx.font = '11px Consolas, monospace';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = SENSOR_PRESSED_COLOR;
-  ctx.fillText('■ 按下', cssW - 170, 4);
-  ctx.fillStyle = SENSOR_RELEASED_COLOR;
-  ctx.fillText('■ 释放', cssW - 116, 4);
-  ctx.fillStyle = SENSOR_TRANSITION_PRESS_COLOR;
-  ctx.fillText('● 按下', cssW - 62, 4);
-  ctx.fillStyle = SENSOR_TRANSITION_RELEASE_COLOR;
-  ctx.fillText('● 释放', cssW - 8, 4);
+  /* 从右往左排，文本变长也不会重叠。 */
+  let legendX = cssW - 8;
+  const legend = [
+    ['● 释放事件', SENSOR_TRANSITION_RELEASE_COLOR],
+    ['● 按下事件', SENSOR_TRANSITION_PRESS_COLOR],
+    ['■ 释放', SENSOR_RELEASED_COLOR],
+    ['■ 按下', SENSOR_PRESSED_COLOR]
+  ];
+  for (const [text, color] of legend) {
+    ctx.fillStyle = color;
+    ctx.fillText(text, legendX, 4);
+    legendX -= ctx.measureText(text).width + 14;
+  }
 
   ctx.fillStyle = '#8b98a5';
   ctx.textAlign = 'left';
@@ -432,12 +910,16 @@ function drawSensorChart() {
 }
 
 function sensorChartLoop() {
+  /* 每帧都重绘：按 30fps 节流会让窗口一次跳 5~10px，看起来像闪频。
+     24000 点的全量绘制实测约 1ms，60fps 完全负担得起。 */
   drawSensorChart();
-  sensorChartRaf = sensorRptEnabled ? requestAnimationFrame(sensorChartLoop) : 0;
+  sensorChartRaf = (sensorRptEnabled && !sensorPaused)
+    ? requestAnimationFrame(sensorChartLoop)
+    : 0;
 }
 
 function startSensorChart() {
-  if (!sensorChartRaf) {
+  if (!sensorChartRaf && sensorRptEnabled && !sensorPaused) {
     sensorChartRaf = requestAnimationFrame(sensorChartLoop);
   }
 }
@@ -453,6 +935,14 @@ function stopSensorChart() {
 /* 通知频率可能很高，DOM 只在固定间隔刷新，键帽显示行程（mm）。 */
 function renderSensorValues() {
   if (!sensorRptEnabled) return;
+
+  const now = performance.now();
+  const elapsed = now - sensorRateStamp;
+  if (elapsed >= 100) {
+    sensorRateHz = ((sensorNotifyCount - sensorRateCount) * 1000) / elapsed;
+    sensorRateCount = sensorNotifyCount;
+    sensorRateStamp = now;
+  }
 
   for (const [index, el] of calibKeyEls) {
     const label = el.root.dataset.label;
@@ -475,8 +965,13 @@ function renderSensorValues() {
 function startSensorMonitor() {
   sensorValues.clear();
   sensorPacketCount = 0;
+  sensorNotifyCount = 0;
+  sensorRateCount = 0;
+  sensorRateStamp = performance.now();
+  sensorRateHz = 0;
   sensorLastException = null;
   sensorHistory = [];
+  resetSensorViewState();
   if (sensorRenderTimer) clearInterval(sensorRenderTimer);
   sensorRenderTimer = setInterval(renderSensorValues, SENSOR_RENDER_MS);
 
@@ -494,6 +989,8 @@ function stopSensorMonitor() {
   }
   sensorValues.clear();
   sensorHistory = [];
+  sensorRateHz = 0;
+  resetSensorViewState();
   renderCalibKeyboard();
   stopSensorChart();
   updateSensorState();
@@ -513,7 +1010,10 @@ function resetSensorMonitor() {
   }
   sensorValues.clear();
   sensorPacketCount = 0;
+  sensorNotifyCount = 0;
+  sensorRateHz = 0;
   sensorLastException = null;
+  resetSensorViewState();
   renderCalibKeyboard();
   stopSensorChart();
   updateSensorState();
