@@ -695,6 +695,15 @@ _Static_assert(4 == sizeof(rotkc_t), "rotkc_t must be 4 bytes");
                         ((pkc->ty == KCT_GP)   && (pkc->gp.md >= GP_MODE_MAX))  || \
                         ((pkc->ty == KCT_FN)   && (pkc->sy >= FN_MAX) /*&& (pkc->fy >= 0xff)*/ )) ? false : true)
 
+#define _MOD_BIT(kc)    ((uint8_t)(0x01U << ((kc) - KC_LCTL)))
+#define _SYS_VALID(sc)  ((((sc) >= SC_POWER_DOWN) && ((sc) <= SC_DO_NOT_DISTURB)) ||            \
+                         (((sc) >= SC_DOCK) && ((sc) <= SC_ACCESSIBILITY_BINDING)) ||           \
+                         (((sc) >= SC_DISPLAY_INVERT) && ((sc) <= SC_DISPLAY_LCD_AUTOSCALE)) || \
+                         (((sc) >= SC_DISPLAY_ROTATION_LOCK_BUTTON) && ((sc) <= SC_DISPLAY_ROTATION_LOCK_SLIDER)))
+
+
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -96,7 +96,6 @@ static void core_thread_entry(ULONG id)
     keyattr_t *p_attr = NULL;
     const keyaxis_para_t *p_axis = NULL;
     uint64_t now = 0;
-    uint8_t ki = 0;
     uint16_t cur_v = 0;
     uint16_t *p_buf = NULL;
 
@@ -109,12 +108,11 @@ static void core_thread_entry(ULONG id)
         now = hpm_csr_get_core_cycle();
         p_core->ntf_time = (now - g_keycore.ntf_tick) / core_freq_mhz;
 
-        ki = 0;
         cur_v = 0;
         p_buf = p_core->buf[p_core->buf_idx];
         p_core->buf_idx = !p_core->buf_idx;
-
-        do {
+        
+        for (uint8_t ki = 0; ki < KBD_KEY_MAX; ki++) {
             p_evt  = &g_keyevt[ki];
             p_mag  = &g_keymag[ki];
             p_attr = &g_obkp.attr[ki];
@@ -148,7 +146,7 @@ static void core_thread_entry(ULONG id)
             //}
             //else {
             //}
-        } while (++ki < KBD_KEY_MAX);
+        }
 
         if (__builtin_expect(_keycal_busy(), 0)) {
             keycal_post_data(p_buf);

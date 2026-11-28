@@ -13,28 +13,7 @@ keyrpt_ctx_t g_keyrpt_ctx = {
     .ms.id   = KRPT_ID_MS,
     .dirty_mask = 0U,
 };
-static inline uint8_t keyrpt_mod_bit(uint8_t kc)
-{
-    return (uint8_t)(0x01U << (kc - KC_LCTL));
-}
 
-/* System Control usage 按描述符里的 4 个区间分字段，返回字段下标，-1 表示不支持 */
-static inline int8_t keyrpt_sys_field(uint8_t sc)
-{
-    if ((sc >= SC_POWER_DOWN) && (sc <= SC_DO_NOT_DISTURB)) {
-        return 0;
-    }
-    if ((sc >= SC_DOCK) && (sc <= SC_ACCESSIBILITY_BINDING)) {
-        return 1;
-    }
-    if ((sc >= SC_DISPLAY_INVERT) && (sc <= SC_DISPLAY_LCD_AUTOSCALE)) {
-        return 2;
-    }
-    if ((sc >= SC_DISPLAY_ROTATION_LOCK_BUTTON) && (sc <= SC_DISPLAY_ROTATION_LOCK_SLIDER)) {
-        return 3;
-    }
-    return -1;
-}
 
 /** ---------------- Report ID 4: 6KRO ---------------- */
 
@@ -42,11 +21,11 @@ void keyrpt_6kro_add(uint8_t kc)
 {
     keyrpt_6kro_t *p_6kro = &g_keyrpt_ctx.kro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_set(p_6kro->modify.dat, keyrpt_mod_bit(kc));
+        rotutil_bit_set(p_6kro->mod.dat, _MOD_BIT(kc));
     }
-    else if (kc != KC_NONE) {
-        for (uint8_t i = 0U; i < (uint8_t)sizeof(p_6kro->keys); i++) {
-            if (p_6kro->keys[i] == KC_NONE) {
+    else {
+        for (uint8_t i = 0U; i < 6; i++) {
+            if (p_6kro->keys[i] == 0) {
                 p_6kro->keys[i] = kc;
                 break;
             }
@@ -58,12 +37,12 @@ void keyrpt_6kro_del(uint8_t kc)
 {
     keyrpt_6kro_t *p_6kro = &g_keyrpt_ctx.kro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_clr(p_6kro->modify.dat, keyrpt_mod_bit(kc));
+        rotutil_bit_clr(p_6kro->mod.dat, _MOD_BIT(kc));
     }
-    else if (kc != KC_NONE) {
-        for (uint8_t i = 0U; i < (uint8_t)sizeof(p_6kro->keys); i++) {
+    else {
+        for (uint8_t i = 0U; i < 6; i++) {
             if (p_6kro->keys[i] == kc) {
-                p_6kro->keys[i] = KC_NONE;
+                p_6kro->keys[i] = 0;
                 break;
             }
         }
@@ -74,7 +53,7 @@ bool keyrpt_6kro_get(uint8_t kc)
 {
     keyrpt_6kro_t *p_6kro = &g_keyrpt_ctx.kro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        return rotutil_bit_get(p_6kro->modify.dat, keyrpt_mod_bit(kc)) != 0U;
+        return rotutil_bit_get(p_6kro->mod.dat, _MOD_BIT(kc)) != 0U;
     }
     else if (kc != KC_NONE) {
         for (uint8_t i = 0U; i < (uint8_t)sizeof(p_6kro->keys); i++) {
@@ -92,7 +71,7 @@ void keyrpt_nkro_add(uint8_t kc)
 {
     keyrpt_nkro_t *p_nkro = &g_keyrpt_ctx.nkro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_set(p_nkro->modify.dat, keyrpt_mod_bit(kc));
+        rotutil_bit_set(p_nkro->mod.dat, _MOD_BIT(kc));
     }
     else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(p_nkro->keys) * 8U))) {
         /* 位图 bit0 对应 usage 0；usage >= 128 不在描述符范围内 */
@@ -104,7 +83,7 @@ void keyrpt_nkro_del(uint8_t kc)
 {
     keyrpt_nkro_t *p_nkro = &g_keyrpt_ctx.nkro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        rotutil_bit_clr(p_nkro->modify.dat, keyrpt_mod_bit(kc));
+        rotutil_bit_clr(p_nkro->mod.dat, _MOD_BIT(kc));
     }
     else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(p_nkro->keys) * 8U))) {
         rotutil_bit_clr(p_nkro->keys[kc >> 3], (uint8_t)(0x01U << (kc & 0x07U)));
@@ -115,7 +94,7 @@ bool keyrpt_nkro_get(uint8_t kc)
 {
     keyrpt_nkro_t *p_nkro = &g_keyrpt_ctx.nkro;
     if (kc >= KC_LCTL && kc <= KC_RGUI) {
-        return rotutil_bit_get(p_nkro->modify.dat, keyrpt_mod_bit(kc)) != 0U;
+        return rotutil_bit_get(p_nkro->mod.dat, _MOD_BIT(kc)) != 0U;
     }
     else if ((kc != KC_NONE) && (kc < (uint8_t)(sizeof(p_nkro->keys) * 8U))) {
         return rotutil_bit_get(p_nkro->keys[kc >> 3], (uint8_t)(0x01U << (kc & 0x07U))) != 0U;
@@ -128,70 +107,63 @@ bool keyrpt_nkro_get(uint8_t kc)
 void keyrpt_csm_add(uint16_t cc)
 {
     if (cc != 0U) {
-        g_keyrpt_ctx.csm.usage = cc;
+        g_keyrpt_ctx.csm.co = cc;
     }
 }
 
 void keyrpt_csm_del(uint16_t cc)
 {
     keyrpt_csm_t *p_csm = &g_keyrpt_ctx.csm;
-    if (p_csm->usage == cc) {
-        p_csm->usage = 0U;
+    if (p_csm->co == cc) {
+        p_csm->co = 0U;
     }
 }
 
 bool keyrpt_csm_get(uint16_t cc)
 {
-    return (cc != 0U) && (g_keyrpt_ctx.csm.usage == cc);
+    return (cc != 0U) && (g_keyrpt_ctx.csm.co == cc);
 }
 
 /** ---------------- Report ID 3: System Control ---------------- */
 
 void keyrpt_sys_add(uint8_t sc)
 {
-    int8_t field = keyrpt_sys_field(sc);
-    keyrpt_sys_t *p_sys = &g_keyrpt_ctx.sys;
-
-    if (field < 0) {
+    if (!_SYS_VALID(sc)) {
         return;
     }
-    /* 同一时刻只保留一个系统控制动作 */
-    memset(p_sys->usage, 0, sizeof(p_sys->usage));
-    p_sys->usage[field] = sc;
+    
+    g_keyrpt_ctx.sys.co = sc;
 }
 
 void keyrpt_sys_del(uint8_t sc)
 {
     keyrpt_sys_t *p_sys = &g_keyrpt_ctx.sys;
-    int8_t field = keyrpt_sys_field(sc);
 
-    if ((field >= 0) && (p_sys->usage[field] == sc)) {
-        p_sys->usage[field] = 0U;
+    if (p_sys->co == sc) {
+        p_sys->co = 0U;
     }
 }
 
 bool keyrpt_sys_get(uint8_t sc)
 {
-    int8_t field = keyrpt_sys_field(sc);
-
-    return (field >= 0) && (g_keyrpt_ctx.sys.usage[field] == sc);
+    return g_keyrpt_ctx.sys.co == sc;
 }
 
 /** ---------------- Report ID 5: Mouse ---------------- */
 
 void keyrpt_ms_add_btn(uint8_t btn)
 {
-    g_keyrpt_ctx.ms.buttons |= btn;
+    g_keyrpt_ctx.ms.btn |= btn;
 }
 
 void keyrpt_ms_del_btn(uint8_t btn)
 {
-    g_keyrpt_ctx.ms.buttons &= (uint8_t)~btn;
+    g_keyrpt_ctx.ms.btn &= (uint8_t)~btn;
 }
 
 bool keyrpt_ms_get_btn(uint8_t btn)
 {
-    return (btn != 0U) && ((g_keyrpt_ctx.ms.buttons & btn) != 0U);
+    return (btn != 0U) && ((g_keyrpt_ctx.ms.btn & btn) != 0U);
 }
 
 void keyrpt_ms_set_move(int16_t dx, int16_t dy)
@@ -203,16 +175,16 @@ void keyrpt_ms_set_move(int16_t dx, int16_t dy)
 
 void keyrpt_ms_set_wheel(int16_t dw)
 {
-    g_keyrpt_ctx.ms.wheel = dw;
+    g_keyrpt_ctx.ms.w = dw;
 }
 
 void keyrpt_ms_clr(void)
 {
     keyrpt_ms_t *p_ms= &g_keyrpt_ctx.ms;
-    p_ms->buttons = 0U;
+    p_ms->btn = 0U;
     p_ms->x = 0;
     p_ms->y = 0;
-    p_ms->wheel = 0;
+    p_ms->w = 0;
     p_ms->pan = 0;
 }
 

@@ -29,51 +29,34 @@ typedef union {
 
 typedef struct {
     uint8_t    id;
-    keyrpt_mod_t modify;
-    // union __attribute__((packed))  {
-    //     uint8_t dat;
-    //     struct {
-    //         uint8_t ctl_l : 1;
-    //         uint8_t sft_l : 1;
-    //         uint8_t alt_l : 1;
-    //         uint8_t gui_l : 1;
-    //         uint8_t ctl_r : 1;
-    //         uint8_t sft_r : 1;
-    //         uint8_t alt_r : 1;
-    //         uint8_t gui_r : 1;
-    //     } bit;
-    // } modify;
+    keyrpt_mod_t mod;
     uint8_t    rsv;
     uint8_t    keys[6];
 } __attribute__((packed)) keyrpt_6kro_t;
 
 typedef struct {
     uint8_t    id;
-    keyrpt_mod_t modify;
+    keyrpt_mod_t mod;
     uint8_t    rsv;
     uint8_t    keys[16];
 } __attribute__((packed)) keyrpt_nkro_t;
 
 typedef struct {
     uint8_t  id;
-    uint16_t usage;
+    uint16_t co;
 } __attribute__((packed)) keyrpt_csm_t;
-
-/* System Control 按 HUT 1.7 的 usage 区间拆成 4 个数组字段，每个字段 1 字节：
- *   [0] 0x81..0x9B  [1] 0xA0..0xAA  [2] 0xB0..0xB7  [3] 0xC9..0xCA */
-#define KEYRPT_SYS_FIELD_NUM    (4U)
 
 typedef struct {
     uint8_t id;
-    uint8_t usage[KEYRPT_SYS_FIELD_NUM];
+    uint8_t co;
 } __attribute__((packed)) keyrpt_sys_t;
 
 typedef struct {
     uint8_t id;
-    uint8_t buttons;
+    uint8_t btn;
     int16_t x;
     int16_t y;
-    int16_t wheel;
+    int16_t w;
     int16_t pan;
 } __attribute__((packed)) keyrpt_ms_t;
 
